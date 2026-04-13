@@ -303,10 +303,13 @@ export class GeminiService {
         - Keep product details that matter for recognition.
         - Prefer simple verbs like holds, brushes, turns, smiles, shows, applies, lifts, moves, looks.
 
-        STRICT RULE: NO TEXT INSIDE GENERATED VIDEO.
-        - Do NOT include any text overlays, subtitles, titles, captions, stickers, UI elements, or on-screen text.
-        - The generated video must be clean.
-        - Text from the original video will be added later in post-production.
+        STRICT RULE: ABSOLUTELY NO TEXT, LETTERS, OR NUMBERS INSIDE GENERATED VIDEO.
+        - The generated video MUST be completely "clean".
+        - Do NOT include any: text overlays, subtitles, titles, captions, stickers, UI elements, watermarks, or on-screen labels.
+        - Do NOT describe any characters (letters/numbers) appearing on objects, clothes, or backgrounds.
+        - Even if the reference video has text, you must IGNORE it entirely and describe ONLY the visual action and scenery.
+        - You are strictly forbidden from including phrases like "with text", "showing caption", or "subtitle appears".
+        - Text from the original video will be added later in post-production by a different system. Your job is ONLY the visual footage.
 
         REFERENCE VIDEO ANALYSIS:
         ${cleanVideoAnalysis}
@@ -315,6 +318,7 @@ export class GeminiService {
 
         OUTPUT REQUIREMENTS:
         - Return only the final prompt.
+        - Absolutely no mentions of text, titles, or overlays.
         - No explanations.
         - No meta notes.
         - No headings outside the time blocks.
