@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOra2 Управление Проектами</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div>
+            <p class="eyebrow">SOra2</p>
+            <h1>Проекты</h1>
+          </div>
+          <button id="create-project-button" class="secondary-button" type="button">Новый проект</button>
+        </div>
+        <div id="project-list" class="project-list"></div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="page-header">
+          <div>
+              <p class="eyebrow">Веб-интерфейс</p>
+              <h2>Входные данные и настройки проекта</h2>
+            </div>
+          <div class="header-actions">
+            <span id="status-text" class="status-text">Готово</span>
+            <button id="delete-project-button" class="danger-button" type="button">Удалить</button>
+            <button id="save-project-button" class="primary-button" type="button">Сохранить</button>
+          </div>
+        </header>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Проект</p>
+              <h3>Идентификация и привязка Telegram</h3>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Название проекта</span>
+              <input id="name" type="text" placeholder="Luxury Watches / Topic #13" />
+            </label>
+
+            <label>
+              <span>Модель</span>
+              <select id="selectedModel">
+                <option value="sora-2">Sora 2</option>
+                <option value="veo-3-1">Veo 3.1</option>
+              </select>
+            </label>
+
+            <div class="info-panel">
+              <span>ID проекта</span>
+              <strong id="project-id">Сначала сохраните проект</strong>
+            </div>
+
+            <div class="info-panel full-width">
+              <span>Привязка Telegram</span>
+              <strong id="telegram-binding-status">Пока не привязан</strong>
+              <code id="binding-command">Сначала сохраните проект, чтобы получить команду привязки.</code>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Входные данные</p>
+              <h3>Контекст товара</h3>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Название товара</span>
+              <input id="productName" type="text" placeholder="Золотые часы-хронограф" />
+            </label>
+
+            <label>
+              <span>Целевая аудитория</span>
+              <input id="targetAudience" type="text" placeholder="Мужчины 25–40, покупатели премиум-сегмента" />
+            </label>
+
+            <label class="full-width">
+              <span>Описание товара</span>
+              <textarea id="productDescription" rows="5" placeholder="Опишите товар, материалы, особенности и что должно оставаться точным при генерации."></textarea>
+            </label>
+
+            <label class="full-width">
+              <span>Дополнительные правила для промпта</span>
+              <textarea id="extraPromptingRules" rows="5" placeholder="Ограничения бренда, запрещенные сцены, предпочтения по камере и темпу."></textarea>
+            </label>
+
+            <label class="full-width">
+              <span>Призыв к действию</span>
+              <input id="cta" type="text" placeholder="Напишите в директ / запросите каталог" />
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Референсы</p>
+              <h3>Изображения товара</h3>
+            </div>
+            <div class="reference-actions">
+              <label class="upload-button">
+                <input id="reference-image-input" type="file" accept="image/*" multiple />
+                Загрузить изображения
+              </label>
+            </div>
+          </div>
+          <div id="primary-image-status" class="inline-note">Первое изображение используется как основной референс для Sora 2 и должно быть синхронизировано с Яндекс Диском.</div>
+          <div id="reference-images" class="reference-grid empty-state">
+            Загрузите фото товара, чтобы сформировать входные данные проекта.
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Библиотека</p>
+              <h3>Референсы reels из Telegram</h3>
+            </div>
+            <button id="refresh-library-button" class="secondary-button" type="button">Обновить</button>
+          </div>
+          <div id="reference-library" class="library-list empty-state">
+            Привяжите проект к теме Telegram и отправляйте туда ссылки на Instagram Reels, чтобы пополнять библиотеку.
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Генерации</p>
+              <h3>История генераций</h3>
+            </div>
+          </div>
+          <div id="generation-tasks" class="library-list empty-state">
+            Генераций пока нет.
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Настройки</p>
+              <h3>Управление автоматизацией</h3>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Режим</span>
+              <select id="mode">
+                <option value="manual">Ручной</option>
+                <option value="auto">Авто</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Дневной лимит генераций</span>
+              <input id="dailyGenerationLimit" type="number" min="0" step="1" />
+            </label>
+
+            <label class="checkbox-label">
+              <input id="automationEnabled" type="checkbox" />
+              <span>Автоматизация включена</span>
+            </label>
+
+            <label class="checkbox-label">
+              <input id="isActive" type="checkbox" />
+              <span>Проект активен</span>
+            </label>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="library-item-modal" class="modal-shell hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-library-modal="true"></div>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="library-item-modal-title">
+        <header class="modal-header">
+          <div>
+            <p class="card-eyebrow">Библиотека Reel</p>
+            <h3 id="library-item-modal-title">Подробности референса</h3>
+          </div>
+          <button id="close-library-item-modal-button" class="secondary-button" type="button">Закрыть</button>
+        </header>
+        <div id="library-item-modal-content" class="modal-content"></div>
+      </section>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
