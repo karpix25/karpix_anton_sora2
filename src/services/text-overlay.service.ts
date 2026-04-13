@@ -4,6 +4,36 @@ import { config } from '../config.js';
 import { createChatCompletionWithRetry } from './gemini.service.js';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 
+const allowedAnchors: ReferenceTextOverlay['anchor'][] = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'center-left',
+  'center',
+  'center-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+];
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toNumberOr(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeAnchor(value: unknown): ReferenceTextOverlay['anchor'] {
+  if (typeof value !== 'string') {
+    return 'top-center';
+  }
+
+  const anchor = value as ReferenceTextOverlay['anchor'];
+  return allowedAnchors.includes(anchor) ? anchor : 'top-center';
+}
+
 function buildProviderRouting() {
   return {
     order: config.openRouter.providers.order,
@@ -54,14 +84,14 @@ function normalizeOverlays(value: unknown): ReferenceTextOverlay[] {
         text,
         startSeconds,
         endSeconds,
-        anchor: typeof overlay.anchor === 'string' ? overlay.anchor as ReferenceTextOverlay['anchor'] : 'top-center',
-        xPercent: Number(overlay.xPercent),
-        yPercent: Number(overlay.yPercent),
-        fontSizePercent: Number(overlay.fontSizePercent),
+        anchor: normalizeAnchor(overlay.anchor),
+        xPercent: clamp(toNumberOr(overlay.xPercent, 0.5), 0, 1),
+        yPercent: clamp(toNumberOr(overlay.yPercent, 0.12), 0, 1),
+        fontSizePercent: clamp(toNumberOr(overlay.fontSizePercent, 0.036), 0.018, 0.09),
         textColor: typeof overlay.textColor === 'string' ? overlay.textColor : '#FFFFFF',
         box: Boolean(overlay.box),
         boxColor: typeof overlay.boxColor === 'string' ? overlay.boxColor : '#000000',
-        boxOpacity: Number(overlay.boxOpacity),
+        boxOpacity: clamp(toNumberOr(overlay.boxOpacity, 0), 0, 1),
       } satisfies ReferenceTextOverlay;
     })
     .filter((item): item is ReferenceTextOverlay => Boolean(item));

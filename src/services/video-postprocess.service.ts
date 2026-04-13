@@ -9,6 +9,19 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
 const defaultFontFamily = 'Arial,Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,Noto Emoji';
 const overlaySafeMarginPercent = 0.03;
+const overlayFontScale = 0.78;
+const overlayTopYOffsetByFont = 0.65;
+const minOverlayFontSizePercent = 0.018;
+const maxOverlayFontSizePercent = 0.07;
+const defaultLineSpacing = 3;
+
+interface PreparedOverlay {
+  overlay: ReferenceTextOverlay;
+  text: string;
+  xPercent: number;
+  yPercent: number;
+  fontSizePercent: number;
+}
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -64,6 +77,16 @@ function normalizeFfmpegColor(value: string, fallback: string): string {
   return fallback;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isCenterAnchor(anchor: ReferenceTextOverlay['anchor']): boolean {
+  return anchor === 'top-center'
+    || anchor === 'center'
+    || anchor === 'bottom-center';
+}
+
 function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
   const words = line.trim().split(/\s+/).filter(Boolean);
   if (!words.length) {
@@ -115,24 +138,56 @@ function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
   return lines;
 }
 
+function padLinesForCenterAlignment(text: string): string {
+  const lines = text.split('\n');
+  if (lines.length <= 1) {
+    return text;
+  }
+
+  const trimmedLines = lines.map((line) => line.trim());
+  const maxLength = Math.max(...trimmedLines.map((line) => Array.from(line).length));
+  if (maxLength <= 0) {
+    return text;
+  }
+
+  return trimmedLines
+    .map((line) => {
+      const missing = Math.max(0, maxLength - Array.from(line).length);
+      const leftPadding = Math.floor(missing / 2);
+      return `${' '.repeat(leftPadding)}${line}`;
+    })
+    .join('\n');
+}
+
 function wrapOverlayText(text: string, maxCharsPerLine: number): string {
   const normalizedMaxChars = Math.max(10, maxCharsPerLine);
   const sourceLines = text.replace(/\r/g, '').split('\n');
+  if (sourceLines.length > 1) {
+    return sourceLines.map((line) => line.trim()).join('\n');
+  }
+
   const wrappedLines = sourceLines.flatMap((line) => wrapLineByWords(line, normalizedMaxChars));
   return wrappedLines.join('\n');
 }
 
-function estimateMaxCharsPerLine(fontSizePercent: number): number {
+function estimateMaxCharsPerLine(fontSizePercent: number, anchor: ReferenceTextOverlay['anchor']): number {
   const normalizedSize = Math.max(0.02, fontSizePercent);
-  const estimated = Math.round(30 * (0.04 / normalizedSize));
-  return Math.max(14, Math.min(44, estimated));
+  const base = isCenterAnchor(anchor) ? 25 : 30;
+  const estimated = Math.round(base * (0.04 / normalizedSize));
+  const min = isCenterAnchor(anchor) ? 12 : 14;
+  const max = isCenterAnchor(anchor) ? 36 : 44;
+  return Math.max(min, Math.min(max, estimated));
 }
 
-function getAnchorExpressions(overlay: ReferenceTextOverlay): { x: string; y: string } {
-  const xBase = `w*${overlay.xPercent.toFixed(4)}`;
-  const yBase = `h*${overlay.yPercent.toFixed(4)}`;
+function getAnchorExpressions(input: {
+  anchor: ReferenceTextOverlay['anchor'];
+  xPercent: number;
+  yPercent: number;
+}): { x: string; y: string } {
+  const xBase = `w*${input.xPercent.toFixed(4)}`;
+  const yBase = `h*${input.yPercent.toFixed(4)}`;
 
-  switch (overlay.anchor) {
+  switch (input.anchor) {
     case 'top-left':
       return { x: xBase, y: yBase };
     case 'top-center':
@@ -156,8 +211,12 @@ function getAnchorExpressions(overlay: ReferenceTextOverlay): { x: string; y: st
   }
 }
 
-function getBoundedAnchorExpressions(overlay: ReferenceTextOverlay): { x: string; y: string } {
-  const { x, y } = getAnchorExpressions(overlay);
+function getBoundedAnchorExpressions(input: {
+  anchor: ReferenceTextOverlay['anchor'];
+  xPercent: number;
+  yPercent: number;
+}): { x: string; y: string } {
+  const { x, y } = getAnchorExpressions(input);
   const margin = `h*${overlaySafeMarginPercent.toFixed(4)}`;
 
   return {
@@ -166,7 +225,35 @@ function getBoundedAnchorExpressions(overlay: ReferenceTextOverlay): { x: string
   };
 }
 
-async function writeOverlayTextFiles(taskId: string, overlays: ReferenceTextOverlay[]): Promise<string[]> {
+function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay {
+  const fontSizePercent = clamp(
+    Math.max(minOverlayFontSizePercent, overlay.fontSizePercent) * overlayFontScale,
+    minOverlayFontSizePercent,
+    maxOverlayFontSizePercent,
+  );
+  const xPercent = clamp(overlay.xPercent, 0, 1);
+  let yPercent = clamp(overlay.yPercent, 0, 1);
+
+  if (overlay.anchor.startsWith('top')) {
+    yPercent = clamp(yPercent - fontSizePercent * overlayTopYOffsetByFont, overlaySafeMarginPercent, 1);
+  }
+
+  const maxCharsPerLine = estimateMaxCharsPerLine(fontSizePercent, overlay.anchor);
+  let text = wrapOverlayText(overlay.text, maxCharsPerLine);
+  if (isCenterAnchor(overlay.anchor)) {
+    text = padLinesForCenterAlignment(text);
+  }
+
+  return {
+    overlay,
+    text,
+    xPercent,
+    yPercent,
+    fontSizePercent,
+  };
+}
+
+async function writeOverlayTextFiles(taskId: string, overlays: PreparedOverlay[]): Promise<string[]> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   await fs.ensureDir(overlayDir);
 
@@ -178,18 +265,22 @@ async function writeOverlayTextFiles(taskId: string, overlays: ReferenceTextOver
     }
 
     const filePath = path.join(overlayDir, `${index + 1}.txt`);
-    const wrappedText = wrapOverlayText(overlay.text, estimateMaxCharsPerLine(overlay.fontSizePercent));
-    await fs.writeFile(filePath, wrappedText, 'utf8');
+    await fs.writeFile(filePath, overlay.text, 'utf8');
     files.push(filePath);
   }
 
   return files;
 }
 
-function buildDrawTextFilters(overlays: ReferenceTextOverlay[], textFiles: string[]): string[] {
-  return overlays.map((overlay, index) => {
+function buildDrawTextFilters(overlays: PreparedOverlay[], textFiles: string[]): string[] {
+  return overlays.map((prepared, index) => {
+    const { overlay } = prepared;
     const textFile = textFiles[index];
-    const { x, y } = getBoundedAnchorExpressions(overlay);
+    const { x, y } = getBoundedAnchorExpressions({
+      anchor: overlay.anchor,
+      xPercent: prepared.xPercent,
+      yPercent: prepared.yPercent,
+    });
     const safeX = escapeDrawtextExpression(x);
     const safeY = escapeDrawtextExpression(y);
     const textColor = normalizeFfmpegColor(overlay.textColor, '0xFFFFFF');
@@ -198,7 +289,7 @@ function buildDrawTextFilters(overlays: ReferenceTextOverlay[], textFiles: strin
       `font='${escapeFilterValue(defaultFontFamily)}'`,
       `textfile='${escapeFilterValue(textFile || '')}'`,
       `reload=1`,
-      `fontsize=h*${Math.max(0.02, overlay.fontSizePercent).toFixed(4)}`,
+      `fontsize=h*${prepared.fontSizePercent.toFixed(4)}`,
       `fontcolor=${textColor}`,
       `x=${safeX}`,
       `y=${safeY}`,
@@ -206,7 +297,7 @@ function buildDrawTextFilters(overlays: ReferenceTextOverlay[], textFiles: strin
       `box=${overlay.box ? 1 : 0}`,
       `boxcolor=${boxColor}`,
       `boxborderw=12`,
-      `line_spacing=8`,
+      `line_spacing=${defaultLineSpacing}`,
       `enable='between(t,${overlay.startSeconds.toFixed(3)},${overlay.endSeconds.toFixed(3)})'`,
     ];
 
@@ -249,8 +340,9 @@ export class VideoPostprocessService {
       return outputPath;
     }
 
-    const textFiles = await writeOverlayTextFiles(input.taskId, input.textOverlays);
-    const filters = buildDrawTextFilters(input.textOverlays, textFiles).join(',');
+    const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
+    const textFiles = await writeOverlayTextFiles(input.taskId, preparedOverlays);
+    const filters = buildDrawTextFilters(preparedOverlays, textFiles).join(',');
 
     try {
       await runFfmpeg([
