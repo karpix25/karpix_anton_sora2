@@ -50,6 +50,15 @@ function parsePort(...values: Array<string | undefined>): number {
   return 3000;
 }
 
+function normalizePublicUrl(value: string | undefined): string {
+  const normalized = (value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.replace(/\/+$/, '');
+}
+
 function normalizeWebhookPath(value: string | undefined): string {
   const normalized = (value || '').trim();
   if (!normalized) {
@@ -93,6 +102,7 @@ export const config = {
   web: {
     host: process.env.WEB_HOST || process.env.HOST || '0.0.0.0',
     port: parsePort(process.env.WEB_PORT, process.env.PORT, '3000'),
+    publicUrl: normalizePublicUrl(process.env.WEB_PUBLIC_URL),
   },
   openRouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',

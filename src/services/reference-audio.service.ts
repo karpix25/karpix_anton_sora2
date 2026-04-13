@@ -153,4 +153,33 @@ export class ReferenceAudioService {
       durationSeconds,
     };
   }
+
+  public static async extractTemporaryAudioTrack(videoUrl: string): Promise<ReferenceAudioDetails> {
+    const normalizedUrl = typeof videoUrl === 'string' ? videoUrl.trim() : '';
+    if (!normalizedUrl) {
+      throw new Error('Video URL is required to extract temporary audio track');
+    }
+
+    await fs.ensureDir(dataDir);
+    const tempName = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.m4a`;
+    const outputPath = path.join(dataDir, tempName);
+
+    await runFfmpeg([
+      '-y',
+      '-i',
+      normalizedUrl,
+      '-vn',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      outputPath,
+    ]);
+
+    const durationSeconds = await runFfprobeDuration(outputPath);
+    return {
+      audioFilePath: outputPath,
+      durationSeconds,
+    };
+  }
 }

@@ -96,6 +96,29 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function getProjectIdFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    return url.searchParams.get('projectId') || '';
+  } catch {
+    return '';
+  }
+}
+
+function syncProjectIdToUrl(projectId) {
+  try {
+    const url = new URL(window.location.href);
+    if (projectId) {
+      url.searchParams.set('projectId', projectId);
+    } else {
+      url.searchParams.delete('projectId');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // ignore URL sync errors
+  }
+}
+
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -270,6 +293,7 @@ function applyProjectToForm(project) {
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
+  syncProjectIdToUrl(state.currentProject.id || '');
 
   renderBindingInfo();
   workflow.renderReferenceImages();
@@ -290,7 +314,11 @@ async function loadProjects() {
   state.projects = data.projects || [];
 
   if (state.projects.length) {
-    const selected = state.projects.find((project) => project.id === state.currentProject.id) || state.projects[0];
+    const projectIdFromUrl = getProjectIdFromUrl();
+    const selected =
+      state.projects.find((project) => project.id === projectIdFromUrl) ||
+      state.projects.find((project) => project.id === state.currentProject.id) ||
+      state.projects[0];
     applyProjectToForm(selected);
   } else {
     applyProjectToForm(defaultProject());

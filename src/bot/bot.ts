@@ -7,20 +7,31 @@ import { GeminiService } from '../services/gemini.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
 import { TextOverlayService } from '../services/text-overlay.service.js';
-import { VideoGenerationService } from '../services/video-generation.service.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 
-interface Session {
-  lastPhotoUrl?: string;
-  model: 'sora-2' | 'veo-3-1';
-}
-
-// Memory-based session (use a DB like Redis for production)
-const sessions = new Map<string, Session>();
-
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function getWebInterfaceUrl(projectId = ''): string {
+  const configured = normalizeString(config.web.publicUrl);
+  const host = config.web.host === '0.0.0.0' || config.web.host === '::'
+    ? 'localhost'
+    : config.web.host;
+  const base = configured || `http://${host}:${config.web.port}`;
+
+  if (!projectId) {
+    return base;
+  }
+
+  try {
+    const url = new URL(base);
+    url.searchParams.set('projectId', projectId);
+    return url.toString();
+  } catch {
+    return `${base}?projectId=${encodeURIComponent(projectId)}`;
+  }
 }
 
 function getMessageThreadId(ctx: Context): string {
@@ -47,20 +58,13 @@ function extractTopicNameFromContext(ctx: Context, fallback = ''): string {
   return inferredName;
 }
 
-function getSessionKey(ctx: Context): string {
-  const chatId = ctx.chat?.id ? String(ctx.chat.id) : 'unknown-chat';
-  const messageThreadId = getMessageThreadId(ctx);
-  return `${chatId}:${messageThreadId}`;
-}
-
-function getSession(ctx: Context): Session {
-  const sessionKey = getSessionKey(ctx);
-
-  if (!sessions.has(sessionKey)) {
-    sessions.set(sessionKey, { model: 'sora-2' });
+function buildDefaultProjectName(messageThreadId: string, topicName = ''): string {
+  if (topicName) {
+    return topicName;
   }
 
-  return sessions.get(sessionKey)!;
+  const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  return `Project ${messageThreadId} ${timestamp}`;
 }
 
 async function getBoundProject(ctx: Context) {
@@ -87,48 +91,32 @@ bot.catch((error: unknown, ctx) => {
 
 // Welcome
 bot.start((ctx) => {
+  const webUrl = getWebInterfaceUrl();
   ctx.reply(
-    'Привет. Этот бот автоматизирует генерацию видео через Sora 2 и Veo 3.1.\n\n' +
-    '1. Отправьте ФОТО товара.\n' +
-    '2. Отправьте ссылку на Instagram REEL.\n' +
-    '3. Получите сгенерированное видео.\n\n' +
-    'Используйте /settings, чтобы посмотреть текущую модель.',
-    Markup.keyboard([['/settings']]).resize()
+    'Привет. Этот бот работает с проектами, привязанными к Telegram-темам.\n\n' +
+    'Быстрый старт:\n' +
+    '1. В нужной теме: /create_project <название>\n' +
+    '2. Откройте проект в вебе и заполните фото/настройки.\n' +
+    '3. В эту же тему отправляйте ссылку на Instagram Reel.\n\n' +
+    `Веб-интерфейс: ${webUrl}`,
+    Markup.keyboard([['/create_project', '/project_status'], ['/settings']]).resize()
   );
 });
 
 // Settings
 bot.command('settings', async (ctx) => {
-  if (!ctx.chat) return;
-  const boundProject = await getBoundProject(ctx);
-
-  if (boundProject) {
-    await ctx.reply(
-      `Эта тема привязана к проекту "${boundProject.name}".\n` +
-      `Текущая модель: ${boundProject.selectedModel.toUpperCase()}\n\n` +
-      `Изменяйте настройки проекта в веб-интерфейсе.`
-    );
+  if (!ctx.chat) {
     return;
   }
 
-  const session = getSession(ctx);
-  ctx.reply(
-    `Текущая модель: ${session.model.toUpperCase()}\nВыберите модель:`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('Sora 2', 'set_model:sora-2')],
-      [Markup.button.callback('Veo 3.1', 'set_model:veo-3-1')],
-    ])
-  );
-});
+  const boundProject = await getBoundProject(ctx);
+  const webUrl = getWebInterfaceUrl(boundProject?.id || '');
 
-// Handle Model Change
-bot.action(/set_model:(.+)/, (ctx) => {
-  const model = ctx.match[1] as 'sora-2' | 'veo-3-1';
-  if (!ctx.chat) return;
-  const session = getSession(ctx);
-  session.model = model;
-  ctx.answerCbQuery();
-  ctx.editMessageText(`Модель установлена: ${model.toUpperCase()}`);
+  await ctx.reply(
+    boundProject
+      ? `Настройки проекта "${boundProject.name}" изменяются только в веб-интерфейсе:\n${webUrl}`
+      : `Настройки и фото проекта изменяются только в веб-интерфейсе:\n${webUrl}`
+  );
 });
 
 bot.command('bind_project', async (ctx) => {
@@ -169,7 +157,112 @@ bot.command('bind_project', async (ctx) => {
     `Проект: ${project.name}\n` +
     `Chat ID: ${project.telegramChatId}\n` +
     `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
-    `Topic ID: ${project.telegramTopicId}`
+    `Topic ID: ${project.telegramTopicId}\n\n` +
+    `Открыть проект в вебе: ${getWebInterfaceUrl(project.id)}`
+  );
+});
+
+bot.command('bind_topic', async (ctx) => {
+  if (!ctx.chat || !('text' in ctx.message)) {
+    return;
+  }
+
+  const text = ctx.message.text.trim();
+  const bindMatch = text.match(/^\/bind_topic(?:@\w+)?\s+(\S+)\s+(\d+)(?:\s+([\s\S]+))?$/);
+  const projectId = normalizeString(bindMatch?.[1]);
+  const topicId = normalizeString(bindMatch?.[2]);
+  const topicName = normalizeString(bindMatch?.[3]);
+
+  if (!projectId || !topicId) {
+    await ctx.reply('⚠️ Использование: /bind_topic <project-id> <topic-id> [название темы]');
+    return;
+  }
+
+  const inferredTopicName = topicName || `Тема ${topicId}`;
+  const project = await projectStore.bindProjectToTelegramTopic(
+    projectId,
+    String(ctx.chat.id),
+    topicId,
+    inferredTopicName
+  );
+
+  if (!project) {
+    await ctx.reply(`❌ Проект не найден: ${projectId}`);
+    return;
+  }
+
+  await ctx.reply(
+    `✅ Проект "${project.name}" привязан.\n` +
+    `Chat ID: ${project.telegramChatId}\n` +
+    `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
+    `Topic ID: ${project.telegramTopicId}\n\n` +
+    `Открыть проект в вебе: ${getWebInterfaceUrl(project.id)}`
+  );
+});
+
+bot.command('create_project', async (ctx) => {
+  if (!ctx.chat || !('text' in ctx.message)) {
+    return;
+  }
+
+  const text = ctx.message.text.trim();
+  const match = text.match(/^\/create_project(?:@\w+)?(?:\s+([\s\S]+))?$/);
+  const rawArgs = normalizeString(match?.[1]);
+  const messageThreadId = getMessageThreadId(ctx);
+
+  const argParts = rawArgs ? rawArgs.split(/\s+/).filter(Boolean) : [];
+  let explicitTopicId = '';
+  if (argParts.length > 1) {
+    const tail = argParts[argParts.length - 1];
+    if (tail && /^\d+$/.test(tail)) {
+      explicitTopicId = tail;
+      argParts.pop();
+    }
+  }
+
+  const topicId = explicitTopicId || (messageThreadId !== 'main' ? messageThreadId : '');
+  if (!topicId) {
+    await ctx.reply(
+      '❗ Создание с привязкой требует topic_id.\n' +
+      'Запустите команду в нужной теме или укажите ID:\n' +
+      '/create_project <название проекта> <topic-id>'
+    );
+    return;
+  }
+
+  const inferredTopicName = messageThreadId === topicId
+    ? extractTopicNameFromContext(ctx)
+    : '';
+  const projectName = normalizeString(argParts.join(' ')) || buildDefaultProjectName(topicId, inferredTopicName);
+
+  const created = await projectStore.createProject({
+    name: projectName,
+    mode: 'manual',
+    selectedModel: 'sora-2',
+    automationEnabled: false,
+    dailyGenerationLimit: 1,
+    isActive: true,
+  });
+
+  const bound = await projectStore.bindProjectToTelegramTopic(
+    created.id,
+    String(ctx.chat.id),
+    topicId,
+    inferredTopicName || `Тема ${topicId}`
+  );
+
+  if (!bound) {
+    await ctx.reply('❌ Не удалось привязать созданный проект к теме.');
+    return;
+  }
+
+  await ctx.reply(
+    `✅ Проект создан и привязан.\n\n` +
+    `Проект: ${bound.name}\n` +
+    `ID: ${bound.id}\n` +
+    `Chat ID: ${bound.telegramChatId}\n` +
+    `Topic ID: ${bound.telegramTopicId}\n\n` +
+    `Дальше заполните фото и настройки в веб-интерфейсе:\n${getWebInterfaceUrl(bound.id)}`
   );
 });
 
@@ -186,7 +279,9 @@ bot.command('project_status', async (ctx) => {
       `К этому контексту пока не привязан проект.\n\n` +
       `Chat ID: ${ctx.chat.id}\n` +
       `Topic ID: ${messageThreadId}\n\n` +
-      `Используйте /bind_project <project-id> в этой теме.`
+      `Создайте проект в этой теме: /create_project <название>\n` +
+      `Или привяжите существующий: /bind_project <project-id>\n\n` +
+      `Веб-интерфейс: ${getWebInterfaceUrl()}`
     );
     return;
   }
@@ -198,26 +293,18 @@ bot.command('project_status', async (ctx) => {
     `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
     `Topic ID: ${project.telegramTopicId}\n` +
     `Модель: ${project.selectedModel.toUpperCase()}\n` +
-    `Режим: ${project.mode === 'auto' ? 'авто' : 'ручной'}`
+    `Режим: ${project.mode === 'auto' ? 'авто' : 'ручной'}\n\n` +
+    `Веб: ${getWebInterfaceUrl(project.id)}`
   );
 });
 
 // Handle Photo
 bot.on(message('photo'), async (ctx) => {
-  try {
-    const photo = ctx.message.photo.pop();
-    if (!photo || !ctx.chat) return;
-
-    // Get the direct link to the photo from Telegram servers
-    const link = await ctx.telegram.getFileLink(photo.file_id);
-    const session = getSession(ctx);
-    session.lastPhotoUrl = link.href;
-
-    ctx.reply('✅ Фото товара получено. Теперь отправьте ссылку на Instagram Reel, стиль которого нужно взять за основу.');
-  } catch (error: any) {
-    console.error('Photo Handle Error:', error.message);
-    ctx.reply('❌ Не удалось обработать изображение. Попробуйте еще раз.');
-  }
+  const boundProject = await getBoundProject(ctx);
+  await ctx.reply(
+    `Фото через Telegram отключены для стабильного пайплайна.\n` +
+    `Загрузите референсы в веб-интерфейсе:\n${getWebInterfaceUrl(boundProject?.id || '')}`
+  );
 });
 
 // Handle Instagram Link
@@ -234,12 +321,19 @@ bot.on(message('text'), async (ctx) => {
 
     const reelUrl = text.trim();
 
-    const session = getSession(ctx);
     const boundProject = await getBoundProject(ctx);
-    const duplicateLibraryItem = boundProject
-      ? await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl)
-      : null;
-    if (duplicateLibraryItem && boundProject) {
+    if (!boundProject) {
+      await ctx.reply(
+        `Эта тема не привязана к проекту.\n` +
+        `Создайте проект: /create_project <название>\n` +
+        `Или привяжите существующий: /bind_project <project-id>\n\n` +
+        `Веб-интерфейс: ${getWebInterfaceUrl()}`
+      );
+      return;
+    }
+
+    const duplicateLibraryItem = await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl);
+    if (duplicateLibraryItem) {
       await ctx.reply(
         `ℹ️ Этот Reel уже есть в проекте "${boundProject.name}".\n` +
         `Статус: ${duplicateLibraryItem.status}.\n` +
@@ -248,25 +342,20 @@ bot.on(message('text'), async (ctx) => {
       return;
     }
 
-    const targetModel = boundProject?.selectedModel ?? session.model;
-    const projectReferenceImageUrls = boundProject
-      ? await projectStore.getReferenceImageDataUrls(boundProject.referenceImages)
-      : [];
-    const libraryItem = boundProject
-      ? await referenceLibraryStore.createItem({
-          projectId: boundProject.id,
-          sourceUrl: reelUrl,
-          status: 'received',
-        })
-      : null;
-
-    if (!boundProject && !session.lastPhotoUrl && projectReferenceImageUrls.length === 0) {
-      return ctx.reply(
-        boundProject
-          ? '❗ У этого проекта пока нет референс-изображений. Загрузите фото товара в веб-интерфейсе или отправьте ФОТО в Telegram.'
-          : '❗ Сначала отправьте ФОТО товара, который нужно использовать.'
+    if (!boundProject.referenceImages.length) {
+      await ctx.reply(
+        `У проекта "${boundProject.name}" нет фото-референсов.\n` +
+        `Загрузите фото в веб-интерфейсе и повторите:\n${getWebInterfaceUrl(boundProject.id)}`
       );
+      return;
     }
+
+    const targetModel = boundProject.selectedModel;
+    const libraryItem = await referenceLibraryStore.createItem({
+      projectId: boundProject.id,
+      sourceUrl: reelUrl,
+      status: 'received',
+    });
 
     let statusMsg: any = null;
     const chatId = ctx.chat.id;
@@ -295,9 +384,7 @@ bot.on(message('text'), async (ctx) => {
     try {
       // 1. Parsing Instagram Reel
       await updateStatus('⏳ Разбираю Reel...');
-      if (libraryItem) {
-        await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
-      }
+      await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
       const reel = await InstagramService.getReelInfo(reelUrl);
 
       // 2. Download Video for Base64 Analysis
@@ -306,97 +393,61 @@ bot.on(message('text'), async (ctx) => {
 
       // 3. Analyzing Video
       await updateStatus('⏳ Анализирую стиль через Gemini...');
-      let updatedLibraryItem = libraryItem;
-      if (libraryItem) {
-        updatedLibraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
-          directVideoUrl: reel.url,
-          thumbnailUrl: reel.thumbnail ?? '',
-          status: 'analyzing',
-        });
+      const updatedLibraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
+        directVideoUrl: reel.url,
+        thumbnailUrl: reel.thumbnail ?? '',
+        status: 'analyzing',
+      });
+      if (!updatedLibraryItem) {
+        throw new Error('Не удалось обновить элемент библиотеки после парсинга Reel');
       }
 
-      if (updatedLibraryItem) {
-        await updateStatus('⏳ Сохраняю аудио из Reel...');
-        await ReferenceAudioService.ensureAudioTrack(updatedLibraryItem);
-        await updateStatus('⏳ Анализирую стиль через Gemini...');
-      }
+      await updateStatus('⏳ Сохраняю аудио из Reel...');
+      await ReferenceAudioService.ensureAudioTrack(updatedLibraryItem);
+      await updateStatus('⏳ Анализирую стиль через Gemini...');
 
       const analysis = await GeminiService.analyzeVideo({ localPath: videoLocalPath, videoUrl: reel.url });
-      if (libraryItem) {
-        const textOverlays = await TextOverlayService.extractFromVideo({
-          localPath: videoLocalPath,
-          videoUrl: reel.url,
-          analysis,
-        });
+      const textOverlays = await TextOverlayService.extractFromVideo({
+        localPath: videoLocalPath,
+        videoUrl: reel.url,
+        analysis,
+      });
 
-        await referenceLibraryStore.updateItem(libraryItem.id, {
-          directVideoUrl: reel.url,
-          thumbnailUrl: reel.thumbnail ?? '',
-          textOverlays,
-          analysis,
-          status: 'analyzed',
-          errorMessage: '',
-        });
-        analysisSaved = true;
+      await referenceLibraryStore.updateItem(libraryItem.id, {
+        directVideoUrl: reel.url,
+        thumbnailUrl: reel.thumbnail ?? '',
+        textOverlays,
+        analysis,
+        status: 'analyzed',
+        errorMessage: '',
+      });
+      analysisSaved = true;
+
+      await updateStatus('⏳ Собираю промпт и запускаю генерацию видео...');
+      const generationTask = await ManualGenerationService.runFromLibraryItem({
+        projectId: boundProject.id,
+        referenceLibraryItemId: libraryItem.id,
+        triggerMode: 'telegram_manual',
+      });
+      if (!generationTask?.resultVideoUrl) {
+        throw new Error('Generation completed without a result video URL');
       }
 
-      let videoUrl: string;
-
-      if (boundProject && libraryItem) {
-        await updateStatus('⏳ Собираю промпт и запускаю генерацию видео...');
-        const generationTask = await ManualGenerationService.runFromLibraryItem({
-          projectId: boundProject.id,
-          referenceLibraryItemId: libraryItem.id,
-          triggerMode: 'telegram_manual',
-          ...(session.lastPhotoUrl ? { fallbackReferenceImageUrl: session.lastPhotoUrl } : {}),
-        });
-
-        if (!generationTask?.resultVideoUrl) {
-          throw new Error('Generation completed without a result video URL');
-        }
-
-        videoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
-      } else {
-        // 3. Generating Sora Prompt
-        await updateStatus('⏳ Собираю промпт через Gemini...');
-        const promptInput = {
-          videoAnalysis: analysis,
-          targetModel,
-          project: boundProject,
-          projectReferenceImageUrls,
-          ...(session.lastPhotoUrl ? { fallbackProductPhotoUrl: session.lastPhotoUrl } : {}),
-        };
-        const prompt = await GeminiService.generateClonningPrompt(promptInput);
-
-        // 4. Triggering Generation
-        await updateStatus(`⏳ Запускаю генерацию ${targetModel.toUpperCase()}... Это может занять несколько минут.`);
-        const generationReferenceImageUrl = session.lastPhotoUrl || projectReferenceImageUrls[0];
-        if (!generationReferenceImageUrl) {
-          throw new Error('No product reference image available for generation');
-        }
-
-        const generationResult = await VideoGenerationService.generateWithFallback({
-          prompt,
-          imageUrl: generationReferenceImageUrl,
-          model: targetModel,
-        });
-
-        // 5. Polling Result
-        videoUrl = generationResult.resultVideoUrl;
-      }
+      const finalVideoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
+      const generationProvider = (generationTask.provider || 'kie').toUpperCase();
 
       // 6. Send Result
       if (statusMsg) {
         await ctx.telegram.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
       }
-      await ctx.replyWithVideo(videoUrl, {
-        caption: `✨ Сгенерировано через ${targetModel.toUpperCase()}\n\nРеференс: ${reelUrl}`,
+      await ctx.replyWithVideo(finalVideoUrl, {
+        caption: `✨ Сгенерировано через ${targetModel.toUpperCase()} (${generationProvider})\n\nРеференс: ${reelUrl}`,
       });
     } catch (error: any) {
       const errorMsg = error.message || String(error) || 'Unknown error';
       console.error('Process Error details:', error);
       
-      if (libraryItem && !analysisSaved) {
+      if (!analysisSaved) {
         await referenceLibraryStore.updateItem(libraryItem.id, {
           status: 'failed',
           errorMessage: errorMsg,

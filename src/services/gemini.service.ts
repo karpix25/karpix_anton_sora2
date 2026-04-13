@@ -268,6 +268,8 @@ export class GeminiService {
 
         PRODUCT VIDEO LOGIC:
         - Preserve the simple story logic of the original reel.
+        - Keep the same timeline structure and action order as the reference analysis.
+        - Do not invent new scenes that are absent in the reference.
         - Preserve the original shot composition and camera distance from the reference.
         - If the reference shows a person, keep a person in frame for the same beats.
         - If the reference is medium/portrait framing, do not switch to isolated macro product shots.
@@ -303,6 +305,7 @@ export class GeminiService {
         - No explanations.
         - No meta notes.
         - No headings outside the time blocks.
+        - Keep the same number of time blocks as in the reference when possible.
         - End naturally after the final reveal.
 
         TARGET STYLE EXAMPLE:
