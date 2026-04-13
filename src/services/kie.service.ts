@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config.js';
+import { RateLimiter } from '../utils/rate-limiter.js';
 
 function parseResultVideoUrl(task: any): string {
   const resultJson = task?.resultJson;
@@ -19,6 +20,12 @@ function parseResultVideoUrl(task: any): string {
 
 export class KieService {
   /**
+   * Limit: 20 generation requests per 10 seconds.
+   * Using 18 for safety.
+   */
+  private static generationRateLimiter = new RateLimiter(18, 10000);
+
+  /**
    * Triggers video generation on Kie.ai.
    * @param prompt The generated prompt from Gemini Pro.
    * @param imageUrl The product photo URL as a reference.
@@ -29,42 +36,59 @@ export class KieService {
     imageUrl: string,
     model: 'sora-2' | 'veo-3-1'
   ): Promise<string> {
-    try {
-      // Kie.ai model mapping aligned with the current image-to-video flow.
-      const modelMapping: Record<string, string> = {
-        'sora-2': 'sora-2-image-to-video-stable',
-        'veo-3-1': 'veo-3-1',
-      };
+    return this.generationRateLimiter.schedule(async () => {
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      const response = await axios.post(
-        `${config.kieAi.baseUrl}/jobs/createTask`,
-        {
-          model: modelMapping[model] || model,
-          input: {
-            prompt,
-            image_urls: [imageUrl],
-            aspect_ratio: 'portrait',
-            n_frames: '10',
-            upload_method: 's3',
-          },
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${config.kieAi.apiKey}`,
-            'Content-Type': 'application/json',
-          },
+      while (retryCount <= maxRetries) {
+        try {
+          // Kie.ai model mapping aligned with the current image-to-video flow.
+          const modelMapping: Record<string, string> = {
+            'sora-2': 'sora-2-image-to-video-stable',
+            'veo-3-1': 'veo-3-1',
+          };
+
+          const response = await axios.post(
+            `${config.kieAi.baseUrl}/jobs/createTask`,
+            {
+              model: modelMapping[model] || model,
+              input: {
+                prompt,
+                image_urls: [imageUrl],
+                aspect_ratio: 'portrait',
+                n_frames: '10',
+                upload_method: 's3',
+              },
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${config.kieAi.apiKey}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          const taskId = response.data.data?.taskId || response.data.task_id || response.data.id;
+          if (!taskId) {
+            throw new Error('Failed to get task ID from Kie.ai');
+          }
+          return taskId;
+        } catch (error: any) {
+          if (error.response?.status === 429) {
+            retryCount++;
+            if (retryCount <= maxRetries) {
+              const waitTime = Math.pow(2, retryCount) * 2000;
+              console.warn(`KIE.ai Rate limit hit (429). Retrying in ${waitTime}ms... (Attempt ${retryCount}/${maxRetries})`);
+              await new Promise((resolve) => setTimeout(resolve, waitTime));
+              continue;
+            }
+          }
+          console.error('Kie.ai Generation Error:', error.response?.data || error.message);
+          throw new Error(`Video generation start failed: ${error.message}`);
         }
-      );
-
-      const taskId = response.data.data?.taskId || response.data.task_id || response.data.id;
-      if (!taskId) {
-        throw new Error('Failed to get task ID from Kie.ai');
       }
-      return taskId;
-    } catch (error: any) {
-      console.error('Kie.ai Generation Error:', error.response?.data || error.message);
-      throw new Error(`Video generation start failed: ${error.message}`);
-    }
+      throw new Error('Failed to start video generation after multiple rate-limit retries.');
+    });
   }
 
   /**

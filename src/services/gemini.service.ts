@@ -161,27 +161,30 @@ export class GeminiService {
               content: [
                 {
                   type: 'text',
-                  text: `Выполни глубокий технический и режиссерский реверс-инжиниринг видео по протоколу Regisseur Protocol v2.1. Твоя цель — создать исчерпывающее описание (Prompt Sheet), которое позволит нейросети Veo 3.1 воссоздать это видео с сохранением физики и стиля.
+                  text: `                  Выполни глубокий технический и режиссерский реверс-инжиниринг видео по протоколу Regisseur Protocol v3.0. Твоя цель — создать исчерпывающее описание (Prompt Sheet), которое позволит нейросети Veo 3.1 или Sora 2 воссоздать это видео с сохранением физики, эмоций и стиля.
 
                   1. Аналитический блок:
                   - Semantic Core: В чем заключается главный визуальный хук или физический механизм (морфинг, левитация, резкая смена планов, комедийный тайминг).
-                  - Optical Geometry: Определи тип линзы (Wide Angle 24mm, Portrait 85mm) и глубину резкости (Bokeh). Тип камеры: UGC (тряска, цифровой шум) или стационарный штатив/кинокамера.
-                  - Lighting & Materials: Определи схему света (контрастный боковой, мягкий заполняющий). Опиши свойства материалов: как свет отражается от кожи, металла или пластика (Glossiness/Roughness).
-                  - Spatial Physics & Occlusion: Опиши эшелонирование кадра. Какие объекты находятся на переднем плане и как они перекрывают друг друга при движении (Z-depth).
-                  - Kinetic Dynamics: Опиши инерцию тел, волос и тканей. Как меняется натяжение одежды при движении? Укажи векторы смещения центра тяжести.
+                  - Acting & Emotions Map (CRITICAL): Опиши мимику персонажа, направление взгляда и микро-эмоции. Как меняется выражение лица в ответ на события?
+                  - Prop & Environment Scan: Перечисли все важные предметы в кадре (наушники, телефон, аксессуары) и опиши их взаимодействие с персонажем.
+                  - Optical Geometry & Continuity: Определи тип линзы и глубину резкости. Укажи тип съемки: ONE-SHOT (один непрерывный план без склеек) или MULTI-SHOT (наличие монтажных склеек).
+                  - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
+                  - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
+                  - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
 
                   3. Text & Overlays Detection (CRITICAL):
                   - Выяви все текстовые элементы на видео.
-                  - Категоризируй как: "Static Text" (неподвижная плашка), "Dynamic Text" (анимированный или движущийся текст) или "Subtitles" (субтитры речи).
+                  - Категоризируй как: "Static Text", "Dynamic Text" или "Subtitles".
                   - Для каждого элемента укажи: [Start - End] тайминг, точный текст и его тип.
 
                   4. Выходной формат (Strict Timeline):
-                  Выдай результат в виде списка по таймкодам (каждые 1-2 сек или при смене действия). Для каждого отрезка укажи:
+                  Выдай результат в виде списка по таймкодам. Для каждого отрезка укажи:
                   - [Time]: (например, 00:00 - 00:02)
                   - Action: Техническое описание движения.
-                  - Camera: Движение камеры (Pan, Tilt, Zoom, Shake).
-                  - Physics Note: Нюансы физики (ткань, инерция, свет).
-                  - Text Overlay: Присутствует ли текст в этом фрагменте? Если да, какой.
+                  - Acting/Emotions: Детальное описание мимики и настроения.
+                  - Camera & Continuity: Движение камеры и подтверждение отсутствия склеек (если это длинный план).
+                  - Physics & Props: Нюансы физики и взаимодействие с предметами (например, наушники).
+                  - Text Overlay: Присутствует ли текст?
                   
                   В конце добавь отдельный блок "SUMMARY OF TEXT OVERLAYS" со списком всех найденных текстов.`,
                 },
@@ -247,11 +250,20 @@ export class GeminiService {
 
         CORE PRINCIPLES:
         - Write like a human describing what is happening on screen.
-        - Use simple words.
-        - Focus on visible action.
-        - Keep the prompt compact.
+        - Use simple words but retain ALL CRITICAL DETAILS (props, emotions, objects).
+        - Focus on visible action and CHARACTER BEHAVIOR.
+        - Keep the prompt compact but descriptive of the vibe.
         - One clear action per time block.
         - Do not explain the analysis. Turn it into a simple sequence of actions.
+
+        EMOTIONS & PROPS (STRICT):
+        - Describe facial micro-expressions (smiles, looking surprised, serious gaze).
+        - Ensure every key prop mentioned in the analysis (e.g. headphones, phone, jewelry) is explicitly included in the prompt.
+        - Describe how the person interacts with these props.
+
+        SHOT CONTINUITY (STRICT):
+        - If the analysis describes a ONE-SHOT or single continuous plan, the generated prompt MUST explicitly state "Single continuous shot without any cuts" or "Seamless one-take video".
+        - Do NOT allow the model to invent cuts between time blocks if the reference is a single shot.
 
         WHAT TO AVOID:
         - No technical film language unless absolutely necessary.
@@ -271,6 +283,7 @@ export class GeminiService {
         - Keep the same timeline structure and action order as the reference analysis.
         - Do not invent new scenes that are absent in the reference.
         - Preserve the original shot composition and camera distance from the reference.
+        - If the reference is a single portrait take, keep it as a single portrait take.
         - If the reference shows a person, keep a person in frame for the same beats.
         - If the reference is medium/portrait framing, do not switch to isolated macro product shots.
         - Keep the same demonstration mechanics as in the reference (same kind of hand motion and reveal rhythm).
@@ -281,7 +294,7 @@ export class GeminiService {
         - The final result should feel like a clear social-media product demo.
 
         PROMPT WRITING RULES:
-        - Describe what the person does.
+        - Describe what the person does and how they feel (mimicry).
         - Describe what changes visually.
         - Describe what the viewer notices.
         - Keep framing language explicit in each block (e.g. medium portrait, chest-up, close-up of hair section in hand).
