@@ -202,7 +202,6 @@ function buildDrawTextFilters(overlays: ReferenceTextOverlay[], textFiles: strin
       `fontcolor=${textColor}`,
       `x=${safeX}`,
       `y=${safeY}`,
-      `text_align=C`,
       `fix_bounds=1`,
       `box=${overlay.box ? 1 : 0}`,
       `boxcolor=${boxColor}`,
