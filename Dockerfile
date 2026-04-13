@@ -7,7 +7,8 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+# Runtime uses ts-node directly, so TypeScript and type packages from devDependencies are required.
+RUN npm ci && npm cache clean --force
 
 COPY tsconfig.json ./
 COPY src ./src
