@@ -21,6 +21,7 @@ export interface Project {
   name: string;
   telegramChatId: string;
   telegramTopicId: string;
+  telegramTopicName: string;
   productName: string;
   productDescription: string;
   extraPromptingRules: string;
@@ -41,6 +42,7 @@ export interface ProjectInput {
   name?: string;
   telegramChatId?: string;
   telegramTopicId?: string;
+  telegramTopicName?: string;
   productName?: string;
   productDescription?: string;
   extraPromptingRules?: string;

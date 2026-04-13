@@ -77,6 +77,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     name: normalizeString(input.name) || existing?.name || 'New Project',
     telegramChatId: normalizeString(input.telegramChatId ?? existing?.telegramChatId),
     telegramTopicId: normalizeString(input.telegramTopicId ?? existing?.telegramTopicId),
+    telegramTopicName: normalizeString(input.telegramTopicName ?? existing?.telegramTopicName),
     productName: normalizeString(input.productName ?? existing?.productName),
     productDescription: normalizeString(input.productDescription ?? existing?.productDescription),
     extraPromptingRules: normalizeString(input.extraPromptingRules ?? existing?.extraPromptingRules),
@@ -175,7 +176,8 @@ export const projectStore = {
   async bindProjectToTelegramTopic(
     projectId: string,
     telegramChatId: string,
-    telegramTopicId: string
+    telegramTopicId: string,
+    telegramTopicName = ''
   ): Promise<Project | null> {
     const projects = await loadProjects();
     const targetIndex = projects.findIndex((project) => project.id === projectId);
@@ -185,6 +187,7 @@ export const projectStore = {
 
     const normalizedChatId = normalizeString(telegramChatId);
     const normalizedTopicId = normalizeString(telegramTopicId);
+    const normalizedTopicName = normalizeString(telegramTopicName);
 
     const nextProjects = projects.map((project, index) => {
       if (
@@ -197,6 +200,7 @@ export const projectStore = {
             ...project,
             telegramChatId: '',
             telegramTopicId: '',
+            telegramTopicName: '',
           },
           project
         );
@@ -208,6 +212,7 @@ export const projectStore = {
             ...project,
             telegramChatId: normalizedChatId,
             telegramTopicId: normalizedTopicId,
+            telegramTopicName: normalizedTopicName || project.telegramTopicName || '',
           },
           project
         );

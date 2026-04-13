@@ -19,12 +19,32 @@ interface Session {
 // Memory-based session (use a DB like Redis for production)
 const sessions = new Map<string, Session>();
 
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function getMessageThreadId(ctx: Context): string {
   const messageThreadId = 'message' in ctx && ctx.message && 'message_thread_id' in ctx.message
     ? ctx.message.message_thread_id
     : undefined;
 
   return typeof messageThreadId === 'number' ? String(messageThreadId) : 'main';
+}
+
+function extractTopicNameFromContext(ctx: Context, fallback = ''): string {
+  const explicitName = normalizeString(fallback);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  const message = 'message' in ctx ? (ctx.message as any) : null;
+  const inferredName =
+    normalizeString(message?.forum_topic_created?.name) ||
+    normalizeString(message?.forum_topic_edited?.name) ||
+    normalizeString(message?.reply_to_message?.forum_topic_created?.name) ||
+    normalizeString(message?.reply_to_message?.forum_topic_edited?.name);
+
+  return inferredName;
 }
 
 function getSessionKey(ctx: Context): string {
@@ -105,7 +125,9 @@ bot.command('bind_project', async (ctx) => {
   }
 
   const text = ctx.message.text.trim();
-  const [, projectId] = text.split(/\s+/, 2);
+  const bindMatch = text.match(/^\/bind_project(?:@\w+)?\s+(\S+)(?:\s+([\s\S]+))?$/);
+  const projectId = normalizeString(bindMatch?.[1]);
+  const topicNameFromCommand = normalizeString(bindMatch?.[2]);
   const messageThreadId = getMessageThreadId(ctx);
 
   if (messageThreadId === 'main') {
@@ -114,11 +136,17 @@ bot.command('bind_project', async (ctx) => {
   }
 
   if (!projectId) {
-    await ctx.reply('⚠️ Использование: /bind_project <project-id>');
+    await ctx.reply('⚠️ Использование: /bind_project <project-id> [название темы]');
     return;
   }
 
-  const project = await projectStore.bindProjectToTelegramTopic(projectId, String(ctx.chat.id), messageThreadId);
+  const inferredTopicName = extractTopicNameFromContext(ctx, topicNameFromCommand) || `Тема ${messageThreadId}`;
+  const project = await projectStore.bindProjectToTelegramTopic(
+    projectId,
+    String(ctx.chat.id),
+    messageThreadId,
+    inferredTopicName
+  );
   if (!project) {
     await ctx.reply(`❌ Проект не найден: ${projectId}`);
     return;
@@ -128,6 +156,7 @@ bot.command('bind_project', async (ctx) => {
     `✅ Проект привязан к этой теме.\n\n` +
     `Проект: ${project.name}\n` +
     `Chat ID: ${project.telegramChatId}\n` +
+    `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
     `Topic ID: ${project.telegramTopicId}`
   );
 });
@@ -154,6 +183,7 @@ bot.command('project_status', async (ctx) => {
     `Текущая тема привязана к:\n\n` +
     `Проект: ${project.name}\n` +
     `Chat ID: ${project.telegramChatId}\n` +
+    `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
     `Topic ID: ${project.telegramTopicId}\n` +
     `Модель: ${project.selectedModel.toUpperCase()}\n` +
     `Режим: ${project.mode === 'auto' ? 'авто' : 'ручной'}`

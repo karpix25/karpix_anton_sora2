@@ -5,6 +5,7 @@ const defaultProject = () => ({
   name: 'Новый проект',
   telegramChatId: '',
   telegramTopicId: '',
+  telegramTopicName: '',
   productName: '',
   productDescription: '',
   extraPromptingRules: '',
@@ -136,7 +137,7 @@ function renderBindingInfo() {
   elements.projectId.textContent = state.currentProject.id;
   elements.telegramBindingStatus.textContent =
     state.currentProject.telegramChatId && state.currentProject.telegramTopicId
-      ? `Привязан к чату ${state.currentProject.telegramChatId}, теме ${state.currentProject.telegramTopicId}`
+      ? `Привязан к чату ${state.currentProject.telegramChatId}, теме "${state.currentProject.telegramTopicName || `Тема ${state.currentProject.telegramTopicId}`}" (ID: ${state.currentProject.telegramTopicId})`
       : 'Пока не привязан';
   elements.bindingCommand.textContent = `/bind_project ${state.currentProject.id}`;
 }
@@ -175,9 +176,11 @@ async function refreshTelegramBindingStatus() {
 
   const nextChatId = project.telegramChatId || '';
   const nextTopicId = project.telegramTopicId || '';
+  const nextTopicName = project.telegramTopicName || '';
   const hasBindingChange =
     state.currentProject.telegramChatId !== nextChatId ||
-    state.currentProject.telegramTopicId !== nextTopicId;
+    state.currentProject.telegramTopicId !== nextTopicId ||
+    state.currentProject.telegramTopicName !== nextTopicName;
 
   if (!hasBindingChange) {
     return;
@@ -187,6 +190,7 @@ async function refreshTelegramBindingStatus() {
     ...state.currentProject,
     telegramChatId: nextChatId,
     telegramTopicId: nextTopicId,
+    telegramTopicName: nextTopicName,
   };
 
   const index = state.projects.findIndex((item) => item.id === project.id);
@@ -195,6 +199,7 @@ async function refreshTelegramBindingStatus() {
       ...state.projects[index],
       telegramChatId: nextChatId,
       telegramTopicId: nextTopicId,
+      telegramTopicName: nextTopicName,
     };
   }
 
