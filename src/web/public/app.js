@@ -26,6 +26,9 @@ const state = {
   generationTasks: [],
 };
 
+const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
+let telegramBindingPollTimer = null;
+
 const elements = {
   projectList: document.getElementById('project-list'),
   statusText: document.getElementById('status-text'),
@@ -138,6 +141,67 @@ function renderBindingInfo() {
   elements.bindingCommand.textContent = `/bind_project ${state.currentProject.id}`;
 }
 
+function stopTelegramBindingPolling() {
+  if (telegramBindingPollTimer) {
+    window.clearInterval(telegramBindingPollTimer);
+    telegramBindingPollTimer = null;
+  }
+}
+
+function startTelegramBindingPolling() {
+  stopTelegramBindingPolling();
+
+  if (!state.currentProject.id) {
+    return;
+  }
+
+  telegramBindingPollTimer = window.setInterval(() => {
+    refreshTelegramBindingStatus().catch((error) => {
+      console.error(error);
+    });
+  }, TELEGRAM_BINDING_POLL_INTERVAL_MS);
+}
+
+async function refreshTelegramBindingStatus() {
+  if (!state.currentProject.id) {
+    return;
+  }
+
+  const data = await api(`/api/projects/${state.currentProject.id}`);
+  const project = data?.project;
+  if (!project) {
+    return;
+  }
+
+  const nextChatId = project.telegramChatId || '';
+  const nextTopicId = project.telegramTopicId || '';
+  const hasBindingChange =
+    state.currentProject.telegramChatId !== nextChatId ||
+    state.currentProject.telegramTopicId !== nextTopicId;
+
+  if (!hasBindingChange) {
+    return;
+  }
+
+  state.currentProject = {
+    ...state.currentProject,
+    telegramChatId: nextChatId,
+    telegramTopicId: nextTopicId,
+  };
+
+  const index = state.projects.findIndex((item) => item.id === project.id);
+  if (index !== -1) {
+    state.projects[index] = {
+      ...state.projects[index],
+      telegramChatId: nextChatId,
+      telegramTopicId: nextTopicId,
+    };
+  }
+
+  renderBindingInfo();
+  renderProjectList();
+}
+
 function renderProjectList() {
   if (!state.projects.length) {
     elements.projectList.innerHTML = '<div class="empty-state">Проектов пока нет. Нажмите «Новый проект», чтобы создать первый.</div>';
@@ -207,6 +271,7 @@ function applyProjectToForm(project) {
   workflow.renderLibraryItems();
   workflow.renderGenerationTasks();
   renderProjectList();
+  startTelegramBindingPolling();
 
   Promise.all([workflow.loadLibrary(), workflow.loadGenerations()]).catch((error) => {
     console.error(error);
@@ -329,6 +394,7 @@ function bindEvents() {
   elements.refreshLibraryButton.addEventListener('click', async () => {
     try {
       setStatus('Обновление данных проекта...');
+      await refreshTelegramBindingStatus();
       await Promise.all([workflow.loadLibrary(), workflow.loadGenerations()]);
       setStatus('Данные проекта обновлены');
     } catch (error) {
@@ -353,4 +419,8 @@ bindEvents();
 loadProjects().catch((error) => {
   console.error(error);
   setStatus(error.message);
+});
+
+window.addEventListener('beforeunload', () => {
+  stopTelegramBindingPolling();
 });
