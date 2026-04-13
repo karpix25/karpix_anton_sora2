@@ -14,6 +14,27 @@ function parseProviderOrder(value: string | undefined): string[] {
   return providers.length > 0 ? providers : ['google-vertex', 'google-ai-studio'];
 }
 
+function parseBoolean(value: string | undefined, defaultValue = false): boolean {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return defaultValue;
+  }
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
 function parsePort(...values: Array<string | undefined>): number {
   for (const value of values) {
     if (!value || value.trim() === '') {
@@ -29,10 +50,45 @@ function parsePort(...values: Array<string | undefined>): number {
   return 3000;
 }
 
+function normalizeWebhookPath(value: string | undefined): string {
+  const normalized = (value || '').trim();
+  if (!normalized) {
+    return '/telegram/webhook';
+  }
+
+  if (normalized.startsWith('/')) {
+    return normalized;
+  }
+
+  return `/${normalized}`;
+}
+
+function deriveWebhookPathFromUrl(webhookUrl: string): string {
+  if (!webhookUrl.trim()) {
+    return '/telegram/webhook';
+  }
+
+  try {
+    const parsed = new URL(webhookUrl);
+    return normalizeWebhookPath(parsed.pathname || '/telegram/webhook');
+  } catch {
+    return '/telegram/webhook';
+  }
+}
+
 export const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.TELEGRAM_BOT_TOKEN || ''),
+    webhook: {
+      enabled: parseBoolean(process.env.TELEGRAM_USE_WEBHOOK, false),
+      url: process.env.TELEGRAM_WEBHOOK_URL || '',
+      secretToken: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+      path: normalizeWebhookPath(
+        process.env.TELEGRAM_WEBHOOK_PATH ||
+          deriveWebhookPathFromUrl(process.env.TELEGRAM_WEBHOOK_URL || '')
+      ),
+    },
   },
   web: {
     host: process.env.WEB_HOST || process.env.HOST || '0.0.0.0',

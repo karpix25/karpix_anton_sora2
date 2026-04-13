@@ -23,6 +23,7 @@ const startBot = async (attempt = 1): Promise<void> => {
 
   try {
     console.log(`🤖 Starting Telegram bot polling (attempt ${attempt}/${maxAttempts})...`);
+    await bot.telegram.deleteWebhook({ drop_pending_updates: false });
     await bot.launch();
     console.log('✅ Bot is running! Press Ctrl+C to stop.');
   } catch (error: any) {
@@ -39,6 +40,22 @@ const startBot = async (attempt = 1): Promise<void> => {
   }
 };
 
+async function startBotWebhook(): Promise<void> {
+  const webhookUrl = config.telegram.webhook.url.trim();
+  if (!webhookUrl) {
+    throw new Error('TELEGRAM_WEBHOOK_URL is required when TELEGRAM_USE_WEBHOOK=true');
+  }
+
+  const secretToken = config.telegram.webhook.secretToken.trim();
+  await bot.telegram.setWebhook(webhookUrl, {
+    drop_pending_updates: false,
+    ...(secretToken ? { secret_token: secretToken } : {}),
+  });
+
+  const webhookInfo = await bot.telegram.getWebhookInfo();
+  console.log(`🪝 Telegram webhook configured: ${webhookInfo.url || webhookUrl}`);
+}
+
 async function bootstrap(): Promise<void> {
   await initDatabase();
   console.log('🗄️ PostgreSQL connected and schema is ready.');
@@ -46,7 +63,11 @@ async function bootstrap(): Promise<void> {
   await startWebServer();
 
   if (config.telegram.isConfigured) {
-    await startBot();
+    if (config.telegram.webhook.enabled) {
+      await startBotWebhook();
+    } else {
+      await startBot();
+    }
   } else {
     console.log('ℹ️ Telegram bot is disabled because TELEGRAM_BOT_TOKEN is missing or still uses a placeholder value.');
   }

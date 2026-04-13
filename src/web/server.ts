@@ -11,6 +11,7 @@ import { TelegramMediaService } from '../services/telegram-media.service.js';
 import { YandexDiskService } from '../services/yandex-disk.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
+import { bot } from '../bot/bot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,53 @@ async function readJsonBody<T>(req: IncomingMessage): Promise<T> {
 
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw ? (JSON.parse(raw) as T) : ({} as T);
+}
+
+function readSecretHeader(req: IncomingMessage): string {
+  const value = req.headers['x-telegram-bot-api-secret-token'];
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+
+  return '';
+}
+
+async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+  if (!config.telegram.isConfigured || !config.telegram.webhook.enabled) {
+    return false;
+  }
+
+  if (pathname !== config.telegram.webhook.path) {
+    return false;
+  }
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return true;
+  }
+
+  const expectedSecret = config.telegram.webhook.secretToken.trim();
+  if (expectedSecret && readSecretHeader(req) !== expectedSecret) {
+    sendJson(res, 403, { error: 'Forbidden' });
+    return true;
+  }
+
+  const update = await readJsonBody<Record<string, unknown>>(req);
+  res.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(JSON.stringify({ ok: true }));
+
+  void bot.handleUpdate(update as any).catch((error: any) => {
+    console.error('Telegram webhook update error:', error?.message || error);
+  });
+
+  return true;
 }
 
 async function serveFile(res: ServerResponse, filePath: string): Promise<void> {
@@ -483,6 +531,11 @@ export async function startWebServer(): Promise<void> {
       }
 
       const url = new URL(req.url, 'http://localhost');
+      const handledWebhook = await handleTelegramWebhook(req, res, url.pathname);
+      if (handledWebhook) {
+        return;
+      }
+
       const handledApi = await handleApi(req, res, url.pathname);
       if (handledApi) {
         return;
