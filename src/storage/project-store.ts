@@ -3,12 +3,34 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'fs-extra';
 import type { Project, ProjectInput, ReferenceImage } from '../domain/project.js';
+import { query } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data');
 const uploadsDir = path.join(dataDir, 'uploads', 'reference-images');
-const projectsFilePath = path.join(dataDir, 'projects.json');
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  telegram_chat_id: string;
+  telegram_topic_id: string;
+  telegram_topic_name: string;
+  product_name: string;
+  product_description: string;
+  extra_prompting_rules: string;
+  target_audience: string;
+  cta: string;
+  mode: string;
+  automation_enabled: boolean;
+  daily_generation_limit: number;
+  selected_model: string;
+  is_active: boolean;
+  primary_reference_image_id: string;
+  reference_images: unknown;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -37,6 +59,15 @@ function normalizeNumber(value: unknown, defaultValue = 0): number {
   return defaultValue;
 }
 
+function toIsoString(value: unknown, fallback = nowIso()): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const normalized = normalizeString(value);
+  return normalized || fallback;
+}
+
 function normalizeReferenceImages(value: unknown): ReferenceImage[] {
   if (!Array.isArray(value)) {
     return [];
@@ -59,6 +90,18 @@ function normalizeReferenceImages(value: unknown): ReferenceImage[] {
       createdAt: normalizeString(item.createdAt) || nowIso(),
     }))
     .filter((item) => item.url);
+}
+
+function parseReferenceImages(value: unknown): ReferenceImage[] {
+  if (typeof value === 'string') {
+    try {
+      return normalizeReferenceImages(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+
+  return normalizeReferenceImages(value);
 }
 
 function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project {
@@ -95,24 +138,32 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
   };
 }
 
+function mapRowToProject(row: ProjectRow): Project {
+  return {
+    id: normalizeString(row.id),
+    name: normalizeString(row.name) || 'New Project',
+    telegramChatId: normalizeString(row.telegram_chat_id),
+    telegramTopicId: normalizeString(row.telegram_topic_id),
+    telegramTopicName: normalizeString(row.telegram_topic_name),
+    productName: normalizeString(row.product_name),
+    productDescription: normalizeString(row.product_description),
+    extraPromptingRules: normalizeString(row.extra_prompting_rules),
+    targetAudience: normalizeString(row.target_audience),
+    cta: normalizeString(row.cta),
+    mode: row.mode === 'auto' ? 'auto' : 'manual',
+    automationEnabled: Boolean(row.automation_enabled),
+    dailyGenerationLimit: normalizeNumber(row.daily_generation_limit, 1),
+    selectedModel: row.selected_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
+    isActive: Boolean(row.is_active),
+    primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
+    referenceImages: parseReferenceImages(row.reference_images),
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
 async function ensureStorage(): Promise<void> {
   await fs.ensureDir(uploadsDir);
-
-  if (!(await fs.pathExists(projectsFilePath))) {
-    await fs.writeJson(projectsFilePath, { projects: [] }, { spaces: 2 });
-  }
-}
-
-async function loadProjects(): Promise<Project[]> {
-  await ensureStorage();
-  const data = (await fs.readJson(projectsFilePath)) as { projects?: ProjectInput[] };
-  const projects = Array.isArray(data.projects) ? data.projects : [];
-  return projects.map((project) => sanitizeProjectInput(project, project as Project));
-}
-
-async function saveProjects(projects: Project[]): Promise<void> {
-  await ensureStorage();
-  await fs.writeJson(projectsFilePath, { projects }, { spaces: 2 });
 }
 
 function safeFileExtension(mimeType: string, fallbackName: string): string {
@@ -132,45 +183,124 @@ function safeFileExtension(mimeType: string, fallbackName: string): string {
   return ext || '.bin';
 }
 
+async function upsertProject(project: Project): Promise<Project> {
+  const result = await query<ProjectRow>(
+    `
+      INSERT INTO projects (
+        id,
+        name,
+        telegram_chat_id,
+        telegram_topic_id,
+        telegram_topic_name,
+        product_name,
+        product_description,
+        extra_prompting_rules,
+        target_audience,
+        cta,
+        mode,
+        automation_enabled,
+        daily_generation_limit,
+        selected_model,
+        is_active,
+        primary_reference_image_id,
+        reference_images,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17::jsonb, $18::timestamptz, $19::timestamptz
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET
+        name = EXCLUDED.name,
+        telegram_chat_id = EXCLUDED.telegram_chat_id,
+        telegram_topic_id = EXCLUDED.telegram_topic_id,
+        telegram_topic_name = EXCLUDED.telegram_topic_name,
+        product_name = EXCLUDED.product_name,
+        product_description = EXCLUDED.product_description,
+        extra_prompting_rules = EXCLUDED.extra_prompting_rules,
+        target_audience = EXCLUDED.target_audience,
+        cta = EXCLUDED.cta,
+        mode = EXCLUDED.mode,
+        automation_enabled = EXCLUDED.automation_enabled,
+        daily_generation_limit = EXCLUDED.daily_generation_limit,
+        selected_model = EXCLUDED.selected_model,
+        is_active = EXCLUDED.is_active,
+        primary_reference_image_id = EXCLUDED.primary_reference_image_id,
+        reference_images = EXCLUDED.reference_images,
+        updated_at = EXCLUDED.updated_at
+      RETURNING *
+    `,
+    [
+      project.id,
+      project.name,
+      project.telegramChatId,
+      project.telegramTopicId,
+      project.telegramTopicName,
+      project.productName,
+      project.productDescription,
+      project.extraPromptingRules,
+      project.targetAudience,
+      project.cta,
+      project.mode,
+      project.automationEnabled,
+      project.dailyGenerationLimit,
+      project.selectedModel,
+      project.isActive,
+      project.primaryReferenceImageId,
+      JSON.stringify(project.referenceImages),
+      project.createdAt,
+      project.updatedAt,
+    ]
+  );
+
+  return mapRowToProject(result.rows[0] as ProjectRow);
+}
+
 export const projectStore = {
   async listProjects(): Promise<Project[]> {
-    const projects = await loadProjects();
-    return projects.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    await ensureStorage();
+    const result = await query<ProjectRow>('SELECT * FROM projects ORDER BY updated_at DESC');
+    return result.rows.map((row) => mapRowToProject(row));
   },
 
   async getProject(projectId: string): Promise<Project | null> {
-    const projects = await loadProjects();
-    return projects.find((project) => project.id === projectId) ?? null;
+    await ensureStorage();
+    const result = await query<ProjectRow>('SELECT * FROM projects WHERE id = $1 LIMIT 1', [normalizeString(projectId)]);
+    return result.rows[0] ? mapRowToProject(result.rows[0]) : null;
   },
 
   async findProjectByTelegramBinding(telegramChatId: string, telegramTopicId: string): Promise<Project | null> {
-    const projects = await loadProjects();
-    return projects.find(
-      (project) =>
-        project.telegramChatId === normalizeString(telegramChatId) &&
-        project.telegramTopicId === normalizeString(telegramTopicId)
-    ) ?? null;
+    await ensureStorage();
+    const result = await query<ProjectRow>(
+      `
+        SELECT *
+        FROM projects
+        WHERE telegram_chat_id = $1 AND telegram_topic_id = $2
+        LIMIT 1
+      `,
+      [normalizeString(telegramChatId), normalizeString(telegramTopicId)]
+    );
+
+    return result.rows[0] ? mapRowToProject(result.rows[0]) : null;
   },
 
   async createProject(input: ProjectInput): Promise<Project> {
-    const projects = await loadProjects();
+    await ensureStorage();
     const project = sanitizeProjectInput(input);
-    projects.unshift(project);
-    await saveProjects(projects);
-    return project;
+    return upsertProject(project);
   },
 
   async updateProject(projectId: string, input: ProjectInput): Promise<Project | null> {
-    const projects = await loadProjects();
-    const index = projects.findIndex((project) => project.id === projectId);
-    if (index === -1) {
+    await ensureStorage();
+    const existing = await this.getProject(projectId);
+    if (!existing) {
       return null;
     }
 
-    const nextProject = sanitizeProjectInput(input, projects[index]);
-    projects[index] = nextProject;
-    await saveProjects(projects);
-    return nextProject;
+    const nextProject = sanitizeProjectInput(input, existing);
+    return upsertProject(nextProject);
   },
 
   async bindProjectToTelegramTopic(
@@ -179,61 +309,52 @@ export const projectStore = {
     telegramTopicId: string,
     telegramTopicName = ''
   ): Promise<Project | null> {
-    const projects = await loadProjects();
-    const targetIndex = projects.findIndex((project) => project.id === projectId);
-    if (targetIndex === -1) {
+    await ensureStorage();
+
+    const targetProject = await this.getProject(projectId);
+    if (!targetProject) {
       return null;
     }
 
     const normalizedChatId = normalizeString(telegramChatId);
     const normalizedTopicId = normalizeString(telegramTopicId);
     const normalizedTopicName = normalizeString(telegramTopicName);
+    const timestamp = nowIso();
 
-    const nextProjects = projects.map((project, index) => {
-      if (
-        index !== targetIndex &&
-        project.telegramChatId === normalizedChatId &&
-        project.telegramTopicId === normalizedTopicId
-      ) {
-        return sanitizeProjectInput(
-          {
-            ...project,
-            telegramChatId: '',
-            telegramTopicId: '',
-            telegramTopicName: '',
-          },
-          project
-        );
-      }
+    await query(
+      `
+        UPDATE projects
+        SET
+          telegram_chat_id = '',
+          telegram_topic_id = '',
+          telegram_topic_name = '',
+          updated_at = $1::timestamptz
+        WHERE id <> $2 AND telegram_chat_id = $3 AND telegram_topic_id = $4
+      `,
+      [timestamp, targetProject.id, normalizedChatId, normalizedTopicId]
+    );
 
-      if (index === targetIndex) {
-        return sanitizeProjectInput(
-          {
-            ...project,
-            telegramChatId: normalizedChatId,
-            telegramTopicId: normalizedTopicId,
-            telegramTopicName: normalizedTopicName || project.telegramTopicName || '',
-          },
-          project
-        );
-      }
+    const nextProject = sanitizeProjectInput(
+      {
+        ...targetProject,
+        telegramChatId: normalizedChatId,
+        telegramTopicId: normalizedTopicId,
+        telegramTopicName: normalizedTopicName || targetProject.telegramTopicName || '',
+      },
+      targetProject
+    );
 
-      return project;
-    });
-
-    await saveProjects(nextProjects);
-    return nextProjects[targetIndex] ?? null;
+    return upsertProject(nextProject);
   },
 
   async deleteProject(projectId: string): Promise<boolean> {
-    const projects = await loadProjects();
-    const existing = projects.find((project) => project.id === projectId);
+    await ensureStorage();
+    const existing = await this.getProject(projectId);
     if (!existing) {
       return false;
     }
 
-    const filtered = projects.filter((project) => project.id !== projectId);
-    await saveProjects(filtered);
+    await query('DELETE FROM projects WHERE id = $1', [normalizeString(projectId)]);
 
     await Promise.all(
       existing.referenceImages.map(async (image: ReferenceImage) => {

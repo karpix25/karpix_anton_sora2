@@ -11,41 +11,75 @@ dns.setDefaultResultOrder('ipv4first');
 
 import { config } from './config.js';
 import { startWebServer } from './web/server.js';
+import { closeDatabase, initDatabase } from './storage/db.js';
 
 console.log('🚀 Starting Sora 2 & Veo 3.1 Video Automation Tool...');
 
-startWebServer().catch((error: Error) => {
-  console.error('❌ Web admin failed to start:', error.message);
-});
+let isShuttingDown = false;
 
-if (config.telegram.isConfigured) {
-  const startBot = async (attempt = 1): Promise<void> => {
-    const maxAttempts = 5;
-    const delay = Math.min(attempt * 2000, 10000);
+const startBot = async (attempt = 1): Promise<void> => {
+  const maxAttempts = 5;
+  const delay = Math.min(attempt * 2000, 10000);
 
-    try {
-      console.log(`🤖 Starting Telegram bot polling (attempt ${attempt}/${maxAttempts})...`);
-      await bot.launch();
-      console.log('✅ Bot is running! Press Ctrl+C to stop.');
-    } catch (error: any) {
-      console.error(`❌ Bot failed to start (attempt ${attempt}):`, error.message);
-      if (attempt < maxAttempts) {
-        console.log(`📡 Retrying in ${delay / 1000}s...`);
-        setTimeout(() => {
-          startBot(attempt + 1).catch(console.error);
-        }, delay);
-      } else {
-        console.error('🛑 Max bot startup attempts reached.');
-        console.error('Full connection error:', error);
-      }
+  try {
+    console.log(`🤖 Starting Telegram bot polling (attempt ${attempt}/${maxAttempts})...`);
+    await bot.launch();
+    console.log('✅ Bot is running! Press Ctrl+C to stop.');
+  } catch (error: any) {
+    console.error(`❌ Bot failed to start (attempt ${attempt}):`, error.message);
+    if (attempt < maxAttempts) {
+      console.log(`📡 Retrying in ${delay / 1000}s...`);
+      setTimeout(() => {
+        startBot(attempt + 1).catch(console.error);
+      }, delay);
+    } else {
+      console.error('🛑 Max bot startup attempts reached.');
+      console.error('Full connection error:', error);
     }
-  };
+  }
+};
 
-  startBot().catch(console.error);
-} else {
-  console.log('ℹ️ Telegram bot is disabled because TELEGRAM_BOT_TOKEN is missing or still uses a placeholder value.');
+async function bootstrap(): Promise<void> {
+  await initDatabase();
+  console.log('🗄️ PostgreSQL connected and schema is ready.');
+
+  await startWebServer();
+
+  if (config.telegram.isConfigured) {
+    await startBot();
+  } else {
+    console.log('ℹ️ Telegram bot is disabled because TELEGRAM_BOT_TOKEN is missing or still uses a placeholder value.');
+  }
 }
 
+async function gracefulShutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  try {
+    bot.stop(signal);
+  } catch {
+    // no-op
+  }
+
+  try {
+    await closeDatabase();
+  } catch (error: any) {
+    console.error('Failed to close PostgreSQL pool:', error?.message || error);
+  }
+}
+
+bootstrap().catch((error: Error) => {
+  console.error('❌ Application startup failed:', error.message);
+  process.exitCode = 1;
+});
+
 // Enable graceful stop
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGINT', () => {
+  gracefulShutdown('SIGINT').catch(console.error);
+});
+process.once('SIGTERM', () => {
+  gracefulShutdown('SIGTERM').catch(console.error);
+});
