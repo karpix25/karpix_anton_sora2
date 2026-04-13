@@ -73,6 +73,18 @@ async function getBoundProject(ctx: Context) {
 
 export const bot = new Telegraf(config.telegram.token);
 
+bot.catch((error: unknown, ctx) => {
+  const updateId = (ctx.update as any)?.update_id;
+  const messageThreadId = getMessageThreadId(ctx);
+
+  console.error('[Bot] Unhandled Telegraf error:', {
+    updateId,
+    chatId: ctx.chat?.id ? String(ctx.chat.id) : '',
+    messageThreadId,
+    error: error instanceof Error ? error.message : String(error),
+  });
+});
+
 // Welcome
 bot.start((ctx) => {
   ctx.reply(
@@ -210,212 +222,225 @@ bot.on(message('photo'), async (ctx) => {
 
 // Handle Instagram Link
 bot.on(message('text'), async (ctx) => {
-  if (!ctx.chat) return;
-  const text = ctx.message.text;
-  if (text.startsWith('/')) return; // Ignore commands
-
-  // Basic Instagram URL check
-  if (!text.includes('instagram.com/')) {
-    return ctx.reply('⚠️ Отправьте корректную ссылку на Instagram Reel или фото товара.');
-  }
-
-  const reelUrl = text.trim();
-
-  const session = getSession(ctx);
-  const boundProject = await getBoundProject(ctx);
-  const duplicateLibraryItem = boundProject
-    ? await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl)
-    : null;
-  if (duplicateLibraryItem && boundProject) {
-    await ctx.reply(
-      `ℹ️ Этот Reel уже есть в проекте "${boundProject.name}".\n` +
-      `Статус: ${duplicateLibraryItem.status}.\n` +
-      'Повторно не сохраняю.'
-    );
-    return;
-  }
-
-  const targetModel = boundProject?.selectedModel ?? session.model;
-  const projectReferenceImageUrls = boundProject
-    ? await projectStore.getReferenceImageDataUrls(boundProject.referenceImages)
-    : [];
-  const libraryItem = boundProject
-    ? await referenceLibraryStore.createItem({
-        projectId: boundProject.id,
-        sourceUrl: reelUrl,
-        status: 'received',
-      })
-    : null;
-
-  if (!boundProject && !session.lastPhotoUrl && projectReferenceImageUrls.length === 0) {
-    return ctx.reply(
-      boundProject
-        ? '❗ У этого проекта пока нет референс-изображений. Загрузите фото товара в веб-интерфейсе или отправьте ФОТО в Telegram.'
-        : '❗ Сначала отправьте ФОТО товара, который нужно использовать.'
-    );
-  }
-
-  let statusMsg: any = null;
-  const chatId = ctx.chat.id;
-  let analysisSaved = false;
-
-  const updateStatus = async (text: string) => {
-    try {
-      if (statusMsg) {
-        await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, text);
-      } else {
-        statusMsg = await ctx.reply(text);
-      }
-    } catch (err: any) {
-      console.error(`[Bot] Failed to update status to "${text}":`, err.message);
-      // If editing fails, try a new reply
-      try {
-        statusMsg = await ctx.reply(text);
-      } catch (innerErr) {
-        console.error('[Bot] Critical failure: could not even send a fresh status reply.');
-      }
-    }
-  };
-
-  let videoLocalPath: string | null = null;
-
   try {
-    // 1. Parsing Instagram Reel
-    await updateStatus('⏳ Разбираю Reel...');
-    if (libraryItem) {
-      await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
-    }
-    const reel = await InstagramService.getReelInfo(reelUrl);
+    if (!ctx.chat) return;
+    const text = ctx.message.text;
+    if (text.startsWith('/')) return; // Ignore commands
 
-    // 2. Download Video for Base64 Analysis
-    await updateStatus('⏳ Скачиваю видео для стабильного анализа...');
-    videoLocalPath = await InstagramService.downloadVideo(reel.url);
-
-    // 3. Analyzing Video
-    await updateStatus('⏳ Анализирую стиль через Gemini...');
-    let updatedLibraryItem = libraryItem;
-    if (libraryItem) {
-      updatedLibraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
-        directVideoUrl: reel.url,
-        thumbnailUrl: reel.thumbnail ?? '',
-        status: 'analyzing',
-      });
+    // Basic Instagram URL check
+    if (!text.includes('instagram.com/')) {
+      return ctx.reply('⚠️ Отправьте корректную ссылку на Instagram Reel или фото товара.');
     }
 
-    if (updatedLibraryItem) {
-      await updateStatus('⏳ Сохраняю аудио из Reel...');
-      await ReferenceAudioService.ensureAudioTrack(updatedLibraryItem);
+    const reelUrl = text.trim();
+
+    const session = getSession(ctx);
+    const boundProject = await getBoundProject(ctx);
+    const duplicateLibraryItem = boundProject
+      ? await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl)
+      : null;
+    if (duplicateLibraryItem && boundProject) {
+      await ctx.reply(
+        `ℹ️ Этот Reel уже есть в проекте "${boundProject.name}".\n` +
+        `Статус: ${duplicateLibraryItem.status}.\n` +
+        'Повторно не сохраняю.'
+      );
+      return;
+    }
+
+    const targetModel = boundProject?.selectedModel ?? session.model;
+    const projectReferenceImageUrls = boundProject
+      ? await projectStore.getReferenceImageDataUrls(boundProject.referenceImages)
+      : [];
+    const libraryItem = boundProject
+      ? await referenceLibraryStore.createItem({
+          projectId: boundProject.id,
+          sourceUrl: reelUrl,
+          status: 'received',
+        })
+      : null;
+
+    if (!boundProject && !session.lastPhotoUrl && projectReferenceImageUrls.length === 0) {
+      return ctx.reply(
+        boundProject
+          ? '❗ У этого проекта пока нет референс-изображений. Загрузите фото товара в веб-интерфейсе или отправьте ФОТО в Telegram.'
+          : '❗ Сначала отправьте ФОТО товара, который нужно использовать.'
+      );
+    }
+
+    let statusMsg: any = null;
+    const chatId = ctx.chat.id;
+    let analysisSaved = false;
+
+    const updateStatus = async (text: string) => {
+      try {
+        if (statusMsg) {
+          await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, text);
+        } else {
+          statusMsg = await ctx.reply(text);
+        }
+      } catch (err: any) {
+        console.error(`[Bot] Failed to update status to "${text}":`, err.message);
+        // If editing fails, try a new reply
+        try {
+          statusMsg = await ctx.reply(text);
+        } catch (innerErr) {
+          console.error('[Bot] Critical failure: could not even send a fresh status reply.');
+        }
+      }
+    };
+
+    let videoLocalPath: string | null = null;
+
+    try {
+      // 1. Parsing Instagram Reel
+      await updateStatus('⏳ Разбираю Reel...');
+      if (libraryItem) {
+        await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
+      }
+      const reel = await InstagramService.getReelInfo(reelUrl);
+
+      // 2. Download Video for Base64 Analysis
+      await updateStatus('⏳ Скачиваю видео для стабильного анализа...');
+      videoLocalPath = await InstagramService.downloadVideo(reel.url);
+
+      // 3. Analyzing Video
       await updateStatus('⏳ Анализирую стиль через Gemini...');
-    }
-
-    const analysis = await GeminiService.analyzeVideo({ localPath: videoLocalPath, videoUrl: reel.url });
-    if (libraryItem) {
-      const textOverlays = await TextOverlayService.extractFromVideo({
-        localPath: videoLocalPath,
-        videoUrl: reel.url,
-        analysis,
-      });
-
-      await referenceLibraryStore.updateItem(libraryItem.id, {
-        directVideoUrl: reel.url,
-        thumbnailUrl: reel.thumbnail ?? '',
-        textOverlays,
-        analysis,
-        status: 'analyzed',
-        errorMessage: '',
-      });
-      analysisSaved = true;
-    }
-
-    let videoUrl: string;
-
-    if (boundProject && libraryItem) {
-      await updateStatus('⏳ Собираю промпт и запускаю генерацию видео...');
-      const generationTask = await ManualGenerationService.runFromLibraryItem({
-        projectId: boundProject.id,
-        referenceLibraryItemId: libraryItem.id,
-        triggerMode: 'telegram_manual',
-        ...(session.lastPhotoUrl ? { fallbackReferenceImageUrl: session.lastPhotoUrl } : {}),
-      });
-
-      if (!generationTask?.resultVideoUrl) {
-        throw new Error('Generation completed without a result video URL');
+      let updatedLibraryItem = libraryItem;
+      if (libraryItem) {
+        updatedLibraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
+          directVideoUrl: reel.url,
+          thumbnailUrl: reel.thumbnail ?? '',
+          status: 'analyzing',
+        });
       }
 
-      videoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
-    } else {
-      // 3. Generating Sora Prompt
-      await updateStatus('⏳ Собираю промпт через Gemini...');
-      const promptInput = {
-        videoAnalysis: analysis,
-        targetModel,
-        project: boundProject,
-        projectReferenceImageUrls,
-        ...(session.lastPhotoUrl ? { fallbackProductPhotoUrl: session.lastPhotoUrl } : {}),
-      };
-      const prompt = await GeminiService.generateClonningPrompt(promptInput);
-
-      // 4. Triggering Generation
-      await updateStatus(`⏳ Запускаю генерацию ${targetModel.toUpperCase()}... Это может занять несколько минут.`);
-      const generationReferenceImageUrl = session.lastPhotoUrl || projectReferenceImageUrls[0];
-      if (!generationReferenceImageUrl) {
-        throw new Error('No product reference image available for generation');
+      if (updatedLibraryItem) {
+        await updateStatus('⏳ Сохраняю аудио из Reel...');
+        await ReferenceAudioService.ensureAudioTrack(updatedLibraryItem);
+        await updateStatus('⏳ Анализирую стиль через Gemini...');
       }
 
-      const generationResult = await VideoGenerationService.generateWithFallback({
-        prompt,
-        imageUrl: generationReferenceImageUrl,
-        model: targetModel,
+      const analysis = await GeminiService.analyzeVideo({ localPath: videoLocalPath, videoUrl: reel.url });
+      if (libraryItem) {
+        const textOverlays = await TextOverlayService.extractFromVideo({
+          localPath: videoLocalPath,
+          videoUrl: reel.url,
+          analysis,
+        });
+
+        await referenceLibraryStore.updateItem(libraryItem.id, {
+          directVideoUrl: reel.url,
+          thumbnailUrl: reel.thumbnail ?? '',
+          textOverlays,
+          analysis,
+          status: 'analyzed',
+          errorMessage: '',
+        });
+        analysisSaved = true;
+      }
+
+      let videoUrl: string;
+
+      if (boundProject && libraryItem) {
+        await updateStatus('⏳ Собираю промпт и запускаю генерацию видео...');
+        const generationTask = await ManualGenerationService.runFromLibraryItem({
+          projectId: boundProject.id,
+          referenceLibraryItemId: libraryItem.id,
+          triggerMode: 'telegram_manual',
+          ...(session.lastPhotoUrl ? { fallbackReferenceImageUrl: session.lastPhotoUrl } : {}),
+        });
+
+        if (!generationTask?.resultVideoUrl) {
+          throw new Error('Generation completed without a result video URL');
+        }
+
+        videoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
+      } else {
+        // 3. Generating Sora Prompt
+        await updateStatus('⏳ Собираю промпт через Gemini...');
+        const promptInput = {
+          videoAnalysis: analysis,
+          targetModel,
+          project: boundProject,
+          projectReferenceImageUrls,
+          ...(session.lastPhotoUrl ? { fallbackProductPhotoUrl: session.lastPhotoUrl } : {}),
+        };
+        const prompt = await GeminiService.generateClonningPrompt(promptInput);
+
+        // 4. Triggering Generation
+        await updateStatus(`⏳ Запускаю генерацию ${targetModel.toUpperCase()}... Это может занять несколько минут.`);
+        const generationReferenceImageUrl = session.lastPhotoUrl || projectReferenceImageUrls[0];
+        if (!generationReferenceImageUrl) {
+          throw new Error('No product reference image available for generation');
+        }
+
+        const generationResult = await VideoGenerationService.generateWithFallback({
+          prompt,
+          imageUrl: generationReferenceImageUrl,
+          model: targetModel,
+        });
+
+        // 5. Polling Result
+        videoUrl = generationResult.resultVideoUrl;
+      }
+
+      // 6. Send Result
+      if (statusMsg) {
+        await ctx.telegram.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
+      }
+      await ctx.replyWithVideo(videoUrl, {
+        caption: `✨ Сгенерировано через ${targetModel.toUpperCase()}\n\nРеференс: ${reelUrl}`,
       });
+    } catch (error: any) {
+      const errorMsg = error.message || String(error) || 'Unknown error';
+      console.error('Process Error details:', error);
+      
+      if (libraryItem && !analysisSaved) {
+        await referenceLibraryStore.updateItem(libraryItem.id, {
+          status: 'failed',
+          errorMessage: errorMsg,
+        });
+      }
 
-      // 5. Polling Result
-      videoUrl = generationResult.resultVideoUrl;
-    }
+      const isInstagramParseError = error instanceof InstagramParseError;
+      const errorText = isInstagramParseError
+        ? `❌ Ошибка обработки: ${errorMsg}\n\nПолный ответ RapidAPI приложен файлом.`
+        : analysisSaved
+          ? `❌ Ошибка генерации: ${errorMsg}\n\nСсылка на Reel и его анализ уже сохранены в библиотеке проекта.`
+          : `❌ Ошибка обработки: ${errorMsg}`;
 
-    // 6. Send Result
-    if (statusMsg) {
-      await ctx.telegram.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
+      if (statusMsg) {
+        await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, errorText).catch(() => {
+          ctx.reply(errorText).catch(() => {});
+        });
+      } else {
+        await ctx.reply(errorText).catch(() => {});
+      }
+
+      if (isInstagramParseError && error.debugFilePath) {
+        await ctx.replyWithDocument(Input.fromLocalFile(error.debugFilePath), {
+          caption: 'Полный JSON-ответ RapidAPI для этого Reel.',
+        });
+      }
+    } finally {
+      if (videoLocalPath) {
+        fs.remove(videoLocalPath).catch((err) => {
+          console.error(`[Bot] Failed to cleanup temp video ${videoLocalPath}:`, err.message);
+        });
+      }
     }
-    await ctx.replyWithVideo(videoUrl, {
-      caption: `✨ Сгенерировано через ${targetModel.toUpperCase()}\n\nРеференс: ${reelUrl}`,
+  } catch (error: any) {
+    const updateId = (ctx.update as any)?.update_id;
+    const messageThreadId = getMessageThreadId(ctx);
+
+    console.error('[Bot] Unhandled text handler error:', {
+      updateId,
+      chatId: ctx.chat?.id ? String(ctx.chat.id) : '',
+      messageThreadId,
+      error: error?.message || String(error),
     });
 
-  } catch (error: any) {
-    const errorMsg = error.message || String(error) || 'Unknown error';
-    console.error('Process Error details:', error);
-    
-    if (libraryItem && !analysisSaved) {
-      await referenceLibraryStore.updateItem(libraryItem.id, {
-        status: 'failed',
-        errorMessage: errorMsg,
-      });
-    }
-
-    const isInstagramParseError = error instanceof InstagramParseError;
-    const errorText = isInstagramParseError
-      ? `❌ Ошибка обработки: ${errorMsg}\n\nПолный ответ RapidAPI приложен файлом.`
-      : analysisSaved
-        ? `❌ Ошибка генерации: ${errorMsg}\n\nСсылка на Reel и его анализ уже сохранены в библиотеке проекта.`
-        : `❌ Ошибка обработки: ${errorMsg}`;
-
-    if (statusMsg) {
-      await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, errorText).catch(() => {
-        ctx.reply(errorText).catch(() => {});
-      });
-    } else {
-      await ctx.reply(errorText).catch(() => {});
-    }
-
-    if (isInstagramParseError && error.debugFilePath) {
-      await ctx.replyWithDocument(Input.fromLocalFile(error.debugFilePath), {
-        caption: 'Полный JSON-ответ RapidAPI для этого Reel.',
-      });
-    }
-  } finally {
-    if (videoLocalPath) {
-      fs.remove(videoLocalPath).catch((err) => {
-        console.error(`[Bot] Failed to cleanup temp video ${videoLocalPath}:`, err.message);
-      });
-    }
+    await ctx.reply('❌ Внутренняя ошибка обработки сообщения. Попробуйте еще раз.').catch(() => {});
   }
 });
