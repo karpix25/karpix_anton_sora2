@@ -268,6 +268,10 @@ export class GeminiService {
 
         PRODUCT VIDEO LOGIC:
         - Preserve the simple story logic of the original reel.
+        - Preserve the original shot composition and camera distance from the reference.
+        - If the reference shows a person, keep a person in frame for the same beats.
+        - If the reference is medium/portrait framing, do not switch to isolated macro product shots.
+        - Keep the same demonstration mechanics as in the reference (same kind of hand motion and reveal rhythm).
         - Replace the original product with the real product from the project inputs and reference images.
         - Show the product in a natural way.
         - If the original video mainly demonstrates an effect, focus on that effect.
@@ -278,6 +282,8 @@ export class GeminiService {
         - Describe what the person does.
         - Describe what changes visually.
         - Describe what the viewer notices.
+        - Keep framing language explicit in each block (e.g. medium portrait, chest-up, close-up of hair section in hand).
+        - Keep background context consistent with reference unless project rules override it.
         - Mention lighting or setting only if it is important for the look.
         - Keep product details that matter for recognition.
         - Prefer simple verbs like holds, brushes, turns, smiles, shows, applies, lifts, moves, looks.
