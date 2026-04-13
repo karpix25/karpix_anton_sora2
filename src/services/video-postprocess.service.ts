@@ -12,9 +12,10 @@ const subtitleFrameWidthPercent = 0.86;
 const subtitleFrameHeightPercent = 0.86;
 const subtitleHorizontalPaddingPx = 141;
 const subtitleOffsetFromBottomPercent = 0.4;
-const subtitleFontSizePx = 30;
-const subtitleOutlineWidthPx = 1;
-const subtitleLineSpacingPx = 4;
+const subtitleFontSizePx = 30; // Will be scaled in ASS
+const subtitleOutlineWidthPx = 1.5;
+const subtitleShadowDepthPx = 0.5;
+const subtitleBold = true;
 
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
@@ -170,25 +171,65 @@ function estimateSubtitleMaxCharsPerLine(): number {
   return clamp(estimated, 12, 42);
 }
 
-function getSubtitleFrameExpressions(): { x: string; y: string } {
-  const frameW = `w*${subtitleFrameWidthPercent.toFixed(4)}`;
-  const frameH = `h*${subtitleFrameHeightPercent.toFixed(4)}`;
-  const frameX = `(w-${frameW})/2`;
-  const frameY = `(h-${frameH})/2`;
-  const leftLimit = `${frameX}+${subtitleHorizontalPaddingPx}`;
-  const rightLimit = `${frameX}+${frameW}-${subtitleHorizontalPaddingPx}`;
-  const targetCenterY = `${frameY}+${frameH}*${(1 - subtitleOffsetFromBottomPercent).toFixed(4)}`;
-  const targetY = `${targetCenterY}-text_h/2`;
+function formatSecondsToAssTime(seconds: number): string {
+  const date = new Date(seconds * 1000);
+  const h = Math.floor(seconds / 3600);
+  const m = date.getUTCMinutes().toString().padStart(2, '0');
+  const s = date.getUTCSeconds().toString().padStart(2, '0');
+  const ms = Math.floor((seconds % 1) * 100).toString().padStart(2, '0');
+  return `${h}:${m}:${s}.${ms}`;
+}
 
-  return {
-    x: `max(${leftLimit},min((w-text_w)/2,${rightLimit}-text_w))`,
-    y: `max(${frameY},min(${targetY},${frameY}+${frameH}-text_h))`,
-  };
+function generateAssFileContent(overlays: PreparedOverlay[]): string {
+  // Styles and configuration for the ASS file.
+  // Note: Alignment 2 is centered bottom. 
+  // MarginV controls the vertical distance from the bottom.
+  const marginV = Math.floor(subtitleOffsetFromBottomPercent * 100 * 2.5); // Scaled for 720x1280
+
+  const header = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,${subtitleFontSizePx},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,${subtitleBold ? -1 : 0},0,0,0,100,100,0,0,1,${subtitleOutlineWidthPx},${subtitleShadowDepthPx},2,20,20,${marginV},1
+`;
+
+  const events = `
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+  const lines = overlays.map((prepared) => {
+    const { overlay, text } = prepared;
+    const start = formatSecondsToAssTime(overlay.startSeconds);
+    const end = formatSecondsToAssTime(overlay.endSeconds);
+    
+    // Convert newlines to \N for ASS
+    const escapedText = text.replace(/\n/g, '\\N');
+    
+    // Dynamic color support if specified in overlay
+    let styleOverride = '';
+    if (overlay.textColor && overlay.textColor.startsWith('#')) {
+      const hex = overlay.textColor.slice(1);
+      // ASS color format is &HBBGGRR (Blue Green Red)
+      const r = hex.slice(0, 2);
+      const g = hex.slice(2, 4);
+      const b = hex.slice(4, 6);
+      styleOverride = `{\\1c&H${b}${g}${r}&}`;
+    }
+
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${styleOverride}${escapedText}`;
+  });
+
+  return header + events + lines.join('\n');
 }
 
 function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay {
   const maxCharsPerLine = estimateSubtitleMaxCharsPerLine();
-  const text = padLinesForCenterAlignment(wrapOverlayText(overlay.text, maxCharsPerLine));
+  const text = wrapOverlayText(overlay.text, maxCharsPerLine);
 
   return {
     overlay,
@@ -196,51 +237,14 @@ function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay
   };
 }
 
-async function writeOverlayTextFiles(taskId: string, overlays: PreparedOverlay[]): Promise<string[]> {
+async function writeAssFile(taskId: string, overlays: PreparedOverlay[]): Promise<string> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   await fs.ensureDir(overlayDir);
-
-  const files: string[] = [];
-  for (let index = 0; index < overlays.length; index += 1) {
-    const overlay = overlays[index];
-    if (!overlay) {
-      continue;
-    }
-
-    const filePath = path.join(overlayDir, `${index + 1}.txt`);
-    await fs.writeFile(filePath, overlay.text, 'utf8');
-    files.push(filePath);
-  }
-
-  return files;
-}
-
-function buildDrawTextFilters(overlays: PreparedOverlay[], textFiles: string[]): string[] {
-  return overlays.map((prepared, index) => {
-    const { overlay } = prepared;
-    const textFile = textFiles[index];
-    const { x, y } = getSubtitleFrameExpressions();
-    const safeX = escapeDrawtextExpression(x);
-    const safeY = escapeDrawtextExpression(y);
-    const textColor = normalizeFfmpegColor(overlay.textColor, '0xFFFFFF');
-    const params = [
-      `font='${escapeFilterValue(defaultFontFamily)}'`,
-      `textfile='${escapeFilterValue(textFile || '')}'`,
-      `reload=1`,
-      `fontsize=${subtitleFontSizePx}`,
-      `fontcolor=${textColor}`,
-      `borderw=${subtitleOutlineWidthPx}`,
-      `bordercolor=0x000000`,
-      `x=${safeX}`,
-      `y=${safeY}`,
-      `fix_bounds=1`,
-      `box=0`,
-      `line_spacing=${subtitleLineSpacingPx}`,
-      `enable='between(t,${overlay.startSeconds.toFixed(3)},${overlay.endSeconds.toFixed(3)})'`,
-    ];
-
-    return `drawtext=${params.join(':')}`;
-  });
+  
+  const assContent = generateAssFileContent(overlays);
+  const filePath = path.join(overlayDir, 'subtitles.ass');
+  await fs.writeFile(filePath, assContent, 'utf8');
+  return filePath;
 }
 
 export class VideoPostprocessService {
@@ -279,8 +283,12 @@ export class VideoPostprocessService {
     }
 
     const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
-    const textFiles = await writeOverlayTextFiles(input.taskId, preparedOverlays);
-    const filters = buildDrawTextFilters(preparedOverlays, textFiles).join(',');
+    const assFilePath = await writeAssFile(input.taskId, preparedOverlays);
+    
+    // FFmpeg subtitles filter on macOS/Darwin often needs carefully escaped paths.
+    // We use a relative path or an escaped absolute path.
+    const relativeAssPath = path.relative(process.cwd(), assFilePath);
+    const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
 
     try {
       await runFfmpeg([
@@ -290,7 +298,7 @@ export class VideoPostprocessService {
         '-i',
         input.audioFilePath,
         '-vf',
-        filters,
+        filter,
         '-map',
         '0:v:0',
         '-map',

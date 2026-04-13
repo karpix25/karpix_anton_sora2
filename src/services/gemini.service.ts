@@ -248,13 +248,15 @@ export class GeminiService {
         You are writing prompts for short product videos in Sora 2 and Veo 3.1.
         Your task is to turn the reference video analysis into a SIMPLE, SHORT, CLEAR action prompt.
 
-        CORE PRINCIPLES:
-        - Write like a human describing what is happening on screen.
-        - Use simple words but retain ALL CRITICAL DETAILS (props, emotions, objects).
+        CORE PRINCIPLES (DIRECTORIAL STYLE):
+        - Start with the "Look and Feel": Describe camera framing, lens (e.g. 35mm), and lighting in the first two sentences.
+        - Write like a professional director/cinematographer describing a scene.
+        - Use simple verbs but retain ALL CRITICAL DETAILS (props, emotions, objects).
+        - Maintain a "Subject Anchor": Clearly state the main character and their key attributes (clothing, accessories) early.
         - Focus on visible action and CHARACTER BEHAVIOR.
-        - Keep the prompt compact but descriptive of the vibe.
-        - One clear action per time block.
-        - Do not explain the analysis. Turn it into a simple sequence of actions.
+        - Keep the prompt compact but vivid.
+        - One clear action per time beat.
+        - Do not explain the analysis. Turn it into a cinematic storyboard.
 
         EMOTIONS & PROPS (STRICT):
         - Describe facial micro-expressions (smiles, looking surprised, serious gaze).
@@ -272,11 +274,11 @@ export class GeminiService {
         - No complex metaphors unless they directly help the visual result.
 
         STRUCTURE:
-        - Use short time blocks like [00:00-00:02].
-        - Usually write 3 to 5 blocks.
-        - Each block should be 1 or 2 short sentences.
-        - Keep the whole prompt short enough to feel like a clean storyboard.
-        - Every block must describe one main visible action.
+        - Use the format: "0.0s – 2.0s: [Action description]"
+        - Maximum 3 to 5 beats.
+        - Each beat should be 1 or 2 concise sentences.
+        - Keep the whole prompt short enough to feel like a high-speed production brief.
+        - Every beat must describe one main visible movement.
 
         PRODUCT VIDEO LOGIC:
         - Preserve the simple story logic of the original reel.
@@ -326,10 +328,9 @@ export class GeminiService {
         - End naturally after the final reveal.
 
         TARGET STYLE EXAMPLE:
-        [00:00-00:02] A woman slowly brushes her hair and looks at the result in the mirror.
-        [00:02-00:04] She runs her hand through her hair to show how soft and smooth it looks.
-        [00:04-00:06] She turns slightly and moves her hair so the light catches the shine.
-        [00:06-00:08] She briefly holds up the product and smiles at the camera.
+        0.0s – 3.0s: Medium-shot on an 85mm lens. A woman with soft golden hour lighting slowly brushes her hair and looks at the result in a mirror, smiling gently.
+        3.0s – 6.0s: She runs her hand through her hair, demonstrating the smoothness.
+        6.0s – 8.0s: Close-up on the product as she holds it up and tilts her head towards the camera with a satisfied expression.
       `;
 
       const userContent: Array<
