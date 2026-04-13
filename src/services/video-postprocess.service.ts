@@ -8,19 +8,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
 const defaultFontFamily = 'Arial,Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,Noto Emoji';
-const overlaySafeMarginPercent = 0.03;
-const overlayFontScale = 0.78;
-const overlayTopYOffsetByFont = 0.65;
-const minOverlayFontSizePercent = 0.018;
-const maxOverlayFontSizePercent = 0.07;
-const defaultLineSpacing = 3;
+const subtitleFrameWidthPercent = 0.86;
+const subtitleFrameHeightPercent = 0.86;
+const subtitleHorizontalPaddingPx = 141;
+const subtitleOffsetFromBottomPercent = 0.4;
+const subtitleFontSizePx = 30;
+const subtitleOutlineWidthPx = 1;
+const subtitleLineSpacingPx = 4;
 
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
   text: string;
-  xPercent: number;
-  yPercent: number;
-  fontSizePercent: number;
 }
 
 function runFfmpeg(args: string[]): Promise<void> {
@@ -79,12 +77,6 @@ function normalizeFfmpegColor(value: string, fallback: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function isCenterAnchor(anchor: ReferenceTextOverlay['anchor']): boolean {
-  return anchor === 'top-center'
-    || anchor === 'center'
-    || anchor === 'bottom-center';
 }
 
 function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
@@ -170,86 +162,37 @@ function wrapOverlayText(text: string, maxCharsPerLine: number): string {
   return wrappedLines.join('\n');
 }
 
-function estimateMaxCharsPerLine(fontSizePercent: number, anchor: ReferenceTextOverlay['anchor']): number {
-  const normalizedSize = Math.max(0.02, fontSizePercent);
-  const base = isCenterAnchor(anchor) ? 25 : 30;
-  const estimated = Math.round(base * (0.04 / normalizedSize));
-  const min = isCenterAnchor(anchor) ? 12 : 14;
-  const max = isCenterAnchor(anchor) ? 36 : 44;
-  return Math.max(min, Math.min(max, estimated));
+function estimateSubtitleMaxCharsPerLine(): number {
+  // 720px baseline for portrait content. Keeps subtitle wrap close to real output sizes.
+  const frameWidthPx = 720 * subtitleFrameWidthPercent;
+  const contentWidthPx = Math.max(220, frameWidthPx - (subtitleHorizontalPaddingPx * 2));
+  const estimated = Math.floor(contentWidthPx / (subtitleFontSizePx * 0.56));
+  return clamp(estimated, 12, 42);
 }
 
-function getAnchorExpressions(input: {
-  anchor: ReferenceTextOverlay['anchor'];
-  xPercent: number;
-  yPercent: number;
-}): { x: string; y: string } {
-  const xBase = `w*${input.xPercent.toFixed(4)}`;
-  const yBase = `h*${input.yPercent.toFixed(4)}`;
-
-  switch (input.anchor) {
-    case 'top-left':
-      return { x: xBase, y: yBase };
-    case 'top-center':
-      return { x: `${xBase}-text_w/2`, y: yBase };
-    case 'top-right':
-      return { x: `${xBase}-text_w`, y: yBase };
-    case 'center-left':
-      return { x: xBase, y: `${yBase}-text_h/2` };
-    case 'center':
-      return { x: `${xBase}-text_w/2`, y: `${yBase}-text_h/2` };
-    case 'center-right':
-      return { x: `${xBase}-text_w`, y: `${yBase}-text_h/2` };
-    case 'bottom-left':
-      return { x: xBase, y: `${yBase}-text_h` };
-    case 'bottom-center':
-      return { x: `${xBase}-text_w/2`, y: `${yBase}-text_h` };
-    case 'bottom-right':
-      return { x: `${xBase}-text_w`, y: `${yBase}-text_h` };
-    default:
-      return { x: `${xBase}-text_w/2`, y: yBase };
-  }
-}
-
-function getBoundedAnchorExpressions(input: {
-  anchor: ReferenceTextOverlay['anchor'];
-  xPercent: number;
-  yPercent: number;
-}): { x: string; y: string } {
-  const { x, y } = getAnchorExpressions(input);
-  const margin = `h*${overlaySafeMarginPercent.toFixed(4)}`;
+function getSubtitleFrameExpressions(): { x: string; y: string } {
+  const frameW = `w*${subtitleFrameWidthPercent.toFixed(4)}`;
+  const frameH = `h*${subtitleFrameHeightPercent.toFixed(4)}`;
+  const frameX = `(w-${frameW})/2`;
+  const frameY = `(h-${frameH})/2`;
+  const leftLimit = `${frameX}+${subtitleHorizontalPaddingPx}`;
+  const rightLimit = `${frameX}+${frameW}-${subtitleHorizontalPaddingPx}`;
+  const targetCenterY = `${frameY}+${frameH}*${(1 - subtitleOffsetFromBottomPercent).toFixed(4)}`;
+  const targetY = `${targetCenterY}-text_h/2`;
 
   return {
-    x: `max(${margin},min(${x},w-text_w-${margin}))`,
-    y: `max(${margin},min(${y},h-text_h-${margin}))`,
+    x: `max(${leftLimit},min((w-text_w)/2,${rightLimit}-text_w))`,
+    y: `max(${frameY},min(${targetY},${frameY}+${frameH}-text_h))`,
   };
 }
 
 function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay {
-  const fontSizePercent = clamp(
-    Math.max(minOverlayFontSizePercent, overlay.fontSizePercent) * overlayFontScale,
-    minOverlayFontSizePercent,
-    maxOverlayFontSizePercent,
-  );
-  const xPercent = clamp(overlay.xPercent, 0, 1);
-  let yPercent = clamp(overlay.yPercent, 0, 1);
-
-  if (overlay.anchor.startsWith('top')) {
-    yPercent = clamp(yPercent - fontSizePercent * overlayTopYOffsetByFont, overlaySafeMarginPercent, 1);
-  }
-
-  const maxCharsPerLine = estimateMaxCharsPerLine(fontSizePercent, overlay.anchor);
-  let text = wrapOverlayText(overlay.text, maxCharsPerLine);
-  if (isCenterAnchor(overlay.anchor)) {
-    text = padLinesForCenterAlignment(text);
-  }
+  const maxCharsPerLine = estimateSubtitleMaxCharsPerLine();
+  const text = padLinesForCenterAlignment(wrapOverlayText(overlay.text, maxCharsPerLine));
 
   return {
     overlay,
     text,
-    xPercent,
-    yPercent,
-    fontSizePercent,
   };
 }
 
@@ -276,28 +219,23 @@ function buildDrawTextFilters(overlays: PreparedOverlay[], textFiles: string[]):
   return overlays.map((prepared, index) => {
     const { overlay } = prepared;
     const textFile = textFiles[index];
-    const { x, y } = getBoundedAnchorExpressions({
-      anchor: overlay.anchor,
-      xPercent: prepared.xPercent,
-      yPercent: prepared.yPercent,
-    });
+    const { x, y } = getSubtitleFrameExpressions();
     const safeX = escapeDrawtextExpression(x);
     const safeY = escapeDrawtextExpression(y);
     const textColor = normalizeFfmpegColor(overlay.textColor, '0xFFFFFF');
-    const boxColor = `${normalizeFfmpegColor(overlay.boxColor, '0x000000')}@${Math.max(0, Math.min(1, overlay.boxOpacity)).toFixed(2)}`;
     const params = [
       `font='${escapeFilterValue(defaultFontFamily)}'`,
       `textfile='${escapeFilterValue(textFile || '')}'`,
       `reload=1`,
-      `fontsize=h*${prepared.fontSizePercent.toFixed(4)}`,
+      `fontsize=${subtitleFontSizePx}`,
       `fontcolor=${textColor}`,
+      `borderw=${subtitleOutlineWidthPx}`,
+      `bordercolor=0x000000`,
       `x=${safeX}`,
       `y=${safeY}`,
       `fix_bounds=1`,
-      `box=${overlay.box ? 1 : 0}`,
-      `boxcolor=${boxColor}`,
-      `boxborderw=12`,
-      `line_spacing=${defaultLineSpacing}`,
+      `box=0`,
+      `line_spacing=${subtitleLineSpacingPx}`,
       `enable='between(t,${overlay.startSeconds.toFixed(3)},${overlay.endSeconds.toFixed(3)})'`,
     ];
 
