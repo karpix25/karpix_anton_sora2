@@ -51,6 +51,9 @@ export class RateLimiter {
       } else {
         // Wait until the oldest request falls out of the window
         const oldestTimestamp = this.requestTimestamps[0];
+        if (oldestTimestamp === undefined) {
+          continue;
+        }
         const waitTime = this.windowMs - (now - oldestTimestamp) + 10; // Extra 10ms buffer
         await new Promise((resolve) => setTimeout(resolve, waitTime));
       }

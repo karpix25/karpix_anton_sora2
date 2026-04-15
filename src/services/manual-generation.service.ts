@@ -72,9 +72,9 @@ export class ManualGenerationService {
 
           if (!analysis) {
             console.log('[ManualGenerationService] Running video analysis...');
-            analysis = await GeminiService.analyzeVideo({ 
-              localPath: videoLocalPath, 
-              videoUrl: libraryItem.directVideoUrl 
+            analysis = await GeminiService.analyzeVideo({
+              videoUrl: libraryItem.directVideoUrl,
+              ...(videoLocalPath ? { localPath: videoLocalPath } : {}),
             });
             needsUpdate = true;
           }
@@ -82,9 +82,9 @@ export class ManualGenerationService {
           if (!textOverlays.length) {
             console.log('[ManualGenerationService] Running text overlay extraction...');
             textOverlays = await TextOverlayService.extractFromVideo({
-              localPath: videoLocalPath,
               videoUrl: libraryItem.directVideoUrl,
               analysis,
+              ...(videoLocalPath ? { localPath: videoLocalPath } : {}),
             });
             needsUpdate = true;
           }
