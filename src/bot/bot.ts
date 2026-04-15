@@ -140,6 +140,32 @@ bot.command('bind_project', async (ctx) => {
     return;
   }
 
+  // Check if topic is already busy
+  const existingTopicProject = await projectStore.findProjectByTelegramBinding(String(ctx.chat.id), messageThreadId);
+  if (existingTopicProject) {
+    if (existingTopicProject.id === projectId) {
+      await ctx.reply(`ℹ️ Проект "${existingTopicProject.name}" уже привязан к этой теме.`);
+      return;
+    }
+    await ctx.reply(`❌ Эта тема уже занята проектом "${existingTopicProject.name}" (ID: ${existingTopicProject.id}).\n\nИспользуйте другую тему или удалите старый проект.`);
+    return;
+  }
+
+  // Check if target project is already bound elsewhere
+  const targetProject = await projectStore.getProject(projectId);
+  if (!targetProject) {
+    await ctx.reply(`❌ Проект не найден: ${projectId}`);
+    return;
+  }
+
+  if (targetProject.telegramChatId && targetProject.telegramTopicId) {
+    await ctx.reply(
+      `❌ Проект "${targetProject.name}" уже привязан к теме "${targetProject.telegramTopicName || targetProject.telegramTopicId}" в чате ${targetProject.telegramChatId}.\n\n` +
+      `Один проект нельзя привязывать к нескольким темам.`
+    );
+    return;
+  }
+
   const inferredTopicName = extractTopicNameFromContext(ctx, topicNameFromCommand) || `Тема ${messageThreadId}`;
   const project = await projectStore.bindProjectToTelegramTopic(
     projectId,
@@ -147,8 +173,9 @@ bot.command('bind_project', async (ctx) => {
     messageThreadId,
     inferredTopicName
   );
+
   if (!project) {
-    await ctx.reply(`❌ Проект не найден: ${projectId}`);
+    await ctx.reply(`❌ Не удалось привязать проект.`);
     return;
   }
 
@@ -178,6 +205,29 @@ bot.command('bind_topic', async (ctx) => {
     return;
   }
 
+  // Check if target topic is already busy
+  const existingTopicProject = await projectStore.findProjectByTelegramBinding(String(ctx.chat.id), topicId);
+  if (existingTopicProject) {
+    if (existingTopicProject.id === projectId) {
+      await ctx.reply(`ℹ️ Проект "${existingTopicProject.name}" уже привязан к теме ${topicId}.`);
+      return;
+    }
+    await ctx.reply(`❌ Тема ${topicId} уже занята проектом "${existingTopicProject.name}" (ID: ${existingTopicProject.id}).`);
+    return;
+  }
+
+  // Check if target project is already bound elsewhere
+  const targetProject = await projectStore.getProject(projectId);
+  if (!targetProject) {
+    await ctx.reply(`❌ Проект не найден: ${projectId}`);
+    return;
+  }
+
+  if (targetProject.telegramChatId && targetProject.telegramTopicId) {
+    await ctx.reply(`❌ Проект "${targetProject.name}" уже привязан к теме ${targetProject.telegramTopicId} в чате ${targetProject.telegramChatId}.`);
+    return;
+  }
+
   const inferredTopicName = topicName || `Тема ${topicId}`;
   const project = await projectStore.bindProjectToTelegramTopic(
     projectId,
@@ -187,7 +237,7 @@ bot.command('bind_topic', async (ctx) => {
   );
 
   if (!project) {
-    await ctx.reply(`❌ Проект не найден: ${projectId}`);
+    await ctx.reply(`❌ Не удалось привязать проект.`);
     return;
   }
 
@@ -227,6 +277,13 @@ bot.command('create_project', async (ctx) => {
       'Запустите команду в нужной теме или укажите ID:\n' +
       '/create_project <название проекта> <topic-id>'
     );
+    return;
+  }
+
+  // Check if topic is already busy
+  const existingTopicProject = await projectStore.findProjectByTelegramBinding(String(ctx.chat.id), topicId);
+  if (existingTopicProject) {
+    await ctx.reply(`❌ В этой теме уже есть проект: "${existingTopicProject.name}" (ID: ${existingTopicProject.id}).\n\nНельзя создать второй проект в одной и той же теме.`);
     return;
   }
 
