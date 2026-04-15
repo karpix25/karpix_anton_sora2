@@ -7,7 +7,7 @@ import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
-const defaultFontFamily = 'Arial';
+const defaultFontFamily = 'DejaVu Sans';
 const subtitleFrameWidthPercent = 0.86;
 const subtitleHorizontalPaddingPx = 141;
 const subtitleFontSizePx = 30; // Will be scaled in ASS
@@ -100,6 +100,26 @@ function normalizeHexColor(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function sanitizeAssFontName(value: string): string {
+  const cleaned = value.replace(/[,\r\n]+/g, ' ').trim();
+  return cleaned || defaultTextRenderStyle.fontFamily;
+}
+
+function normalizeEmojiPresentation(value: string): string {
+  // libass in ffmpeg typically cannot render colored emoji sequences.
+  // Removing emoji variation selectors improves fallback to monochrome glyph fonts.
+  return value.replace(/[\uFE0E\uFE0F]/g, '');
+}
+
+function escapeAssDialogueText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
+    .replace(/\r/g, '')
+    .replace(/\n/g, '\\N');
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -119,7 +139,7 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
   const borderStyle = borderStyleRaw === 3 ? 3 : 1;
 
   return {
-    fontFamily,
+    fontFamily: sanitizeAssFontName(fontFamily),
     fontSize,
     fontColor: normalizeHexColor(source.fontColor, defaultTextRenderStyle.fontColor),
     fontWeight,
@@ -183,8 +203,9 @@ function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
 }
 
 function wrapOverlayText(text: string, maxCharsPerLine: number): string {
+  const normalizedText = normalizeEmojiPresentation(text).normalize('NFC');
   const normalizedMaxChars = Math.max(10, maxCharsPerLine);
-  const sourceLines = text.replace(/\r/g, '').split('\n');
+  const sourceLines = normalizedText.replace(/\r/g, '').split('\n');
   if (sourceLines.length > 1) {
     return sourceLines.map((line) => line.trim()).join('\n');
   }
@@ -249,8 +270,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const start = formatSecondsToAssTime(overlay.startSeconds);
     const end = formatSecondsToAssTime(overlay.endSeconds);
     
-    // Convert newlines to \N for ASS
-    const escapedText = text.replace(/\n/g, '\\N');
+    const escapedText = escapeAssDialogueText(text);
     
     return `Dialogue: 0,${start},${end},Default,,0,0,0,,${escapedText}`;
   });
