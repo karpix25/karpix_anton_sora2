@@ -2,20 +2,157 @@ import axios from 'axios';
 import { config } from '../config.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
 
-function parseResultVideoUrl(task: any): string {
-  const resultJson = task?.resultJson;
-  if (typeof resultJson === 'string' && resultJson.trim()) {
-    try {
-      const parsed = JSON.parse(resultJson);
-      if (Array.isArray(parsed?.resultUrls) && parsed.resultUrls[0]) {
-        return parsed.resultUrls[0];
-      }
-    } catch (error) {
-      console.warn('Failed to parse Kie resultJson:', error);
+function pickFirstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
     }
   }
 
-  return task?.videoUrl || task?.video_url || '';
+  return '';
+}
+
+function pickFirstUrlFromArray(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry.trim()) {
+      return entry.trim();
+    }
+
+    if (entry && typeof entry === 'object') {
+      const url = pickFirstNonEmptyString(
+        (entry as Record<string, unknown>).url,
+        (entry as Record<string, unknown>).videoUrl,
+        (entry as Record<string, unknown>).video_url,
+        (entry as Record<string, unknown>).downloadUrl,
+        (entry as Record<string, unknown>).download_url,
+      );
+      if (url) {
+        return url;
+      }
+    }
+  }
+
+  return '';
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>;
+    }
+  } catch (error) {
+    console.warn('Failed to parse Kie JSON payload:', error);
+  }
+
+  return null;
+}
+
+function parseResultVideoUrl(task: any): string {
+  const parsedResultJson = parseJsonObject(task?.resultJson);
+  const parsedResult = parseJsonObject(task?.result);
+  const parsedOutput = parseJsonObject(task?.output);
+
+  const resultVideoUrl = pickFirstNonEmptyString(
+    task?.videoUrl,
+    task?.video_url,
+    task?.resultVideoUrl,
+    task?.result_video_url,
+    task?.url,
+    task?.downloadUrl,
+    task?.download_url,
+    parsedResultJson?.videoUrl,
+    parsedResultJson?.video_url,
+    parsedResultJson?.downloadUrl,
+    parsedResultJson?.download_url,
+    parsedResult?.videoUrl,
+    parsedResult?.video_url,
+    parsedResult?.downloadUrl,
+    parsedResult?.download_url,
+    parsedOutput?.videoUrl,
+    parsedOutput?.video_url,
+    parsedOutput?.downloadUrl,
+    parsedOutput?.download_url,
+  );
+
+  if (resultVideoUrl) {
+    return resultVideoUrl;
+  }
+
+  return pickFirstUrlFromArray(task?.resultUrls)
+    || pickFirstUrlFromArray(task?.result_urls)
+    || pickFirstUrlFromArray(task?.outputs)
+    || pickFirstUrlFromArray(task?.outputUrls)
+    || pickFirstUrlFromArray(parsedResultJson?.resultUrls)
+    || pickFirstUrlFromArray(parsedResultJson?.result_urls)
+    || pickFirstUrlFromArray(parsedResult?.resultUrls)
+    || pickFirstUrlFromArray(parsedResult?.result_urls)
+    || pickFirstUrlFromArray(parsedOutput?.resultUrls)
+    || pickFirstUrlFromArray(parsedOutput?.result_urls)
+    || '';
+}
+
+function extractStatus(...sources: any[]): string {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
+    const value = pickFirstNonEmptyString(
+      source.state,
+      source.status,
+      source.taskStatus,
+      source.task_status,
+      source.jobStatus,
+      source.job_status,
+      source.phase,
+    );
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function isSuccessStatus(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return ['success', 'succeeded', 'completed', 'finished', 'done', 'ok'].includes(normalized);
+}
+
+function isFailureStatus(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return ['fail', 'failed', 'error', 'cancelled', 'canceled', 'timeout', 'timed_out'].includes(normalized);
+}
+
+function extractErrorMessage(...sources: any[]): string {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
+    const value = pickFirstNonEmptyString(
+      source.failMsg,
+      source.fail_msg,
+      source.errorMessage,
+      source.error_message,
+      source.message,
+      source.error,
+    );
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
 }
 
 export class KieService {
@@ -96,7 +233,7 @@ export class KieService {
    * @param taskId The ID of the task to poll.
    */
   public static async pollStatus(taskId: string): Promise<string> {
-    const maxRetries = 60; // 5-10 minutes polling
+    const maxRetries = 120; // up to ~20 minutes polling
     const delay = 10000; // 10 seconds
 
     for (let i = 0; i < maxRetries; i++) {
@@ -111,22 +248,32 @@ export class KieService {
           }
         );
 
-        const task = response.data.data ?? response.data;
-        const status = task.state || task.status;
-        if (status === 'success' || status === 'FINISHED' || status === 'COMPLETED' || status === 'succeeded' || status === 'completed') {
+        const root = response.data ?? {};
+        const data = root?.data ?? root;
+        const task = data?.task ?? data?.record ?? data;
+        const status = extractStatus(task, data, root);
+        const resultVideoUrl = parseResultVideoUrl(task) || parseResultVideoUrl(data) || parseResultVideoUrl(root);
+
+        // Kie occasionally keeps "waiting" even when result URL is already available.
+        if (resultVideoUrl && !isFailureStatus(status)) {
+          return resultVideoUrl;
+        }
+
+        if (isSuccessStatus(status)) {
           const resultVideoUrl = parseResultVideoUrl(task);
           if (!resultVideoUrl) {
             throw new Error('Generation completed but no result video URL was returned');
           }
           return resultVideoUrl;
-        } else if (status === 'fail' || status === 'FAILED' || status === 'failed') {
-          throw new Error(`Generation failed: ${task.failMsg || task.message || task.error_message || 'Unknown error'}`);
+        } else if (isFailureStatus(status)) {
+          const details = extractErrorMessage(task, data, root) || 'Unknown error';
+          throw new Error(`Generation failed: ${details}`);
         }
 
-        console.log(`Task ${taskId} status: ${status}. Waiting...`);
+        console.log(`Task ${taskId} status: ${status || 'unknown'}. Waiting... (${i + 1}/${maxRetries})`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       } catch (error: any) {
-        if (error.message.includes('failed')) throw error;
+        if (typeof error?.message === 'string' && /failed|timed out|timeout/i.test(error.message)) throw error;
         console.warn(`Polling error for ${taskId}:`, error.message);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
