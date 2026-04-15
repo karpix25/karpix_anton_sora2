@@ -180,11 +180,33 @@ function formatSecondsToAssTime(seconds: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-function generateAssFileContent(overlays: PreparedOverlay[]): string {
+function generateAssFileContent(overlays: PreparedOverlay[], style: {
+  fontFamily: string;
+  fontSize: number;
+  fontColor: string;
+  fontWeight: string;
+  outlineColor: string;
+  outlineWidth: number;
+  backgroundColor: string;
+  borderStyle: number;
+  verticalMargin: number;
+}): string {
   // Styles and configuration for the ASS file.
-  // Note: Alignment 2 is centered bottom. 
   // MarginV controls the vertical distance from the bottom.
-  const marginV = Math.floor(subtitleOffsetFromBottomPercent * 100 * 2.5); // Scaled for 720x1280
+  const marginV = Math.floor(style.verticalMargin * 2.5); // Scaled for 720x1280
+
+  const toAssColor = (hex: string) => {
+    if (!hex || !hex.startsWith('#')) return '&H00FFFFFF&';
+    const r = hex.slice(1, 3);
+    const g = hex.slice(3, 5);
+    const b = hex.slice(5, 7);
+    return `&H00${b}${g}${r}&`;
+  };
+
+  const primaryColor = toAssColor(style.fontColor);
+  const outlineColor = toAssColor(style.outlineColor);
+  const backColor = toAssColor(style.backgroundColor);
+  const isBold = style.fontWeight === 'bold' || parseInt(style.fontWeight, 10) >= 700;
 
   const header = `[Script Info]
 ScriptType: v4.00+
@@ -194,7 +216,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,${subtitleFontSizePx},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,${subtitleBold ? -1 : 0},0,0,0,100,100,0,0,1,${subtitleOutlineWidthPx},${subtitleShadowDepthPx},2,20,20,${marginV},1
+Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,2,20,20,${marginV},1
 `;
 
   const events = `
@@ -210,18 +232,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     // Convert newlines to \N for ASS
     const escapedText = text.replace(/\n/g, '\\N');
     
-    // Dynamic color support if specified in overlay
-    let styleOverride = '';
-    if (overlay.textColor && overlay.textColor.startsWith('#')) {
-      const hex = overlay.textColor.slice(1);
-      // ASS color format is &HBBGGRR (Blue Green Red)
-      const r = hex.slice(0, 2);
-      const g = hex.slice(2, 4);
-      const b = hex.slice(4, 6);
-      styleOverride = `{\\1c&H${b}${g}${r}&}`;
-    }
-
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${styleOverride}${escapedText}`;
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${escapedText}`;
   });
 
   return header + events + lines.join('\n');
@@ -237,11 +248,11 @@ function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay
   };
 }
 
-async function writeAssFile(taskId: string, overlays: PreparedOverlay[]): Promise<string> {
+async function writeAssFile(taskId: string, overlays: PreparedOverlay[], style: any): Promise<string> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   await fs.ensureDir(overlayDir);
   
-  const assContent = generateAssFileContent(overlays);
+  const assContent = generateAssFileContent(overlays, style);
   const filePath = path.join(overlayDir, 'subtitles.ass');
   await fs.writeFile(filePath, assContent, 'utf8');
   return filePath;
@@ -253,6 +264,7 @@ export class VideoPostprocessService {
     generatedVideoUrl: string;
     audioFilePath: string;
     textOverlays?: ReferenceTextOverlay[];
+    textStyle?: any;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
 
@@ -285,7 +297,7 @@ export class VideoPostprocessService {
     }
 
     const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
-    const assFilePath = await writeAssFile(input.taskId, preparedOverlays);
+    const assFilePath = await writeAssFile(input.taskId, preparedOverlays, input.textStyle);
     
     // FFmpeg subtitles filter on macOS/Darwin often needs carefully escaped paths.
     // We use a relative path or an escaped absolute path.

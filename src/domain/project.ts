@@ -16,6 +16,18 @@ export interface ReferenceImage {
   createdAt: string;
 }
 
+export interface TextStyle {
+  fontFamily: string;
+  fontSize: number;
+  fontColor: string;
+  fontWeight: string;
+  outlineColor: string;
+  outlineWidth: number;
+  backgroundColor: string;
+  borderStyle: number; // 1 = Style with outline/shadow, 3 = Opaque box
+  verticalMargin: number;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -34,6 +46,7 @@ export interface Project {
   isActive: boolean;
   primaryReferenceImageId: string;
   referenceImages: ReferenceImage[];
+  textStyle?: TextStyle;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,4 +68,5 @@ export interface ProjectInput {
   isActive?: boolean;
   primaryReferenceImageId?: string;
   referenceImages?: ReferenceImage[];
+  textStyle?: TextStyle;
 }

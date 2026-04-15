@@ -28,6 +28,7 @@ interface ProjectRow {
   is_active: boolean;
   primary_reference_image_id: string;
   reference_images: unknown;
+  text_style: unknown;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -92,16 +93,15 @@ function normalizeReferenceImages(value: unknown): ReferenceImage[] {
     .filter((item) => item.url);
 }
 
-function parseReferenceImages(value: unknown): ReferenceImage[] {
+function parseJSON<T>(value: unknown, defaultValue: T): T {
   if (typeof value === 'string') {
     try {
-      return normalizeReferenceImages(JSON.parse(value));
+      return JSON.parse(value) as T;
     } catch {
-      return [];
+      return defaultValue;
     }
   }
-
-  return normalizeReferenceImages(value);
+  return (value as T) ?? defaultValue;
 }
 
 function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project {
@@ -114,6 +114,20 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     referenceImages.find((image) => image.id === primaryReferenceImageId)?.id ??
     referenceImages[0]?.id ??
     '';
+
+  const defaultTextStyle: Project['textStyle'] = {
+    fontFamily: 'Montserrat',
+    fontSize: 30,
+    fontColor: '#FFFFFF',
+    fontWeight: '700',
+    outlineColor: '#000000',
+    outlineWidth: 1.5,
+    backgroundColor: '#000000',
+    borderStyle: 1,
+    verticalMargin: 40,
+  };
+
+  const textStyle = input.textStyle ?? existing?.textStyle ?? defaultTextStyle;
 
   return {
     id: existing?.id ?? randomUUID(),
@@ -133,6 +147,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     isActive: normalizeBoolean(input.isActive, existing?.isActive ?? true),
     primaryReferenceImageId: resolvedPrimaryReferenceImageId,
     referenceImages,
+    textStyle,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -156,7 +171,8 @@ function mapRowToProject(row: ProjectRow): Project {
     selectedModel: row.selected_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
     isActive: Boolean(row.is_active),
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
-    referenceImages: parseReferenceImages(row.reference_images),
+    referenceImages: parseJSON(row.reference_images, []),
+    textStyle: parseJSON(row.text_style, undefined),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
@@ -204,12 +220,13 @@ async function upsertProject(project: Project): Promise<Project> {
         is_active,
         primary_reference_image_id,
         reference_images,
+        text_style,
         created_at,
         updated_at
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17::jsonb, $18::timestamptz, $19::timestamptz
+        $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::timestamptz, $20::timestamptz
       )
       ON CONFLICT (id) DO UPDATE
       SET
@@ -229,6 +246,7 @@ async function upsertProject(project: Project): Promise<Project> {
         is_active = EXCLUDED.is_active,
         primary_reference_image_id = EXCLUDED.primary_reference_image_id,
         reference_images = EXCLUDED.reference_images,
+        text_style = EXCLUDED.text_style,
         updated_at = EXCLUDED.updated_at
       RETURNING *
     `,
@@ -250,6 +268,7 @@ async function upsertProject(project: Project): Promise<Project> {
       project.isActive,
       project.primaryReferenceImageId,
       JSON.stringify(project.referenceImages),
+      JSON.stringify(project.textStyle || {}),
       project.createdAt,
       project.updatedAt,
     ]

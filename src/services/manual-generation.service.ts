@@ -145,6 +145,7 @@ export class ManualGenerationService {
         generatedVideoUrl: resultVideoUrl,
         audioFilePath: audio.audioFilePath,
         textOverlays: textOverlays,
+        textStyle: project.textStyle,
       });
 
       const storedVideo = await YandexDiskService.uploadGeneratedVideoFile({

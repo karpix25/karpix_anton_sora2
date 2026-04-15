@@ -138,6 +138,75 @@
         <section class="card">
           <div class="card-title-row">
             <div>
+              <p class="card-eyebrow">Оверлеи</p>
+              <h3>Стиль текста и превью</h3>
+            </div>
+          </div>
+
+          <div class="text-styling-grid">
+            <div class="form-grid" style="margin-top: 0;">
+              <label class="full-width">
+                <span>Шрифт (Google Fonts)</span>
+                <select id="textStyle-fontFamily">
+                  <option value="Montserrat">Montserrat (Modern Ads)</option>
+                  <option value="Inter">Inter (Clean UI)</option>
+                  <option value="Roboto">Roboto (Standard)</option>
+                  <option value="Rubik">Rubik (Friendly)</option>
+                  <option value="Playfair Display">Playfair Display (Elegant)</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Размер текста</span>
+                <input id="textStyle-fontSize" type="range" min="10" max="80" step="1" />
+              </label>
+
+              <label>
+                <span>Жирность</span>
+                <select id="textStyle-fontWeight">
+                  <option value="400">Normal</option>
+                  <option value="700">Bold</option>
+                  <option value="900">Black</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Цвет текста</span>
+                <input id="textStyle-fontColor" type="color" />
+              </label>
+
+              <label>
+                <span>Тип оформления</span>
+                <select id="textStyle-borderStyle">
+                  <option value="1">Обводка и тень</option>
+                  <option value="3">Прямоугольный бокс</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Цвет оформления</span>
+                <input id="textStyle-outlineColor" type="color" />
+              </label>
+
+              <label>
+                <span>Отступ снизу (%)</span>
+                <input id="textStyle-verticalMargin" type="range" min="0" max="500" step="5" />
+              </label>
+            </div>
+
+            <div class="preview-9-16-container">
+              <div class="preview-mock-video"></div>
+              <div class="preview-label">9:16 Preview</div>
+              <div id="text-style-preview-element" class="preview-text-overlay">
+                Пример текста субтитров в вашем проекте
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
               <p class="card-eyebrow">Генерации</p>
               <h3>История генераций</h3>
             </div>

@@ -65,9 +65,14 @@ export async function initDatabase(): Promise<void> {
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       primary_reference_image_id TEXT NOT NULL DEFAULT '',
       reference_images JSONB NOT NULL DEFAULT '[]'::jsonb,
+      text_style JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_style JSONB NOT NULL DEFAULT '{}'::jsonb;
   `);
 
   await db.query(`

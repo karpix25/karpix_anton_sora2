@@ -18,6 +18,17 @@ const defaultProject = () => ({
   isActive: true,
   primaryReferenceImageId: '',
   referenceImages: [],
+  textStyle: {
+    fontFamily: 'Montserrat',
+    fontSize: 30,
+    fontColor: '#FFFFFF',
+    fontWeight: '700',
+    outlineColor: '#000000',
+    outlineWidth: 1.5,
+    backgroundColor: '#000000',
+    borderStyle: 1,
+    verticalMargin: 40,
+  },
 });
 
 const state = {
@@ -60,7 +71,17 @@ const elements = {
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
     selectedModel: document.getElementById('selectedModel'),
     isActive: document.getElementById('isActive'),
+    textStyle: {
+      fontFamily: document.getElementById('textStyle-fontFamily'),
+      fontSize: document.getElementById('textStyle-fontSize'),
+      fontWeight: document.getElementById('textStyle-fontWeight'),
+      fontColor: document.getElementById('textStyle-fontColor'),
+      borderStyle: document.getElementById('textStyle-borderStyle'),
+      outlineColor: document.getElementById('textStyle-outlineColor'),
+      verticalMargin: document.getElementById('textStyle-verticalMargin'),
+    },
   },
+  textPreview: document.getElementById('text-style-preview-element'),
 };
 
 function setStatus(message) {
@@ -146,7 +167,60 @@ function snapshotFromForm() {
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
     selectedModel: elements.fields.selectedModel.value,
     isActive: elements.fields.isActive.checked,
+    textStyle: {
+      fontFamily: elements.fields.textStyle.fontFamily.value,
+      fontSize: Number(elements.fields.textStyle.fontSize.value),
+      fontWeight: elements.fields.textStyle.fontWeight.value,
+      fontColor: elements.fields.textStyle.fontColor.value,
+      borderStyle: Number(elements.fields.textStyle.borderStyle.value),
+      outlineColor: elements.fields.textStyle.outlineColor.value,
+      verticalMargin: Number(elements.fields.textStyle.verticalMargin.value),
+      outlineWidth: state.currentProject.textStyle?.outlineWidth ?? 1.5,
+      backgroundColor: elements.fields.textStyle.outlineColor.value, // Simplified for UI
+    },
   };
+}
+
+function loadGoogleFont(fontFamily) {
+  const linkId = `google-font-${fontFamily.toLowerCase().replace(/\s+/g, '-')}`;
+  if (document.getElementById(linkId)) return;
+
+  const link = document.createElement('link');
+  link.id = linkId;
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(/\s+/g, '+')}:wght@400;700;900&display=swap`;
+  document.head.appendChild(link);
+}
+
+function updateTextPreview() {
+  const style = state.currentProject.textStyle;
+  if (!style || !elements.textPreview) return;
+
+  loadGoogleFont(style.fontFamily);
+
+  const p = elements.textPreview;
+  p.style.fontFamily = `'${style.fontFamily}', sans-serif`;
+  p.style.fontSize = `${style.fontSize}px`;
+  p.style.color = style.fontColor;
+  p.style.fontWeight = style.fontWeight;
+  
+  // verticalMargin is 0-500 in ASS (1280 height). 
+  // In our preview it's relative.
+  p.style.bottom = `${(style.verticalMargin / 1280) * 100}%`;
+
+  if (style.borderStyle === 3) {
+    // Box style
+    p.style.backgroundColor = style.backgroundColor || style.outlineColor;
+    p.style.webkitTextStroke = '0';
+    p.style.textShadow = 'none';
+    p.style.borderRadius = '8px';
+  } else {
+    // Outline style
+    p.style.backgroundColor = 'transparent';
+    p.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor}`;
+    p.style.textShadow = `2px 2px 4px rgba(0,0,0,0.5)`;
+    p.style.borderRadius = '0';
+  }
 }
 
 function renderBindingInfo() {
@@ -293,6 +367,17 @@ function applyProjectToForm(project) {
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
+
+  const style = state.currentProject.textStyle || defaultProject().textStyle;
+  elements.fields.textStyle.fontFamily.value = style.fontFamily;
+  elements.fields.textStyle.fontSize.value = style.fontSize;
+  elements.fields.textStyle.fontWeight.value = style.fontWeight;
+  elements.fields.textStyle.fontColor.value = style.fontColor;
+  elements.fields.textStyle.borderStyle.value = String(style.borderStyle);
+  elements.fields.textStyle.outlineColor.value = style.outlineColor;
+  elements.fields.textStyle.verticalMargin.value = style.verticalMargin;
+
+  updateTextPreview();
   syncProjectIdToUrl(state.currentProject.id || '');
 
   renderBindingInfo();
@@ -445,6 +530,24 @@ function bindEvents() {
     if (target instanceof HTMLElement && target.dataset.closeLibraryModal === 'true') {
       workflow.closeLibraryItemModal();
     }
+  });
+
+  // Text Styling Live Preview
+  const styleFields = [
+    elements.fields.textStyle.fontFamily,
+    elements.fields.textStyle.fontSize,
+    elements.fields.textStyle.fontWeight,
+    elements.fields.textStyle.fontColor,
+    elements.fields.textStyle.borderStyle,
+    elements.fields.textStyle.outlineColor,
+    elements.fields.textStyle.verticalMargin,
+  ];
+
+  styleFields.forEach(field => {
+    field.addEventListener('input', () => {
+      state.currentProject = snapshotFromForm();
+      updateTextPreview();
+    });
   });
 }
 
