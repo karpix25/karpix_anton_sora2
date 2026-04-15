@@ -41,6 +41,9 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
+const DEBUG_VERSION = '1.0.1-text-styling';
+console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
+
 const elements = {
   projectList: document.getElementById('project-list'),
   statusText: document.getElementById('status-text'),
@@ -551,11 +554,26 @@ function bindEvents() {
   });
 }
 
-bindEvents();
-loadProjects().catch((error) => {
-  console.error(error);
-  setStatus(error.message);
-});
+  console.log('✅ Event listeners bound');
+}
+
+console.log('🔄 Initializing app...');
+try {
+  bindEvents();
+  loadProjects().then(() => {
+    console.log('✅ Projects loaded');
+  }).catch((error) => {
+    console.error('❌ Failed to load projects:', error);
+    setStatus(`Error: ${error.message}`);
+  });
+} catch (err) {
+  console.error('❌ Initialization error:', err);
+  document.body.insertAdjacentHTML('afterbegin', `
+    <div style="background: red; color: white; padding: 20px; position: fixed; top: 0; left: 0; right: 0; z-index: 9999;">
+      <strong>JS Error:</strong> ${err.message}
+    </div>
+  `);
+}
 
 window.addEventListener('beforeunload', () => {
   stopTelegramBindingPolling();
