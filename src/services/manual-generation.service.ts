@@ -8,6 +8,7 @@ import { YandexDiskService } from './yandex-disk.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
+import { InstagramService } from './instagram.service.js';
 import type { GenerationTriggerMode } from '../domain/generation-task.js';
 import fs from 'fs-extra';
 
@@ -51,32 +52,58 @@ export class ManualGenerationService {
     try {
       let resultVideoUrl = '';
       let analysis = libraryItem.analysis;
-      if (!analysis) {
+      let textOverlays = libraryItem.textOverlays || [];
+      
+      // Force processing if missing components
+      if (!analysis || !textOverlays.length) {
         if (!libraryItem.directVideoUrl) {
           throw new Error('Reference item has no analysis and no direct video URL');
         }
 
-        await referenceLibraryStore.updateItem(libraryItem.id, { status: 'analyzing' });
-        analysis = await GeminiService.analyzeVideo({ videoUrl: libraryItem.directVideoUrl });
-        await referenceLibraryStore.updateItem(libraryItem.id, {
-          analysis,
-          status: 'analyzed',
-          errorMessage: '',
-        });
-        libraryItem = (await referenceLibraryStore.getItem(libraryItem.id)) || libraryItem;
-      }
+        let videoLocalPath: string | null = null;
+        let needsUpdate = false;
 
-      let textOverlays = libraryItem.textOverlays || [];
-      if (!textOverlays.length && libraryItem.directVideoUrl) {
-        textOverlays = await TextOverlayService.extractFromVideo({
-          videoUrl: libraryItem.directVideoUrl,
-          analysis,
-        });
+        try {
+          // Download for stability if something is missing
+          if (!analysis || !textOverlays.length) {
+            console.log(`[ManualGenerationService] Downloading video for ${!analysis ? 'analysis' : ''} ${!textOverlays.length ? 'and text extraction' : ''}...`);
+            videoLocalPath = await InstagramService.downloadVideo(libraryItem.directVideoUrl);
+          }
 
-        await referenceLibraryStore.updateItem(libraryItem.id, {
-          textOverlays,
-        });
-        libraryItem = (await referenceLibraryStore.getItem(libraryItem.id)) || libraryItem;
+          if (!analysis) {
+            console.log('[ManualGenerationService] Running video analysis...');
+            analysis = await GeminiService.analyzeVideo({ 
+              localPath: videoLocalPath, 
+              videoUrl: libraryItem.directVideoUrl 
+            });
+            needsUpdate = true;
+          }
+
+          if (!textOverlays.length) {
+            console.log('[ManualGenerationService] Running text overlay extraction...');
+            textOverlays = await TextOverlayService.extractFromVideo({
+              localPath: videoLocalPath,
+              videoUrl: libraryItem.directVideoUrl,
+              analysis,
+            });
+            needsUpdate = true;
+          }
+        } finally {
+          if (videoLocalPath) {
+            fs.remove(videoLocalPath).catch(err => 
+              console.error('[ManualGenerationService] Failed to cleanup temp video:', err.message)
+            );
+          }
+        }
+
+        if (needsUpdate) {
+          await referenceLibraryStore.updateItem(libraryItem.id, {
+            analysis,
+            textOverlays,
+            status: 'analyzed',
+          });
+          libraryItem = (await referenceLibraryStore.getItem(libraryItem.id)) || libraryItem;
+        }
       }
 
       const projectReferenceImageUrls = await projectStore.getReferenceImageDataUrls(project.referenceImages);
@@ -92,11 +119,10 @@ export class ManualGenerationService {
       });
 
       const generationReferenceImageUrl = await ProjectReferenceService.getGenerationReferenceImageUrl(
-        project,
-        input.fallbackReferenceImageUrl || libraryItem.thumbnailUrl
+        project
       );
       if (!generationReferenceImageUrl) {
-        throw new Error('Нет доступного изображения для генерации. Добавьте референс в проект или дождитесь thumbnail из Reel.');
+        throw new Error('Нет доступного фото товара. Загрузите референс в проект (нужно минимум одно фото).');
       }
 
       const audio = await ReferenceAudioService.ensureAudioTrack(libraryItem);

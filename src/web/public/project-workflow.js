@@ -441,13 +441,47 @@ export function createProjectWorkflow(context) {
       return;
     }
 
-    setStatus('Запуск ручной генерации...');
-    await api(`/api/projects/${state.currentProject.id}/library/${itemId}/generate`, {
-      method: 'POST',
-    });
+    if (!state.currentProject.referenceImages || state.currentProject.referenceImages.length === 0) {
+      setStatus('Ошибка: У проекта нет фото-референсов. Загрузите фото товара перед генерацией.');
+      return;
+    }
 
-    await loadGenerations();
-    setStatus('Генерация завершена');
+    try {
+      setStatus('Сохранение настроек и запуск генерации...');
+      // 1. Save project first to ensure latest form values (name, description, etc) are in DB
+      const saveResponse = await api(
+        state.currentProject.id
+          ? `/api/projects/${state.currentProject.id}`
+          : '/api/projects',
+        {
+          method: state.currentProject.id ? 'PUT' : 'POST',
+          body: JSON.stringify({
+            ...state.currentProject,
+            name: state.currentProject.name || 'Новый проект',
+          }),
+        }
+      );
+      
+      // Update local state with saved project
+      if (saveResponse?.project) {
+        state.currentProject = {
+          ...state.currentProject,
+          ...saveResponse.project,
+        };
+        renderProjectList();
+      }
+
+      // 2. Trigger generation
+      await api(`/api/projects/${state.currentProject.id}/library/${itemId}/generate`, {
+        method: 'POST',
+      });
+
+      await loadGenerations();
+      setStatus('Генерация запущена. Следите за статусом в истории.');
+    } catch (error) {
+      console.error(error);
+      setStatus(`Ошибка: ${error.message}`);
+    }
   }
 
   async function removeLibraryItem(itemId) {
