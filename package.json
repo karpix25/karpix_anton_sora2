@@ -18,6 +18,7 @@
     "form-data": "^4.0.5",
     "fs-extra": "^11.3.4",
     "pg": "^8.16.3",
+    "puppeteer-core": "^24.41.0",
     "telegraf": "^4.16.3",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2"

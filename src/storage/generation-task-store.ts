@@ -97,6 +97,41 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
 }
 
 export const generationTaskStore = {
+  async getTask(taskId: string): Promise<GenerationTask | null> {
+    const result = await query<GenerationTaskRow>(
+      'SELECT * FROM generation_tasks WHERE id = $1 LIMIT 1',
+      [normalizeString(taskId)]
+    );
+
+    return result.rows[0] ? mapRowToTask(result.rows[0]) : null;
+  },
+
+  async listRecoverableTasks(input?: {
+    limit?: number;
+    pendingOlderThanSeconds?: number;
+    processingOlderThanSeconds?: number;
+  }): Promise<GenerationTask[]> {
+    const limit = Math.max(1, Math.min(200, input?.limit ?? 50));
+    const pendingOlderThanSeconds = Math.max(0, input?.pendingOlderThanSeconds ?? 20);
+    const processingOlderThanSeconds = Math.max(0, input?.processingOlderThanSeconds ?? 120);
+
+    const result = await query<GenerationTaskRow>(
+      `
+        SELECT *
+        FROM generation_tasks
+        WHERE
+          (status = 'pending' AND updated_at < NOW() - make_interval(secs => $1::int))
+          OR
+          (status = 'processing' AND updated_at < NOW() - make_interval(secs => $2::int))
+        ORDER BY created_at ASC
+        LIMIT $3
+      `,
+      [pendingOlderThanSeconds, processingOlderThanSeconds, limit]
+    );
+
+    return result.rows.map((row) => mapRowToTask(row));
+  },
+
   async listProjectTasks(projectId: string): Promise<GenerationTask[]> {
     const result = await query<GenerationTaskRow>(
       `

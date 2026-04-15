@@ -9,7 +9,9 @@ import { generationTaskStore } from '../storage/generation-task-store.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { InstagramService } from './instagram.service.js';
-import type { GenerationTriggerMode } from '../domain/generation-task.js';
+import type { GenerationTask, GenerationTriggerMode } from '../domain/generation-task.js';
+import type { Project } from '../domain/project.js';
+import type { ReferenceLibraryItem } from '../domain/reference-library.js';
 import fs from 'fs-extra';
 
 function nowIso(): string {
@@ -42,14 +44,48 @@ export class ManualGenerationService {
       status: 'pending',
     });
 
+    return this.processTask(task, project, libraryItem);
+  }
+
+  public static async resumeTask(taskId: string) {
+    const task = await generationTaskStore.getTask(taskId);
+    if (!task) {
+      throw new Error(`Generation task not found: ${taskId}`);
+    }
+
+    if (task.status === 'completed') {
+      return task;
+    }
+
+    const context = await this.loadTaskContext(task);
+    return this.processTask(task, context.project, context.libraryItem);
+  }
+
+  private static async loadTaskContext(task: GenerationTask): Promise<{ project: Project; libraryItem: ReferenceLibraryItem }> {
+    const project = await projectStore.getProject(task.projectId);
+    if (!project) {
+      throw new Error(`Project not found for task ${task.id}: ${task.projectId}`);
+    }
+
+    const libraryItem = await referenceLibraryStore.getItem(task.referenceLibraryItemId);
+    if (!libraryItem || libraryItem.projectId !== project.id) {
+      throw new Error(`Reference library item not found for task ${task.id}: ${task.referenceLibraryItemId}`);
+    }
+
+    return { project, libraryItem };
+  }
+
+  private static async processTask(task: GenerationTask, project: Project, initialLibraryItem: ReferenceLibraryItem) {
     await generationTaskStore.updateTask(task.id, {
       status: 'processing',
-      startedAt: nowIso(),
+      startedAt: task.startedAt || nowIso(),
+      finishedAt: '',
       errorMessage: '',
     });
 
     let mergedVideoPath = '';
     try {
+      let libraryItem = initialLibraryItem;
       let resultVideoUrl = '';
       let analysis = libraryItem.analysis;
       let textOverlays = libraryItem.textOverlays || [];
@@ -154,7 +190,7 @@ export class ManualGenerationService {
         filePath: mergedVideoPath,
       });
 
-      return generationTaskStore.updateTask(task.id, {
+      const completedTask = await generationTaskStore.updateTask(task.id, {
         status: 'completed',
         promptText,
         resultVideoUrl,
@@ -163,6 +199,10 @@ export class ManualGenerationService {
         storedAt: storedVideo.syncedAt,
         finishedAt: nowIso(),
       });
+      if (!completedTask) {
+        throw new Error(`Task disappeared while completing: ${task.id}`);
+      }
+      return completedTask;
     } catch (error: any) {
       await generationTaskStore.updateTask(task.id, {
         status: 'failed',

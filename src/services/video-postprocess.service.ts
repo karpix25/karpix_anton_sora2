@@ -1,7 +1,9 @@
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import fs from 'fs-extra';
+import puppeteer from 'puppeteer-core';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +19,12 @@ const subtitleBold = true;
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
   text: string;
+}
+
+interface OverlayFrame {
+  startSeconds: number;
+  endSeconds: number;
+  imagePath: string;
 }
 
 interface TextRenderStyle {
@@ -118,6 +126,129 @@ function escapeAssDialogueText(value: string): string {
     .replace(/\}/g, '\\}')
     .replace(/\r/g, '')
     .replace(/\n/g, '\\N');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function escapeCssString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function toRgba(hex: string, alpha: number): string {
+  const normalized = normalizeHexColor(hex, '#000000');
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+}
+
+function resolveChromiumExecutablePath(): string {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROMIUM_PATH,
+    process.env.CHROMIUM_BIN,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ].filter((value): value is string => Boolean(value && value.trim()));
+
+  const found = candidates.find((filePath) => existsSync(filePath));
+  if (!found) {
+    throw new Error('Chromium executable is not available. Set PUPPETEER_EXECUTABLE_PATH or install chromium.');
+  }
+
+  return found;
+}
+
+function buildOverlayFrameHtml(text: string, style: TextRenderStyle): string {
+  const frameWidth = 720;
+  const frameHeight = 1280;
+  const frameMaxWidth = Math.max(220, (frameWidth * subtitleFrameWidthPercent) - (subtitleHorizontalPaddingPx * 2));
+  const marginBottomPx = Math.floor(style.verticalMargin * 2.5);
+  const fontFamily = escapeCssString(style.fontFamily);
+  const hasEmoji = /\p{Extended_Pictographic}/u.test(text);
+  const escapedText = escapeHtml(text).replace(/\n/g, '<br />');
+  const baseTextStyles = [
+    `position:absolute`,
+    `left:50%`,
+    `transform:translateX(-50%)`,
+    `bottom:${marginBottomPx}px`,
+    `max-width:${Math.floor(frameMaxWidth)}px`,
+    `width:100%`,
+    `font-family:"${fontFamily}","Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","DejaVu Sans",sans-serif`,
+    `font-size:${style.fontSize}px`,
+    `font-weight:${style.fontWeight}`,
+    `color:${style.fontColor}`,
+    `line-height:1.24`,
+    `letter-spacing:0`,
+    `text-align:center`,
+    `white-space:pre-wrap`,
+    `word-break:break-word`,
+    `overflow-wrap:anywhere`,
+    `box-sizing:border-box`,
+    `padding:0`,
+    `margin:0 auto`,
+  ];
+
+  if (style.borderStyle === 3) {
+    baseTextStyles.push(
+      `background:${toRgba(style.backgroundColor, 0.82)}`,
+      `padding:12px 18px`,
+      `border-radius:10px`,
+      `text-shadow:none`,
+      `-webkit-text-stroke:0 transparent`
+    );
+  } else if (hasEmoji) {
+    baseTextStyles.push(
+      `text-shadow:0 2px 6px rgba(0,0,0,0.58)`,
+      `-webkit-text-stroke:0 transparent`
+    );
+  } else {
+    baseTextStyles.push(
+      `-webkit-text-stroke:${style.outlineWidth}px ${style.outlineColor}`,
+      `text-shadow:0 2px 6px rgba(0,0,0,0.55)`,
+      `background:transparent`
+    );
+  }
+
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      html, body {
+        margin: 0;
+        width: ${frameWidth}px;
+        height: ${frameHeight}px;
+        background: transparent;
+        overflow: hidden;
+      }
+      .frame {
+        position: relative;
+        width: ${frameWidth}px;
+        height: ${frameHeight}px;
+        background: transparent;
+      }
+      .subtitle {
+        ${baseTextStyles.join(';\n        ')};
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="subtitle">${escapedText}</div>
+    </div>
+  </body>
+</html>`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -298,6 +429,83 @@ async function writeAssFile(taskId: string, overlays: PreparedOverlay[], style: 
   return filePath;
 }
 
+function buildOverlayFilterGraph(frames: OverlayFrame[]): { graph: string; finalLabel: string } {
+  let currentLabel = '0:v';
+  const chains: string[] = [];
+
+  frames.forEach((frame, index) => {
+    const inputLabel = `${index + 2}:v`;
+    const outputLabel = `v${index + 1}`;
+    const start = Math.max(0, frame.startSeconds);
+    const end = Math.max(start + 0.01, frame.endSeconds);
+    chains.push(
+      `[${currentLabel}][${inputLabel}]overlay=x=0:y=0:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'[${outputLabel}]`
+    );
+    currentLabel = outputLabel;
+  });
+
+  return {
+    graph: chains.join(';'),
+    finalLabel: currentLabel,
+  };
+}
+
+async function renderOverlayFramesWithChromium(taskId: string, overlays: PreparedOverlay[], style: TextRenderStyle): Promise<OverlayFrame[]> {
+  const executablePath = resolveChromiumExecutablePath();
+  const overlayDir = path.join(dataDir, `${taskId}-overlays`);
+  const framesDir = path.join(overlayDir, 'frames');
+  await fs.ensureDir(framesDir);
+
+  const browser = await puppeteer.launch({
+    executablePath,
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--font-render-hinting=medium',
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 720, height: 1280, deviceScaleFactor: 1 });
+
+    const frames: OverlayFrame[] = [];
+    for (const [index, item] of overlays.entries()) {
+      const startSeconds = item.overlay.startSeconds;
+      const endSeconds = item.overlay.endSeconds;
+      if (!(endSeconds > startSeconds)) {
+        continue;
+      }
+
+      const imagePath = path.join(framesDir, `overlay-${String(index + 1).padStart(3, '0')}.png`);
+      const html = buildOverlayFrameHtml(item.text, style);
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.evaluate(async () => {
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+      });
+      await page.screenshot({
+        path: imagePath,
+        type: 'png',
+        omitBackground: true,
+      });
+
+      frames.push({
+        startSeconds,
+        endSeconds,
+        imagePath,
+      });
+    }
+
+    return frames;
+  } finally {
+    await browser.close();
+  }
+}
+
 export class VideoPostprocessService {
   public static async applyAudioTrack(input: {
     taskId: string;
@@ -338,14 +546,61 @@ export class VideoPostprocessService {
 
     const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
     const resolvedTextStyle = resolveTextStyle(input.textStyle);
-    const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
-    
-    // FFmpeg subtitles filter on macOS/Darwin often needs carefully escaped paths.
-    // We use a relative path or an escaped absolute path.
-    const relativeAssPath = path.relative(process.cwd(), assFilePath);
-    const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+    const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
     try {
+      try {
+        const overlayFrames = await renderOverlayFramesWithChromium(input.taskId, preparedOverlays, resolvedTextStyle);
+        if (overlayFrames.length > 0) {
+          const { graph, finalLabel } = buildOverlayFilterGraph(overlayFrames);
+          const ffmpegArgs = [
+            '-y',
+            '-i',
+            input.generatedVideoUrl,
+            '-stream_loop',
+            '-1',
+            '-i',
+            input.audioFilePath,
+          ];
+
+          overlayFrames.forEach((frame) => {
+            ffmpegArgs.push('-loop', '1', '-i', frame.imagePath);
+          });
+
+          ffmpegArgs.push(
+            '-filter_complex',
+            graph,
+            '-map',
+            `[${finalLabel}]`,
+            '-map',
+            '1:a:0',
+            '-c:v',
+            'libx264',
+            '-preset',
+            'medium',
+            '-crf',
+            '18',
+            '-pix_fmt',
+            'yuv420p',
+            '-c:a',
+            'aac',
+            '-shortest',
+            '-movflags',
+            '+faststart',
+            outputPath
+          );
+
+          await runFfmpeg(ffmpegArgs);
+          return outputPath;
+        }
+      } catch (error: any) {
+        console.warn('[VideoPostprocessService] Chromium overlay renderer failed, fallback to ASS:', error?.message || error);
+      }
+
+      const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
+      const relativeAssPath = path.relative(process.cwd(), assFilePath);
+      const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+
       await runFfmpeg([
         '-y',
         '-i',
@@ -376,7 +631,7 @@ export class VideoPostprocessService {
         outputPath,
       ]);
     } finally {
-      await fs.remove(path.join(dataDir, `${input.taskId}-overlays`));
+      await fs.remove(overlayWorkDir);
     }
 
     return outputPath;

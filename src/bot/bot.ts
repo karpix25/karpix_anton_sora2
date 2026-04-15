@@ -75,6 +75,15 @@ async function getBoundProject(ctx: Context) {
   return projectStore.findProjectByTelegramBinding(String(ctx.chat.id), getMessageThreadId(ctx));
 }
 
+function getReplyParams(ctx: Context): { reply_parameters?: { message_id: number } } {
+  const message = 'message' in ctx ? (ctx.message as any) : undefined;
+  const messageId = message?.message_id;
+  if (typeof messageId === 'number') {
+    return { reply_parameters: { message_id: messageId } };
+  }
+  return {};
+}
+
 export const bot = new Telegraf(config.telegram.token);
 
 bot.catch((error: unknown, ctx) => {
@@ -360,7 +369,8 @@ bot.on(message('photo'), async (ctx) => {
   const boundProject = await getBoundProject(ctx);
   await ctx.reply(
     `Фото через Telegram отключены для стабильного пайплайна.\n` +
-    `Загрузите референсы в веб-интерфейсе:\n${getWebInterfaceUrl(boundProject?.id || '')}`
+    `Загрузите референсы в веб-интерфейсе:\n${getWebInterfaceUrl(boundProject?.id || '')}`,
+    getReplyParams(ctx)
   );
 });
 
@@ -370,10 +380,11 @@ bot.on(message('text'), async (ctx) => {
     if (!ctx.chat) return;
     const text = ctx.message.text;
     if (text.startsWith('/')) return; // Ignore commands
+    const replyParams = getReplyParams(ctx);
 
     // Basic Instagram URL check
     if (!text.includes('instagram.com/')) {
-      return ctx.reply('⚠️ Отправьте корректную ссылку на Instagram Reel или фото товара.');
+      return ctx.reply('⚠️ Отправьте корректную ссылку на Instagram Reel или фото товара.', replyParams);
     }
 
     const reelUrl = text.trim();
@@ -384,7 +395,8 @@ bot.on(message('text'), async (ctx) => {
         `Эта тема не привязана к проекту.\n` +
         `Создайте проект: /create_project <название>\n` +
         `Или привяжите существующий: /bind_project <project-id>\n\n` +
-        `Веб-интерфейс: ${getWebInterfaceUrl()}`
+        `Веб-интерфейс: ${getWebInterfaceUrl()}`,
+        replyParams
       );
       return;
     }
@@ -394,7 +406,8 @@ bot.on(message('text'), async (ctx) => {
       await ctx.reply(
         `ℹ️ Этот Reel уже есть в проекте "${boundProject.name}".\n` +
         `Статус: ${duplicateLibraryItem.status}.\n` +
-        'Повторно не сохраняю.'
+        'Повторно не сохраняю.',
+        replyParams
       );
       return;
     }
@@ -402,7 +415,8 @@ bot.on(message('text'), async (ctx) => {
     if (!boundProject.referenceImages.length) {
       await ctx.reply(
         `У проекта "${boundProject.name}" нет фото-референсов.\n` +
-        `Загрузите фото в веб-интерфейсе и повторите:\n${getWebInterfaceUrl(boundProject.id)}`
+        `Загрузите фото в веб-интерфейсе и повторите:\n${getWebInterfaceUrl(boundProject.id)}`,
+        replyParams
       );
       return;
     }
@@ -423,13 +437,13 @@ bot.on(message('text'), async (ctx) => {
         if (statusMsg) {
           await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, text);
         } else {
-          statusMsg = await ctx.reply(text);
+          statusMsg = await ctx.reply(text, replyParams);
         }
       } catch (err: any) {
         console.error(`[Bot] Failed to update status to "${text}":`, err.message);
         // If editing fails, try a new reply
         try {
-          statusMsg = await ctx.reply(text);
+          statusMsg = await ctx.reply(text, replyParams);
         } catch (innerErr) {
           console.error('[Bot] Critical failure: could not even send a fresh status reply.');
         }
@@ -499,6 +513,7 @@ bot.on(message('text'), async (ctx) => {
       }
       await ctx.replyWithVideo(finalVideoUrl, {
         caption: `✨ Сгенерировано через ${targetModel.toUpperCase()} (${generationProvider})\n\nРеференс: ${reelUrl}`,
+        ...replyParams,
       });
     } catch (error: any) {
       const errorMsg = error.message || String(error) || 'Unknown error';
@@ -520,15 +535,16 @@ bot.on(message('text'), async (ctx) => {
 
       if (statusMsg) {
         await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, errorText).catch(() => {
-          ctx.reply(errorText).catch(() => {});
+          ctx.reply(errorText, replyParams).catch(() => {});
         });
       } else {
-        await ctx.reply(errorText).catch(() => {});
+        await ctx.reply(errorText, replyParams).catch(() => {});
       }
 
       if (isInstagramParseError && error.debugFilePath) {
         await ctx.replyWithDocument(Input.fromLocalFile(error.debugFilePath), {
           caption: 'Полный JSON-ответ RapidAPI для этого Reel.',
+          ...replyParams,
         });
       }
     } finally {
@@ -549,6 +565,6 @@ bot.on(message('text'), async (ctx) => {
       error: error?.message || String(error),
     });
 
-    await ctx.reply('❌ Внутренняя ошибка обработки сообщения. Попробуйте еще раз.').catch(() => {});
+    await ctx.reply('❌ Внутренняя ошибка обработки сообщения. Попробуйте еще раз.', getReplyParams(ctx)).catch(() => {});
   }
 });

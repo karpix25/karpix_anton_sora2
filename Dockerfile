@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ffmpeg \
+    chromium \
     ca-certificates \
     fontconfig \
     fonts-dejavu-core \
