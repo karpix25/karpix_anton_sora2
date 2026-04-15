@@ -24,8 +24,16 @@ export interface TextStyle {
   outlineColor: string;
   outlineWidth: number;
   backgroundColor: string;
+  backgroundOpacity: number;
   borderStyle: number; // 1 = Style with outline/shadow, 3 = Opaque box
   verticalMargin: number;
+  frameWidthPercent: number;
+  frameXPercent: number;
+  textAlign: 'left' | 'center' | 'right';
+  lineHeight: number;
+  boxPaddingX: number;
+  boxPaddingY: number;
+  boxRadius: number;
 }
 
 export interface Project {

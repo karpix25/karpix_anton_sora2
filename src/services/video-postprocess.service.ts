@@ -10,8 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
 const defaultFontFamily = 'DejaVu Sans';
-const subtitleFrameWidthPercent = 0.86;
-const subtitleHorizontalPaddingPx = 141;
 const subtitleFontSizePx = 30; // Will be scaled in ASS
 const subtitleOutlineWidthPx = 1.5;
 const subtitleBold = true;
@@ -35,8 +33,16 @@ interface TextRenderStyle {
   outlineColor: string;
   outlineWidth: number;
   backgroundColor: string;
+  backgroundOpacity: number;
   borderStyle: number;
   verticalMargin: number;
+  frameWidthPercent: number;
+  frameXPercent: number;
+  textAlign: 'left' | 'center' | 'right';
+  lineHeight: number;
+  boxPaddingX: number;
+  boxPaddingY: number;
+  boxRadius: number;
 }
 
 const defaultTextRenderStyle: TextRenderStyle = {
@@ -47,8 +53,16 @@ const defaultTextRenderStyle: TextRenderStyle = {
   outlineColor: '#000000',
   outlineWidth: subtitleOutlineWidthPx,
   backgroundColor: '#000000',
+  backgroundOpacity: 0.82,
   borderStyle: 1,
   verticalMargin: 40,
+  frameWidthPercent: 47,
+  frameXPercent: 50,
+  textAlign: 'center',
+  lineHeight: 1.24,
+  boxPaddingX: 18,
+  boxPaddingY: 12,
+  boxRadius: 10,
 };
 
 function runFfmpeg(args: string[]): Promise<void> {
@@ -141,12 +155,31 @@ function escapeCssString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function toGoogleFontFamilyParam(fontFamily: string): string {
+  return fontFamily
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => encodeURIComponent(token))
+    .join('+');
+}
+
 function toRgba(hex: string, alpha: number): string {
   const normalized = normalizeHexColor(hex, '#000000');
   const r = Number.parseInt(normalized.slice(1, 3), 16);
   const g = Number.parseInt(normalized.slice(3, 5), 16);
   const b = Number.parseInt(normalized.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+}
+
+function toAssAlignment(textAlign: TextRenderStyle['textAlign']): number {
+  if (textAlign === 'left') {
+    return 1;
+  }
+  if (textAlign === 'right') {
+    return 3;
+  }
+  return 2;
 }
 
 function resolveChromiumExecutablePath(): string {
@@ -172,38 +205,46 @@ function resolveChromiumExecutablePath(): string {
 function buildOverlayFrameHtml(text: string, style: TextRenderStyle): string {
   const frameWidth = 720;
   const frameHeight = 1280;
-  const frameMaxWidth = Math.max(220, (frameWidth * subtitleFrameWidthPercent) - (subtitleHorizontalPaddingPx * 2));
+  const textFrameWidthPx = Math.max(120, Math.floor((style.frameWidthPercent / 100) * frameWidth));
   const marginBottomPx = Math.floor(style.verticalMargin * 2.5);
   const fontFamily = escapeCssString(style.fontFamily);
+  const googleFontFamily = toGoogleFontFamilyParam(style.fontFamily);
   const hasEmoji = /\p{Extended_Pictographic}/u.test(text);
   const escapedText = escapeHtml(text).replace(/\n/g, '<br />');
-  const baseTextStyles = [
+  const frameStyles = [
     `position:absolute`,
-    `left:50%`,
+    `left:${style.frameXPercent}%`,
     `transform:translateX(-50%)`,
     `bottom:${marginBottomPx}px`,
-    `max-width:${Math.floor(frameMaxWidth)}px`,
+    `width:${textFrameWidthPx}px`,
+    `max-width:${frameWidth}px`,
+    `box-sizing:border-box`,
+    `margin:0`,
+  ];
+
+  const baseTextStyles = [
+    `position:relative`,
     `width:100%`,
     `font-family:"${fontFamily}","Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","DejaVu Sans",sans-serif`,
     `font-size:${style.fontSize}px`,
     `font-weight:${style.fontWeight}`,
     `color:${style.fontColor}`,
-    `line-height:1.24`,
+    `line-height:${style.lineHeight}`,
     `letter-spacing:0`,
-    `text-align:center`,
+    `text-align:${style.textAlign}`,
     `white-space:pre-wrap`,
     `word-break:break-word`,
     `overflow-wrap:anywhere`,
     `box-sizing:border-box`,
     `padding:0`,
-    `margin:0 auto`,
+    `margin:0`,
   ];
 
   if (style.borderStyle === 3) {
     baseTextStyles.push(
-      `background:${toRgba(style.backgroundColor, 0.82)}`,
-      `padding:12px 18px`,
-      `border-radius:10px`,
+      `background:${toRgba(style.backgroundColor, style.backgroundOpacity)}`,
+      `padding:${style.boxPaddingY}px ${style.boxPaddingX}px`,
+      `border-radius:${style.boxRadius}px`,
       `text-shadow:none`,
       `-webkit-text-stroke:0 transparent`
     );
@@ -224,6 +265,7 @@ function buildOverlayFrameHtml(text: string, style: TextRenderStyle): string {
 <html>
   <head>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${googleFontFamily}:wght@400;700;900&display=swap" />
     <style>
       html, body {
         margin: 0;
@@ -241,11 +283,16 @@ function buildOverlayFrameHtml(text: string, style: TextRenderStyle): string {
       .subtitle {
         ${baseTextStyles.join(';\n        ')};
       }
+      .subtitle-frame {
+        ${frameStyles.join(';\n        ')};
+      }
     </style>
   </head>
   <body>
     <div class="frame">
-      <div class="subtitle">${escapedText}</div>
+      <div class="subtitle-frame">
+        <div class="subtitle">${escapedText}</div>
+      </div>
     </div>
   </body>
 </html>`;
@@ -266,8 +313,20 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
   const fontSize = Math.round(clamp(toFiniteNumber(source.fontSize) ?? defaultTextRenderStyle.fontSize, 10, 120));
   const outlineWidth = clamp(toFiniteNumber(source.outlineWidth) ?? defaultTextRenderStyle.outlineWidth, 0, 12);
   const verticalMargin = Math.round(clamp(toFiniteNumber(source.verticalMargin) ?? defaultTextRenderStyle.verticalMargin, 0, 500));
+  const frameWidthPercent = Math.round(clamp(toFiniteNumber(source.frameWidthPercent) ?? defaultTextRenderStyle.frameWidthPercent, 20, 100));
+  const frameXPercent = Math.round(clamp(toFiniteNumber(source.frameXPercent) ?? defaultTextRenderStyle.frameXPercent, 0, 100));
+  const lineHeight = clamp(toFiniteNumber(source.lineHeight) ?? defaultTextRenderStyle.lineHeight, 0.8, 2);
+  const backgroundOpacity = clamp(toFiniteNumber(source.backgroundOpacity) ?? defaultTextRenderStyle.backgroundOpacity, 0, 1);
+  const boxPaddingX = Math.round(clamp(toFiniteNumber(source.boxPaddingX) ?? defaultTextRenderStyle.boxPaddingX, 0, 120));
+  const boxPaddingY = Math.round(clamp(toFiniteNumber(source.boxPaddingY) ?? defaultTextRenderStyle.boxPaddingY, 0, 80));
+  const boxRadius = Math.round(clamp(toFiniteNumber(source.boxRadius) ?? defaultTextRenderStyle.boxRadius, 0, 120));
   const borderStyleRaw = toFiniteNumber(source.borderStyle);
   const borderStyle = borderStyleRaw === 3 ? 3 : 1;
+  const textAlignRaw = typeof source.textAlign === 'string' ? source.textAlign.trim().toLowerCase() : '';
+  const textAlign: TextRenderStyle['textAlign'] =
+    textAlignRaw === 'left' || textAlignRaw === 'right' || textAlignRaw === 'center'
+      ? textAlignRaw
+      : defaultTextRenderStyle.textAlign;
 
   return {
     fontFamily: sanitizeAssFontName(fontFamily),
@@ -277,8 +336,16 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
     outlineColor: normalizeHexColor(source.outlineColor, defaultTextRenderStyle.outlineColor),
     outlineWidth,
     backgroundColor: normalizeHexColor(source.backgroundColor, defaultTextRenderStyle.backgroundColor),
+    backgroundOpacity,
     borderStyle,
     verticalMargin,
+    frameWidthPercent,
+    frameXPercent,
+    textAlign,
+    lineHeight,
+    boxPaddingX,
+    boxPaddingY,
+    boxRadius,
   };
 }
 
@@ -345,12 +412,12 @@ function wrapOverlayText(text: string, maxCharsPerLine: number): string {
   return wrappedLines.join('\n');
 }
 
-function estimateSubtitleMaxCharsPerLine(): number {
-  // 720px baseline for portrait content. Keeps subtitle wrap close to real output sizes.
-  const frameWidthPx = 720 * subtitleFrameWidthPercent;
-  const contentWidthPx = Math.max(220, frameWidthPx - (subtitleHorizontalPaddingPx * 2));
-  const estimated = Math.floor(contentWidthPx / (subtitleFontSizePx * 0.56));
-  return clamp(estimated, 12, 42);
+function estimateSubtitleMaxCharsPerLine(style: TextRenderStyle): number {
+  const frameWidthPx = Math.floor((720 * style.frameWidthPercent) / 100);
+  const horizontalPadding = style.borderStyle === 3 ? style.boxPaddingX * 2 : 0;
+  const contentWidthPx = Math.max(80, frameWidthPx - horizontalPadding);
+  const estimated = Math.floor(contentWidthPx / (style.fontSize * 0.56));
+  return Math.round(clamp(estimated, 8, 80));
 }
 
 function formatSecondsToAssTime(seconds: number): string {
@@ -366,18 +433,25 @@ function generateAssFileContent(overlays: PreparedOverlay[], style: TextRenderSt
   // Styles and configuration for the ASS file.
   // MarginV controls the vertical distance from the bottom.
   const marginV = Math.floor(style.verticalMargin * 2.5); // Scaled for 720x1280
+  const frameWidthPx = Math.floor((720 * style.frameWidthPercent) / 100);
+  const centerXPx = Math.floor((720 * style.frameXPercent) / 100);
+  const halfFrame = Math.floor(frameWidthPx / 2);
+  const marginL = Math.round(clamp(centerXPx - halfFrame, 0, 719));
+  const marginR = Math.round(clamp(720 - (centerXPx + halfFrame), 0, 719));
+  const alignment = toAssAlignment(style.textAlign);
 
-  const toAssColor = (hex: string) => {
+  const toAssColor = (hex: string, alpha = 0) => {
     if (!hex || !hex.startsWith('#')) return '&H00FFFFFF&';
     const r = hex.slice(1, 3);
     const g = hex.slice(3, 5);
     const b = hex.slice(5, 7);
-    return `&H00${b}${g}${r}&`;
+    const alphaHex = Math.round(clamp(alpha, 0, 1) * 255).toString(16).toUpperCase().padStart(2, '0');
+    return `&H${alphaHex}${b}${g}${r}&`;
   };
 
   const primaryColor = toAssColor(style.fontColor);
   const outlineColor = toAssColor(style.outlineColor);
-  const backColor = toAssColor(style.backgroundColor);
+  const backColor = toAssColor(style.backgroundColor, 1 - style.backgroundOpacity);
   const isBold = style.fontWeight === 'bold' || parseInt(style.fontWeight, 10) >= 700;
 
   const header = `[Script Info]
@@ -388,7 +462,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,2,20,20,${marginV},1
+Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,${alignment},${marginL},${marginR},${marginV},1
 `;
 
   const events = `
@@ -409,8 +483,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return header + events + lines.join('\n');
 }
 
-function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay {
-  const maxCharsPerLine = estimateSubtitleMaxCharsPerLine();
+function prepareOverlayForRender(overlay: ReferenceTextOverlay, style: TextRenderStyle): PreparedOverlay {
+  const maxCharsPerLine = estimateSubtitleMaxCharsPerLine(style);
   const text = wrapOverlayText(overlay.text, maxCharsPerLine);
 
   return {
@@ -544,8 +618,8 @@ export class VideoPostprocessService {
       return outputPath;
     }
 
-    const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
     const resolvedTextStyle = resolveTextStyle(input.textStyle);
+    const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
     const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
     try {

@@ -17,8 +17,16 @@ const defaultTextStyle: NonNullable<Project['textStyle']> = {
   outlineColor: '#000000',
   outlineWidth: 1.5,
   backgroundColor: '#000000',
+  backgroundOpacity: 0.82,
   borderStyle: 1,
   verticalMargin: 40,
+  frameWidthPercent: 47,
+  frameXPercent: 50,
+  textAlign: 'center',
+  lineHeight: 1.24,
+  boxPaddingX: 18,
+  boxPaddingY: 12,
+  boxRadius: 10,
 };
 
 interface ProjectRow {
@@ -153,9 +161,21 @@ function normalizeTextStyle(
   const outlineWidthRaw = toFiniteNumber(style.outlineWidth);
   const borderStyleRaw = toFiniteNumber(style.borderStyle);
   const verticalMarginRaw = toFiniteNumber(style.verticalMargin);
+  const frameWidthPercentRaw = toFiniteNumber(style.frameWidthPercent);
+  const frameXPercentRaw = toFiniteNumber(style.frameXPercent);
+  const lineHeightRaw = toFiniteNumber(style.lineHeight);
+  const backgroundOpacityRaw = toFiniteNumber(style.backgroundOpacity);
+  const boxPaddingXRaw = toFiniteNumber(style.boxPaddingX);
+  const boxPaddingYRaw = toFiniteNumber(style.boxPaddingY);
+  const boxRadiusRaw = toFiniteNumber(style.boxRadius);
   const fontWeightRaw = normalizeString(style.fontWeight);
   const normalizedFontWeight =
     /^(normal|bold|[1-9]00)$/.test(fontWeightRaw) ? fontWeightRaw : fallback.fontWeight;
+  const textAlignRaw = normalizeString(style.textAlign).toLowerCase();
+  const textAlign: NonNullable<Project['textStyle']>['textAlign'] =
+    textAlignRaw === 'left' || textAlignRaw === 'right' || textAlignRaw === 'center'
+      ? textAlignRaw
+      : fallback.textAlign;
 
   const fontFamily = normalizeString(style.fontFamily);
 
@@ -171,8 +191,16 @@ function normalizeTextStyle(
     outlineColor: normalizeHexColor(style.outlineColor, fallback.outlineColor),
     outlineWidth: clamp(outlineWidthRaw ?? fallback.outlineWidth, 0, 12),
     backgroundColor: normalizeHexColor(style.backgroundColor, fallback.backgroundColor),
+    backgroundOpacity: clamp(backgroundOpacityRaw ?? fallback.backgroundOpacity, 0, 1),
     borderStyle,
     verticalMargin: Math.round(clamp(verticalMarginRaw ?? fallback.verticalMargin, 0, 500)),
+    frameWidthPercent: Math.round(clamp(frameWidthPercentRaw ?? fallback.frameWidthPercent, 20, 100)),
+    frameXPercent: Math.round(clamp(frameXPercentRaw ?? fallback.frameXPercent, 0, 100)),
+    textAlign,
+    lineHeight: clamp(lineHeightRaw ?? fallback.lineHeight, 0.8, 2),
+    boxPaddingX: Math.round(clamp(boxPaddingXRaw ?? fallback.boxPaddingX, 0, 120)),
+    boxPaddingY: Math.round(clamp(boxPaddingYRaw ?? fallback.boxPaddingY, 0, 80)),
+    boxRadius: Math.round(clamp(boxRadiusRaw ?? fallback.boxRadius, 0, 120)),
   };
 }
 

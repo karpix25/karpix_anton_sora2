@@ -13,7 +13,7 @@
           <div>
             <p class="eyebrow">SOra2</p>
             <h1>Проекты</h1>
-            <span style="font-size: 10px; background: #e67e22; color: white; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">v1.0.1</span>
+            <span style="font-size: 10px; background: #e67e22; color: white; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">v1.1.0</span>
           </div>
           <button id="create-project-button" class="secondary-button" type="button">Новый проект</button>
         </div>
@@ -185,7 +185,7 @@
               </label>
 
               <label>
-                <span>Цвет оформления</span>
+                <span>Цвет обводки</span>
                 <input id="textStyle-outlineColor" type="color" />
               </label>
 
@@ -193,13 +193,64 @@
                 <span>Отступ снизу (%)</span>
                 <input id="textStyle-verticalMargin" type="range" min="0" max="500" step="5" />
               </label>
+
+              <label>
+                <span>Ширина текстового фрейма (%)</span>
+                <input id="textStyle-frameWidthPercent" type="range" min="20" max="100" step="1" />
+              </label>
+
+              <label>
+                <span>Позиция фрейма по X (%)</span>
+                <input id="textStyle-frameXPercent" type="range" min="0" max="100" step="1" />
+              </label>
+
+              <label>
+                <span>Выравнивание текста</span>
+                <select id="textStyle-textAlign">
+                  <option value="left">Слева</option>
+                  <option value="center">По центру</option>
+                  <option value="right">Справа</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Межстрочный интервал</span>
+                <input id="textStyle-lineHeight" type="range" min="0.8" max="2" step="0.05" />
+              </label>
+
+              <label class="box-control">
+                <span>Цвет бокса</span>
+                <input id="textStyle-backgroundColor" type="color" />
+              </label>
+
+              <label class="box-control">
+                <span>Прозрачность бокса (%)</span>
+                <input id="textStyle-backgroundOpacity" type="range" min="0" max="100" step="1" />
+              </label>
+
+              <label class="box-control">
+                <span>Внутренний отступ бокса X (px)</span>
+                <input id="textStyle-boxPaddingX" type="range" min="0" max="120" step="1" />
+              </label>
+
+              <label class="box-control">
+                <span>Внутренний отступ бокса Y (px)</span>
+                <input id="textStyle-boxPaddingY" type="range" min="0" max="80" step="1" />
+              </label>
+
+              <label class="box-control">
+                <span>Скругление бокса (px)</span>
+                <input id="textStyle-boxRadius" type="range" min="0" max="120" step="1" />
+              </label>
             </div>
 
             <div class="preview-9-16-container">
               <div class="preview-mock-video"></div>
               <div class="preview-label">9:16 Preview</div>
-              <div id="text-style-preview-element" class="preview-text-overlay">
-                Пример текста субтитров в вашем проекте
+              <div id="text-style-preview-frame" class="preview-text-frame">
+                <div id="text-style-preview-element" class="preview-text-overlay">
+                  Пример текста субтитров в вашем проекте
+                </div>
               </div>
             </div>
           </div>
@@ -267,6 +318,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/app.js?v=1.1.0"></script>
   </body>
 </html>

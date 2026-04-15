@@ -26,8 +26,16 @@ const defaultProject = () => ({
     outlineColor: '#000000',
     outlineWidth: 1.5,
     backgroundColor: '#000000',
+    backgroundOpacity: 0.82,
     borderStyle: 1,
     verticalMargin: 40,
+    frameWidthPercent: 47,
+    frameXPercent: 50,
+    textAlign: 'center',
+    lineHeight: 1.24,
+    boxPaddingX: 18,
+    boxPaddingY: 12,
+    boxRadius: 10,
   },
 });
 
@@ -41,7 +49,7 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.0.1-text-styling';
+const DEBUG_VERSION = '1.1.0-text-frame-controls';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
 
 const elements = {
@@ -82,8 +90,18 @@ const elements = {
       borderStyle: document.getElementById('textStyle-borderStyle'),
       outlineColor: document.getElementById('textStyle-outlineColor'),
       verticalMargin: document.getElementById('textStyle-verticalMargin'),
+      frameWidthPercent: document.getElementById('textStyle-frameWidthPercent'),
+      frameXPercent: document.getElementById('textStyle-frameXPercent'),
+      textAlign: document.getElementById('textStyle-textAlign'),
+      lineHeight: document.getElementById('textStyle-lineHeight'),
+      backgroundColor: document.getElementById('textStyle-backgroundColor'),
+      backgroundOpacity: document.getElementById('textStyle-backgroundOpacity'),
+      boxPaddingX: document.getElementById('textStyle-boxPaddingX'),
+      boxPaddingY: document.getElementById('textStyle-boxPaddingY'),
+      boxRadius: document.getElementById('textStyle-boxRadius'),
     },
   },
+  textPreviewFrame: document.getElementById('text-style-preview-frame'),
   textPreview: document.getElementById('text-style-preview-element'),
 };
 
@@ -179,7 +197,15 @@ function snapshotFromForm() {
       outlineColor: elements.fields.textStyle.outlineColor.value,
       verticalMargin: Number(elements.fields.textStyle.verticalMargin.value),
       outlineWidth: state.currentProject.textStyle?.outlineWidth ?? 1.5,
-      backgroundColor: elements.fields.textStyle.outlineColor.value, // Simplified for UI
+      backgroundColor: elements.fields.textStyle.backgroundColor.value,
+      backgroundOpacity: Number(elements.fields.textStyle.backgroundOpacity.value) / 100,
+      frameWidthPercent: Number(elements.fields.textStyle.frameWidthPercent.value),
+      frameXPercent: Number(elements.fields.textStyle.frameXPercent.value),
+      textAlign: elements.fields.textStyle.textAlign.value,
+      lineHeight: Number(elements.fields.textStyle.lineHeight.value),
+      boxPaddingX: Number(elements.fields.textStyle.boxPaddingX.value),
+      boxPaddingY: Number(elements.fields.textStyle.boxPaddingY.value),
+      boxRadius: Number(elements.fields.textStyle.boxRadius.value),
     },
   };
 }
@@ -197,33 +223,66 @@ function loadGoogleFont(fontFamily) {
 
 function updateTextPreview() {
   const style = state.currentProject.textStyle;
-  if (!style || !elements.textPreview) return;
+  if (!style || !elements.textPreview || !elements.textPreviewFrame) return;
 
   loadGoogleFont(style.fontFamily);
 
   const p = elements.textPreview;
+  const frame = elements.textPreviewFrame;
+  const normalizedOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity ?? 0.82)));
   p.style.fontFamily = `'${style.fontFamily}', sans-serif`;
   p.style.fontSize = `${style.fontSize}px`;
   p.style.color = style.fontColor;
   p.style.fontWeight = style.fontWeight;
-  
-  // verticalMargin is 0-500 in ASS (1280 height). 
-  // In our preview it's relative.
-  p.style.bottom = `${(style.verticalMargin / 1280) * 100}%`;
+  p.style.textAlign = style.textAlign || 'center';
+  p.style.lineHeight = String(style.lineHeight || 1.24);
+
+  frame.style.bottom = `${(style.verticalMargin / 1280) * 100}%`;
+  frame.style.width = `${style.frameWidthPercent || 47}%`;
+  frame.style.left = `${style.frameXPercent || 50}%`;
 
   if (style.borderStyle === 3) {
-    // Box style
-    p.style.backgroundColor = style.backgroundColor || style.outlineColor;
+    p.style.backgroundColor = hexToRgba(style.backgroundColor || '#000000', normalizedOpacity);
+    p.style.padding = `${style.boxPaddingY ?? 12}px ${style.boxPaddingX ?? 18}px`;
     p.style.webkitTextStroke = '0';
     p.style.textShadow = 'none';
-    p.style.borderRadius = '8px';
+    p.style.borderRadius = `${style.boxRadius ?? 10}px`;
+    frame.classList.remove('disabled');
   } else {
-    // Outline style
     p.style.backgroundColor = 'transparent';
+    p.style.padding = '0';
     p.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor}`;
     p.style.textShadow = `2px 2px 4px rgba(0,0,0,0.5)`;
     p.style.borderRadius = '0';
+    frame.classList.add('disabled');
   }
+
+  toggleBoxControls(style.borderStyle === 3);
+}
+
+function toggleBoxControls(enabled) {
+  document.querySelectorAll('.box-control').forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    node.classList.toggle('disabled', !enabled);
+    const input = node.querySelector('input, select');
+    if (input) {
+      input.disabled = !enabled;
+    }
+  });
+}
+
+function hexToRgba(hexColor, alpha) {
+  const normalized = String(hexColor || '').trim();
+  const match = normalized.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) {
+    return `rgba(0, 0, 0, ${alpha})`;
+  }
+
+  const hex = match[1];
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function renderBindingInfo() {
@@ -382,6 +441,15 @@ function applyProjectToForm(project) {
   elements.fields.textStyle.borderStyle.value = String(style.borderStyle);
   elements.fields.textStyle.outlineColor.value = style.outlineColor;
   elements.fields.textStyle.verticalMargin.value = style.verticalMargin;
+  elements.fields.textStyle.frameWidthPercent.value = String(style.frameWidthPercent);
+  elements.fields.textStyle.frameXPercent.value = String(style.frameXPercent);
+  elements.fields.textStyle.textAlign.value = style.textAlign;
+  elements.fields.textStyle.lineHeight.value = String(style.lineHeight);
+  elements.fields.textStyle.backgroundColor.value = style.backgroundColor;
+  elements.fields.textStyle.backgroundOpacity.value = String(Math.round((style.backgroundOpacity ?? 0.82) * 100));
+  elements.fields.textStyle.boxPaddingX.value = String(style.boxPaddingX);
+  elements.fields.textStyle.boxPaddingY.value = String(style.boxPaddingY);
+  elements.fields.textStyle.boxRadius.value = String(style.boxRadius);
 
   updateTextPreview();
   syncProjectIdToUrl(state.currentProject.id || '');
@@ -547,9 +615,22 @@ function bindEvents() {
     elements.fields.textStyle.borderStyle,
     elements.fields.textStyle.outlineColor,
     elements.fields.textStyle.verticalMargin,
+    elements.fields.textStyle.frameWidthPercent,
+    elements.fields.textStyle.frameXPercent,
+    elements.fields.textStyle.textAlign,
+    elements.fields.textStyle.lineHeight,
+    elements.fields.textStyle.backgroundColor,
+    elements.fields.textStyle.backgroundOpacity,
+    elements.fields.textStyle.boxPaddingX,
+    elements.fields.textStyle.boxPaddingY,
+    elements.fields.textStyle.boxRadius,
   ];
 
-  styleFields.forEach(field => {
+  styleFields.forEach((field) => {
+    if (!field) {
+      return;
+    }
+
     field.addEventListener('input', () => {
       state.currentProject = snapshotFromForm();
       updateTextPreview();

@@ -176,6 +176,10 @@ textarea {
   height: 18px;
 }
 
+.box-control.disabled {
+  opacity: 0.45;
+}
+
 .info-panel {
   display: flex;
   flex-direction: column;
@@ -213,13 +217,29 @@ textarea {
               url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=700') center/cover;
 }
 
-.preview-text-overlay {
+.preview-text-frame {
   position: absolute;
-  width: 80%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 47%;
+  border: 1px dashed rgba(255, 255, 255, 0.45);
+  border-radius: 8px;
+  padding: 0;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.preview-text-frame.disabled {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.preview-text-overlay {
+  width: 100%;
   text-align: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 10px 14px;
-  line-height: 1.25;
+  padding: 0;
+  line-height: 1.24;
+  box-sizing: border-box;
 }
 
 .preview-label {
