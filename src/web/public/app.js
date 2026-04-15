@@ -371,7 +371,10 @@ function applyProjectToForm(project) {
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
 
-  const style = state.currentProject.textStyle || defaultProject().textStyle;
+  const style = {
+    ...defaultProject().textStyle,
+    ...(state.currentProject.textStyle || {}),
+  };
   elements.fields.textStyle.fontFamily.value = style.fontFamily;
   elements.fields.textStyle.fontSize.value = style.fontSize;
   elements.fields.textStyle.fontWeight.value = style.fontWeight;
@@ -552,8 +555,6 @@ function bindEvents() {
       updateTextPreview();
     });
   });
-}
-
   console.log('✅ Event listeners bound');
 }
 

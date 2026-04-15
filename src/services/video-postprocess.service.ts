@@ -7,20 +7,41 @@ import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
-const defaultFontFamily = 'Arial,Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,Noto Emoji';
+const defaultFontFamily = 'Arial';
 const subtitleFrameWidthPercent = 0.86;
-const subtitleFrameHeightPercent = 0.86;
 const subtitleHorizontalPaddingPx = 141;
-const subtitleOffsetFromBottomPercent = 0.4;
 const subtitleFontSizePx = 30; // Will be scaled in ASS
 const subtitleOutlineWidthPx = 1.5;
-const subtitleShadowDepthPx = 0.5;
 const subtitleBold = true;
 
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
   text: string;
 }
+
+interface TextRenderStyle {
+  fontFamily: string;
+  fontSize: number;
+  fontColor: string;
+  fontWeight: string;
+  outlineColor: string;
+  outlineWidth: number;
+  backgroundColor: string;
+  borderStyle: number;
+  verticalMargin: number;
+}
+
+const defaultTextRenderStyle: TextRenderStyle = {
+  fontFamily: defaultFontFamily,
+  fontSize: subtitleFontSizePx,
+  fontColor: '#FFFFFF',
+  fontWeight: subtitleBold ? '700' : '400',
+  outlineColor: '#000000',
+  outlineWidth: subtitleOutlineWidthPx,
+  backgroundColor: '#000000',
+  borderStyle: 1,
+  verticalMargin: 40,
+};
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -56,28 +77,58 @@ function escapeFilterValue(value: string): string {
     .replace(/,/g, '\\,');
 }
 
-function escapeDrawtextExpression(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/:/g, '\\:')
-    .replace(/,/g, '\\,');
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
-function normalizeFfmpegColor(value: string, fallback: string): string {
-  const normalized = value.trim();
-  if (/^#[0-9a-f]{6}$/i.test(normalized)) {
-    return `0x${normalized.slice(1).toUpperCase()}`;
+function normalizeHexColor(value: unknown, fallback: string): string {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (/^#[0-9A-F]{6}$/.test(normalized)) {
+    return normalized;
   }
-
-  if (/^0x[0-9a-f]{6}$/i.test(normalized)) {
-    return normalized.toUpperCase();
-  }
-
   return fallback;
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function resolveTextStyle(style: unknown): TextRenderStyle {
+  const source = style && typeof style === 'object' ? (style as Record<string, unknown>) : {};
+  const fontFamily = typeof source.fontFamily === 'string' && source.fontFamily.trim()
+    ? source.fontFamily.trim()
+    : defaultTextRenderStyle.fontFamily;
+  const fontWeight = typeof source.fontWeight === 'string' && /^(normal|bold|[1-9]00)$/.test(source.fontWeight.trim())
+    ? source.fontWeight.trim()
+    : defaultTextRenderStyle.fontWeight;
+  const fontSize = Math.round(clamp(toFiniteNumber(source.fontSize) ?? defaultTextRenderStyle.fontSize, 10, 120));
+  const outlineWidth = clamp(toFiniteNumber(source.outlineWidth) ?? defaultTextRenderStyle.outlineWidth, 0, 12);
+  const verticalMargin = Math.round(clamp(toFiniteNumber(source.verticalMargin) ?? defaultTextRenderStyle.verticalMargin, 0, 500));
+  const borderStyleRaw = toFiniteNumber(source.borderStyle);
+  const borderStyle = borderStyleRaw === 3 ? 3 : 1;
+
+  return {
+    fontFamily,
+    fontSize,
+    fontColor: normalizeHexColor(source.fontColor, defaultTextRenderStyle.fontColor),
+    fontWeight,
+    outlineColor: normalizeHexColor(source.outlineColor, defaultTextRenderStyle.outlineColor),
+    outlineWidth,
+    backgroundColor: normalizeHexColor(source.backgroundColor, defaultTextRenderStyle.backgroundColor),
+    borderStyle,
+    verticalMargin,
+  };
 }
 
 function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
@@ -131,27 +182,6 @@ function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
   return lines;
 }
 
-function padLinesForCenterAlignment(text: string): string {
-  const lines = text.split('\n');
-  if (lines.length <= 1) {
-    return text;
-  }
-
-  const trimmedLines = lines.map((line) => line.trim());
-  const maxLength = Math.max(...trimmedLines.map((line) => Array.from(line).length));
-  if (maxLength <= 0) {
-    return text;
-  }
-
-  return trimmedLines
-    .map((line) => {
-      const missing = Math.max(0, maxLength - Array.from(line).length);
-      const leftPadding = Math.floor(missing / 2);
-      return `${' '.repeat(leftPadding)}${line}`;
-    })
-    .join('\n');
-}
-
 function wrapOverlayText(text: string, maxCharsPerLine: number): string {
   const normalizedMaxChars = Math.max(10, maxCharsPerLine);
   const sourceLines = text.replace(/\r/g, '').split('\n');
@@ -180,17 +210,7 @@ function formatSecondsToAssTime(seconds: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-function generateAssFileContent(overlays: PreparedOverlay[], style: {
-  fontFamily: string;
-  fontSize: number;
-  fontColor: string;
-  fontWeight: string;
-  outlineColor: string;
-  outlineWidth: number;
-  backgroundColor: string;
-  borderStyle: number;
-  verticalMargin: number;
-}): string {
+function generateAssFileContent(overlays: PreparedOverlay[], style: TextRenderStyle): string {
   // Styles and configuration for the ASS file.
   // MarginV controls the vertical distance from the bottom.
   const marginV = Math.floor(style.verticalMargin * 2.5); // Scaled for 720x1280
@@ -248,7 +268,7 @@ function prepareOverlayForRender(overlay: ReferenceTextOverlay): PreparedOverlay
   };
 }
 
-async function writeAssFile(taskId: string, overlays: PreparedOverlay[], style: any): Promise<string> {
+async function writeAssFile(taskId: string, overlays: PreparedOverlay[], style: TextRenderStyle): Promise<string> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   await fs.ensureDir(overlayDir);
   
@@ -264,7 +284,7 @@ export class VideoPostprocessService {
     generatedVideoUrl: string;
     audioFilePath: string;
     textOverlays?: ReferenceTextOverlay[];
-    textStyle?: any;
+    textStyle?: unknown;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
 
@@ -297,7 +317,8 @@ export class VideoPostprocessService {
     }
 
     const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay));
-    const assFilePath = await writeAssFile(input.taskId, preparedOverlays, input.textStyle);
+    const resolvedTextStyle = resolveTextStyle(input.textStyle);
+    const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
     
     // FFmpeg subtitles filter on macOS/Darwin often needs carefully escaped paths.
     // We use a relative path or an escaped absolute path.

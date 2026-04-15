@@ -9,6 +9,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data');
 const uploadsDir = path.join(dataDir, 'uploads', 'reference-images');
+const defaultTextStyle: NonNullable<Project['textStyle']> = {
+  fontFamily: 'Montserrat',
+  fontSize: 30,
+  fontColor: '#FFFFFF',
+  fontWeight: '700',
+  outlineColor: '#000000',
+  outlineWidth: 1.5,
+  backgroundColor: '#000000',
+  borderStyle: 1,
+  verticalMargin: 40,
+};
 
 interface ProjectRow {
   id: string;
@@ -104,6 +115,67 @@ function parseJSON<T>(value: unknown, defaultValue: T): T {
   return (value as T) ?? defaultValue;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  const normalized = normalizeString(value).toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
+}
+
+function normalizeTextStyle(
+  value: unknown,
+  fallback: NonNullable<Project['textStyle']> = defaultTextStyle
+): NonNullable<Project['textStyle']> {
+  const parsed =
+    typeof value === 'string'
+      ? parseJSON<Record<string, unknown> | null>(value, null)
+      : (value as Record<string, unknown> | null);
+  const style = parsed && typeof parsed === 'object' ? parsed : {};
+
+  const fontSizeRaw = toFiniteNumber(style.fontSize);
+  const outlineWidthRaw = toFiniteNumber(style.outlineWidth);
+  const borderStyleRaw = toFiniteNumber(style.borderStyle);
+  const verticalMarginRaw = toFiniteNumber(style.verticalMargin);
+  const fontWeightRaw = normalizeString(style.fontWeight);
+  const normalizedFontWeight =
+    /^(normal|bold|[1-9]00)$/.test(fontWeightRaw) ? fontWeightRaw : fallback.fontWeight;
+
+  const fontFamily = normalizeString(style.fontFamily);
+
+  const fallbackBorderStyle = fallback.borderStyle === 3 ? 3 : 1;
+  const borderStyle =
+    borderStyleRaw === 1 || borderStyleRaw === 3 ? Math.round(borderStyleRaw) : fallbackBorderStyle;
+
+  return {
+    fontFamily: fontFamily || fallback.fontFamily,
+    fontSize: Math.round(clamp(fontSizeRaw ?? fallback.fontSize, 10, 120)),
+    fontColor: normalizeHexColor(style.fontColor, fallback.fontColor),
+    fontWeight: normalizedFontWeight,
+    outlineColor: normalizeHexColor(style.outlineColor, fallback.outlineColor),
+    outlineWidth: clamp(outlineWidthRaw ?? fallback.outlineWidth, 0, 12),
+    backgroundColor: normalizeHexColor(style.backgroundColor, fallback.backgroundColor),
+    borderStyle,
+    verticalMargin: Math.round(clamp(verticalMarginRaw ?? fallback.verticalMargin, 0, 500)),
+  };
+}
+
 function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project {
   const timestamp = nowIso();
   const mode = input.mode ?? existing?.mode ?? 'manual';
@@ -114,20 +186,8 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     referenceImages.find((image) => image.id === primaryReferenceImageId)?.id ??
     referenceImages[0]?.id ??
     '';
-
-  const defaultTextStyle: Project['textStyle'] = {
-    fontFamily: 'Montserrat',
-    fontSize: 30,
-    fontColor: '#FFFFFF',
-    fontWeight: '700',
-    outlineColor: '#000000',
-    outlineWidth: 1.5,
-    backgroundColor: '#000000',
-    borderStyle: 1,
-    verticalMargin: 40,
-  };
-
-  const textStyle = input.textStyle ?? existing?.textStyle ?? defaultTextStyle;
+  const existingTextStyle = normalizeTextStyle(existing?.textStyle, defaultTextStyle);
+  const textStyle = normalizeTextStyle(input.textStyle, existingTextStyle);
 
   return {
     id: existing?.id ?? randomUUID(),
@@ -172,7 +232,7 @@ function mapRowToProject(row: ProjectRow): Project {
     isActive: Boolean(row.is_active),
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
     referenceImages: parseJSON(row.reference_images, []),
-    textStyle: parseJSON(row.text_style, undefined),
+    textStyle: normalizeTextStyle(row.text_style, defaultTextStyle),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
