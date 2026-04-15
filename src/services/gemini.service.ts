@@ -289,11 +289,15 @@ export class GeminiService {
         - If the reference shows a person, keep a person in frame for the same beats.
         - If the reference is medium/portrait framing, do not switch to isolated macro product shots.
         - Keep the same demonstration mechanics as in the reference (same kind of hand motion and reveal rhythm).
-        - Replace the original product with the real product from the project inputs and reference images.
-        - Show the product in a natural way.
-        - If the original video mainly demonstrates an effect, focus on that effect.
-        - If the original video ends with a quick product reveal, keep that ending.
-        - The final result should feel like a clear social-media product demo.
+        PRODUCT INTEGRATION (CRITICAL):
+        - Your main mission is to RE-SKIN the reference video with the NEW product.
+        - Look at the provided product images carefully. This is the ONLY product that should appear.
+        - Use the Project Product Name and Product Description as your guide.
+        - NEVER mention the product from the reference analysis if it's different.
+        - Describe the product's appearance (color, shape, material) based on the images.
+        - The person in the video must interact with the NEW product exactly as they did with the old one, but the visual description must match the NEW product.
+        - If the project relates to hair/beauty, ensure the "product" being demonstrated (e.g., hair texture, color results) matches the project inputs.
+        - If the original video ends with a quick product reveal, keep that ending using the new product.
 
         PROMPT WRITING RULES:
         - Describe what the person does and how they feel (mimicry).
