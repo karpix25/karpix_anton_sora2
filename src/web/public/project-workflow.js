@@ -109,7 +109,7 @@ export function createProjectWorkflow(context) {
     const doneAt = task.finishedAt || task.updatedAt || task.createdAt;
     const doneAtText = doneAt ? context.escapeHtml(new Date(doneAt).toLocaleString()) : '—';
     const errorText = task.errorMessage ? context.escapeHtml(shortenText(task.errorMessage, 140)) : '';
-    const resultUrl = task.yandexDownloadUrl || task.resultVideoUrl || '';
+    const finalResultUrl = task.yandexDownloadUrl || '';
 
     return `
       <div class="library-generation-summary">
@@ -117,7 +117,9 @@ export function createProjectWorkflow(context) {
         <p class="meta-line">Провайдер: ${provider}</p>
         <p class="meta-line">Обновлено: ${doneAtText}</p>
         ${errorText ? `<p class="meta-line library-error-text">${errorText}</p>` : ''}
-        ${resultUrl ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(resultUrl)}" target="_blank" rel="noreferrer">Открыть результат</a></p>` : ''}
+        ${finalResultUrl
+          ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Открыть финальный результат</a></p>`
+          : '<p class="meta-line">Финальный файл еще не готов</p>'}
       </div>
     `;
   }
@@ -326,8 +328,7 @@ export function createProjectWorkflow(context) {
               </div>
               <span class="library-status">${context.escapeHtml(task.status)}</span>
             </div>
-            ${task.yandexDownloadUrl ? `<p><a class="library-link" href="${task.yandexDownloadUrl}" target="_blank" rel="noreferrer">Видео на Яндекс Диске</a></p>` : ''}
-            ${task.resultVideoUrl ? `<p><a class="library-link" href="${task.resultVideoUrl}" target="_blank" rel="noreferrer">Исходный результат</a></p>` : ''}
+            ${task.yandexDownloadUrl ? `<p><a class="library-link" href="${task.yandexDownloadUrl}" target="_blank" rel="noreferrer">Финальный результат (Яндекс Диск)</a></p>` : '<p class="meta-line">Финальный результат еще не загружен</p>'}
             ${task.yandexDiskPath ? `<p class="meta-line">${context.escapeHtml(task.yandexDiskPath)}</p>` : ''}
             ${task.errorMessage ? `<p class="meta-line">${context.escapeHtml(task.errorMessage)}</p>` : ''}
             ${task.promptText ? `<div class="library-analysis">${context.escapeHtml(shortenText(task.promptText))}</div>` : ''}
