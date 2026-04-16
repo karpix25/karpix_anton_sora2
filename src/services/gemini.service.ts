@@ -298,6 +298,11 @@ export class GeminiService {
         - The person in the video must interact with the NEW product exactly as they did with the old one, but the visual description must match the NEW product.
         - If the project relates to hair/beauty, ensure the "product" being demonstrated (e.g., hair texture, color results) matches the project inputs.
         - If the original video ends with a quick product reveal, keep that ending using the new product.
+        - If the reference has no obvious product moment, integrate the product natively into the same real-life action flow (as a natural prop already present in scene), without changing the scene logic.
+        - In "no product in reference" cases, the product should appear organically from the first beat or early in the same action context, not as a separate promo insert.
+        - Never force a dedicated advertising shot if the reference does not contain one.
+        - Forbidden in this mode: isolated packshot, hard cut to clean studio product frame, "hero shot" on neutral background, logo-like lockup composition, sudden end-card style reveal.
+        - Product must feel like part of behavior and story, not an external ad overlay.
 
         PROMPT WRITING RULES:
         - Describe what the person does and how they feel (mimicry).
@@ -329,12 +334,13 @@ export class GeminiService {
         - No meta notes.
         - No headings outside the time blocks.
         - Keep the same number of time blocks as in the reference when possible.
-        - End naturally after the final reveal.
+        - End naturally after the final action from the reference.
+        - Do not add a forced "final reveal" unless the reference itself clearly has a reveal beat.
 
         TARGET STYLE EXAMPLE:
         0.0s – 3.0s: Medium-shot on an 85mm lens. A woman with soft golden hour lighting slowly brushes her hair and looks at the result in a mirror, smiling gently.
-        3.0s – 6.0s: She runs her hand through her hair, demonstrating the smoothness.
-        6.0s – 8.0s: Close-up on the product as she holds it up and tilts her head towards the camera with a satisfied expression.
+        3.0s – 6.0s: She runs her hand through her hair, naturally handling the product within the same motion and showing the effect.
+        6.0s – 8.0s: She finishes the original action with a satisfied expression, keeping the product integrated in the scene context.
       `;
 
       const userContent: Array<
@@ -344,7 +350,7 @@ export class GeminiService {
         {
           type: 'text',
           text:
-            'Generate a short timestamped product-video prompt in plain language. Keep it simple, visual, and action-based. Use 3 to 5 short blocks. One main action per block. End with a short product reveal if it fits the reference logic.',
+            'Generate a short timestamped product-video prompt in plain language. Keep it simple, visual, and action-based. Use 3 to 5 short blocks. One main action per block. Keep product integration native to the original action flow; do not create ad-like insert shots. Add final reveal only if the reference clearly has it.',
         },
       ];
 

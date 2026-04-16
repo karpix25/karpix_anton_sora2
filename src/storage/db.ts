@@ -63,6 +63,7 @@ export async function initDatabase(): Promise<void> {
       daily_generation_limit INTEGER NOT NULL DEFAULT 1,
       selected_model TEXT NOT NULL DEFAULT 'sora-2',
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      trim_video_to_audio BOOLEAN NOT NULL DEFAULT FALSE,
       primary_reference_image_id TEXT NOT NULL DEFAULT '',
       reference_images JSONB NOT NULL DEFAULT '[]'::jsonb,
       text_style JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -73,6 +74,10 @@ export async function initDatabase(): Promise<void> {
 
   await db.query(`
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_style JSONB NOT NULL DEFAULT '{}'::jsonb;
+  `);
+
+  await db.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS trim_video_to_audio BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
   await db.query(`

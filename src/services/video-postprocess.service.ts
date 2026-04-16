@@ -585,20 +585,27 @@ export class VideoPostprocessService {
     taskId: string;
     generatedVideoUrl: string;
     audioFilePath: string;
+    trimVideoToAudio?: boolean;
     textOverlays?: ReferenceTextOverlay[];
     textStyle?: unknown;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
 
     const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
+    const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
 
     if (!input.textOverlays?.length) {
-      await runFfmpeg([
+      const ffmpegArgs = [
         '-y',
         '-i',
         input.generatedVideoUrl,
-        '-stream_loop',
-        '-1',
+      ];
+
+      if (!shouldTrimVideoToAudio) {
+        ffmpegArgs.push('-stream_loop', '-1');
+      }
+
+      ffmpegArgs.push(
         '-i',
         input.audioFilePath,
         '-map',
@@ -613,7 +620,9 @@ export class VideoPostprocessService {
         '-movflags',
         '+faststart',
         outputPath,
-      ]);
+      );
+
+      await runFfmpeg(ffmpegArgs);
 
       return outputPath;
     }
@@ -631,11 +640,16 @@ export class VideoPostprocessService {
             '-y',
             '-i',
             input.generatedVideoUrl,
-            '-stream_loop',
-            '-1',
+          ];
+
+          if (!shouldTrimVideoToAudio) {
+            ffmpegArgs.push('-stream_loop', '-1');
+          }
+
+          ffmpegArgs.push(
             '-i',
             input.audioFilePath,
-          ];
+          );
 
           overlayFrames.forEach((frame) => {
             ffmpegArgs.push('-loop', '1', '-i', frame.imagePath);
@@ -679,8 +693,7 @@ export class VideoPostprocessService {
         '-y',
         '-i',
         input.generatedVideoUrl,
-        '-stream_loop',
-        '-1',
+        ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
         '-i',
         input.audioFilePath,
         '-vf',

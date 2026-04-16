@@ -45,6 +45,7 @@ interface ProjectRow {
   daily_generation_limit: number;
   selected_model: string;
   is_active: boolean;
+  trim_video_to_audio: boolean;
   primary_reference_image_id: string;
   reference_images: unknown;
   text_style: unknown;
@@ -233,6 +234,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     dailyGenerationLimit: normalizeNumber(input.dailyGenerationLimit, existing?.dailyGenerationLimit ?? 1),
     selectedModel: selectedModel === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
     isActive: normalizeBoolean(input.isActive, existing?.isActive ?? true),
+    trimVideoToAudio: normalizeBoolean(input.trimVideoToAudio, existing?.trimVideoToAudio ?? false),
     primaryReferenceImageId: resolvedPrimaryReferenceImageId,
     referenceImages,
     textStyle,
@@ -258,6 +260,7 @@ function mapRowToProject(row: ProjectRow): Project {
     dailyGenerationLimit: normalizeNumber(row.daily_generation_limit, 1),
     selectedModel: row.selected_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
     isActive: Boolean(row.is_active),
+    trimVideoToAudio: Boolean(row.trim_video_to_audio),
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
     referenceImages: parseJSON(row.reference_images, []),
     textStyle: normalizeTextStyle(row.text_style, defaultTextStyle),
@@ -306,6 +309,7 @@ async function upsertProject(project: Project): Promise<Project> {
         daily_generation_limit,
         selected_model,
         is_active,
+        trim_video_to_audio,
         primary_reference_image_id,
         reference_images,
         text_style,
@@ -314,7 +318,7 @@ async function upsertProject(project: Project): Promise<Project> {
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::timestamptz, $20::timestamptz
+        $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20::timestamptz, $21::timestamptz
       )
       ON CONFLICT (id) DO UPDATE
       SET
@@ -332,6 +336,7 @@ async function upsertProject(project: Project): Promise<Project> {
         daily_generation_limit = EXCLUDED.daily_generation_limit,
         selected_model = EXCLUDED.selected_model,
         is_active = EXCLUDED.is_active,
+        trim_video_to_audio = EXCLUDED.trim_video_to_audio,
         primary_reference_image_id = EXCLUDED.primary_reference_image_id,
         reference_images = EXCLUDED.reference_images,
         text_style = EXCLUDED.text_style,
@@ -354,6 +359,7 @@ async function upsertProject(project: Project): Promise<Project> {
       project.dailyGenerationLimit,
       project.selectedModel,
       project.isActive,
+      project.trimVideoToAudio,
       project.primaryReferenceImageId,
       JSON.stringify(project.referenceImages),
       JSON.stringify(project.textStyle || {}),
