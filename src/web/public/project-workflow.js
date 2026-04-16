@@ -74,8 +74,57 @@ export function createProjectWorkflow(context) {
     return value.length > limit ? `${value.slice(0, limit)}...` : value;
   }
 
+  function toTimestamp(value) {
+    const parsed = Date.parse(String(value || ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function getLatestGenerationByLibraryItemId() {
+    const tasks = Array.isArray(state.generationTasks) ? [...state.generationTasks] : [];
+    tasks.sort((a, b) => {
+      const aTs = toTimestamp(a?.updatedAt || a?.finishedAt || a?.createdAt);
+      const bTs = toTimestamp(b?.updatedAt || b?.finishedAt || b?.createdAt);
+      return bTs - aTs;
+    });
+
+    const latestMap = new Map();
+    for (const task of tasks) {
+      const itemId = task?.referenceLibraryItemId;
+      if (!itemId || latestMap.has(itemId)) {
+        continue;
+      }
+      latestMap.set(itemId, task);
+    }
+
+    return latestMap;
+  }
+
+  function formatGenerationCell(task) {
+    if (!task) {
+      return '<span class="meta-line">Нет запусков</span>';
+    }
+
+    const status = context.escapeHtml(task.status || 'unknown');
+    const provider = context.escapeHtml((task.provider || 'kie').toUpperCase());
+    const doneAt = task.finishedAt || task.updatedAt || task.createdAt;
+    const doneAtText = doneAt ? context.escapeHtml(new Date(doneAt).toLocaleString()) : '—';
+    const errorText = task.errorMessage ? context.escapeHtml(shortenText(task.errorMessage, 140)) : '';
+    const resultUrl = task.yandexDownloadUrl || task.resultVideoUrl || '';
+
+    return `
+      <div class="library-generation-summary">
+        <span class="library-status library-status--${status}">${status}</span>
+        <p class="meta-line">Провайдер: ${provider}</p>
+        <p class="meta-line">Обновлено: ${doneAtText}</p>
+        ${errorText ? `<p class="meta-line library-error-text">${errorText}</p>` : ''}
+        ${resultUrl ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(resultUrl)}" target="_blank" rel="noreferrer">Открыть результат</a></p>` : ''}
+      </div>
+    `;
+  }
+
   function renderLibraryItems() {
     const items = state.libraryItems || [];
+    const latestGenerationByItemId = getLatestGenerationByLibraryItemId();
 
     if (!state.currentProject.id) {
       elements.referenceLibrary.className = 'empty-state';
@@ -101,13 +150,16 @@ export function createProjectWorkflow(context) {
               <th>Ссылка</th>
               <th>Аудио</th>
               <th>Анализ</th>
+              <th>Генерация</th>
               <th>Действия</th>
             </tr>
           </thead>
           <tbody>
             ${items
       .map(
-        (item) => `
+        (item) => {
+          const latestTask = latestGenerationByItemId.get(item.id);
+          return `
           <tr>
             <td>${context.escapeHtml(new Date(item.createdAt).toLocaleString())}</td>
             <td><span class="library-status">${context.escapeHtml(item.status)}</span></td>
@@ -118,6 +170,7 @@ export function createProjectWorkflow(context) {
             </td>
             <td>${item.audioStoredAt ? 'Есть' : 'Нет'}</td>
             <td>${context.escapeHtml(item.analysis ? shortenText(item.analysis, 96) : 'Нет анализа')}</td>
+            <td>${formatGenerationCell(latestTask)}</td>
             <td>
               <div class="table-actions">
                 <button type="button" data-open-library-item="${item.id}">Открыть</button>
@@ -126,7 +179,8 @@ export function createProjectWorkflow(context) {
               </div>
             </td>
           </tr>
-        `
+        `;
+        }
       )
       .join('')}
           </tbody>
@@ -175,6 +229,17 @@ export function createProjectWorkflow(context) {
   }
 
   function renderLibraryItemModal(item) {
+    const latestGenerationByItemId = getLatestGenerationByLibraryItemId();
+    const latestTask = latestGenerationByItemId.get(item.id);
+    const latestTaskSummary = latestTask
+      ? `
+          Статус: ${context.escapeHtml(latestTask.status || 'unknown')}<br />
+          Провайдер: ${context.escapeHtml((latestTask.provider || 'kie').toUpperCase())}<br />
+          Обновлено: ${context.escapeHtml(new Date(latestTask.finishedAt || latestTask.updatedAt || latestTask.createdAt).toLocaleString())}
+          ${latestTask.errorMessage ? `<br />Ошибка: ${context.escapeHtml(latestTask.errorMessage)}` : ''}
+        `
+      : 'Для этого референса генераций пока не было';
+
     const sections = [
       ['Ссылка на Reel', item.sourceUrl ? `<a class="library-link" href="${item.sourceUrl}" target="_blank" rel="noreferrer">${context.escapeHtml(item.sourceUrl)}</a>` : 'Нет'],
       ['Статус', context.escapeHtml(item.status || 'Нет')],
@@ -186,6 +251,7 @@ export function createProjectWorkflow(context) {
       ['Текстовые оверлеи', item.textOverlays?.length ? String(item.textOverlays.length) : 'Нет'],
       ['Файл аудио', item.audioFilePath ? context.escapeHtml(item.audioFilePath) : 'Нет'],
       ['Ошибка', item.errorMessage ? context.escapeHtml(item.errorMessage) : 'Нет'],
+      ['Последняя генерация', latestTaskSummary],
     ];
 
     elements.libraryItemModalContent.innerHTML = `
@@ -287,12 +353,14 @@ export function createProjectWorkflow(context) {
     if (!state.currentProject.id) {
       state.generationTasks = [];
       renderGenerationTasks();
+      renderLibraryItems();
       return;
     }
 
     const data = await api(`/api/projects/${state.currentProject.id}/generations`);
     state.generationTasks = data.tasks || [];
     renderGenerationTasks();
+    renderLibraryItems();
   }
 
   function hasUnsyncedYandexImages(project) {

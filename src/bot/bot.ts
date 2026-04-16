@@ -84,7 +84,9 @@ function getReplyParams(ctx: Context): { reply_parameters?: { message_id: number
   return {};
 }
 
-export const bot = new Telegraf(config.telegram.token);
+export const bot = new Telegraf(config.telegram.token, {
+  handlerTimeout: config.telegram.handlerTimeoutMs,
+});
 
 bot.catch((error: unknown, ctx) => {
   const updateId = (ctx.update as any)?.update_id;

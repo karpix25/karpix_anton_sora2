@@ -50,6 +50,19 @@ function parsePort(...values: Array<string | undefined>): number {
   return 3000;
 }
 
+function parsePositiveInt(value: string | undefined, defaultValue: number): number {
+  if (!value || value.trim() === '') {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultValue;
+  }
+
+  return Math.floor(parsed);
+}
+
 function normalizePublicUrl(value: string | undefined): string {
   const normalized = (value || '').trim();
   if (!normalized) {
@@ -89,6 +102,7 @@ export const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.TELEGRAM_BOT_TOKEN || ''),
+    handlerTimeoutMs: parsePositiveInt(process.env.TELEGRAM_HANDLER_TIMEOUT_MS, 20 * 60 * 1000),
     webhook: {
       enabled: parseBoolean(process.env.TELEGRAM_USE_WEBHOOK, false),
       url: process.env.TELEGRAM_WEBHOOK_URL || '',

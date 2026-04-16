@@ -431,6 +431,33 @@ textarea {
   text-transform: capitalize;
 }
 
+.library-status--failed {
+  background: rgba(142, 44, 36, 0.12);
+  color: var(--danger);
+}
+
+.library-status--completed {
+  background: rgba(46, 125, 50, 0.12);
+  color: #2e7d32;
+}
+
+.library-status--processing,
+.library-status--pending {
+  background: rgba(182, 87, 42, 0.14);
+  color: var(--accent-dark);
+}
+
+.library-generation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.library-error-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .library-analysis {
   margin-top: 12px;
   padding: 12px 14px;
@@ -460,7 +487,7 @@ textarea {
 .library-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 920px;
+  min-width: 1120px;
 }
 
 .library-table th,

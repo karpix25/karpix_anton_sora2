@@ -25,9 +25,15 @@ export class VideoGenerationService {
     model: VideoModel;
     referenceDurationSeconds?: number;
   }): Promise<VideoGenerationResult> {
+    console.log(
+      `[VideoGenerationService] Starting generation: model=${input.model}, imageUrl=${input.imageUrl ? 'provided' : 'missing'}, referenceDuration=${input.referenceDurationSeconds ?? 'n/a'}`
+    );
+
     try {
       const providerTaskId = await KieService.generateVideo(input.prompt, input.imageUrl, input.model);
+      console.log(`[VideoGenerationService] Kie task created: ${providerTaskId}`);
       const resultVideoUrl = await KieService.pollStatus(providerTaskId);
+      console.log(`[VideoGenerationService] Kie completed: task=${providerTaskId}`);
       return {
         provider: 'kie',
         providerTaskId,
@@ -45,7 +51,9 @@ export class VideoGenerationService {
         input.imageUrl,
         input.referenceDurationSeconds,
       );
+      console.log(`[VideoGenerationService] WaveSpeed fallback task created: ${providerTaskId}`);
       const resultVideoUrl = await WaveSpeedService.pollStatus(providerTaskId);
+      console.log(`[VideoGenerationService] WaveSpeed fallback completed: task=${providerTaskId}`);
       return {
         provider: 'wavespeed',
         providerTaskId,
