@@ -13,6 +13,18 @@ const defaultFontFamily = 'DejaVu Sans';
 const subtitleFontSizePx = 30; // Will be scaled in ASS
 const subtitleOutlineWidthPx = 1.5;
 const subtitleBold = true;
+const ffmpegTimeoutMs = (() => {
+  const parsed = Number(process.env.FFMPEG_TIMEOUT_MS);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return 20 * 60 * 1000; // 20 minutes
+})();
+
+interface RunFfmpegOptions {
+  timeoutMs?: number;
+  label?: string;
+}
 
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
@@ -65,28 +77,61 @@ const defaultTextRenderStyle: TextRenderStyle = {
   boxRadius: 10,
 };
 
-function runFfmpeg(args: string[]): Promise<void> {
+function runFfmpeg(args: string[], options?: RunFfmpegOptions): Promise<void> {
   return new Promise((resolve, reject) => {
+    const timeoutMs = options?.timeoutMs ?? ffmpegTimeoutMs;
+    const label = options?.label || 'ffmpeg';
     const process = spawn('ffmpeg', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
     });
 
+    const startedAt = Date.now();
     let stderr = '';
+    let didTimeout = false;
+
+    console.log(`[VideoPostprocessService] ${label}: started (timeout=${timeoutMs}ms)`);
+
     process.stderr.on('data', (chunk) => {
       stderr += String(chunk);
     });
 
+    const heartbeatTimer = setInterval(() => {
+      const elapsedMs = Date.now() - startedAt;
+      console.log(`[VideoPostprocessService] ${label}: running ${(elapsedMs / 1000).toFixed(1)}s`);
+    }, 30000);
+
+    const timeoutTimer = setTimeout(() => {
+      didTimeout = true;
+      console.error(`[VideoPostprocessService] ${label}: timeout after ${timeoutMs}ms, killing process`);
+      process.kill('SIGKILL');
+    }, timeoutMs);
+
+    const clearTimers = () => {
+      clearInterval(heartbeatTimer);
+      clearTimeout(timeoutTimer);
+    };
+
     process.on('error', (error) => {
+      clearTimers();
       reject(new Error(`Не удалось запустить ffmpeg: ${error.message}`));
     });
 
     process.on('close', (code) => {
+      clearTimers();
+      const elapsedMs = Date.now() - startedAt;
+
+      if (didTimeout) {
+        reject(new Error(`ffmpeg timed out after ${timeoutMs}ms (${label})`));
+        return;
+      }
+
       if (code === 0) {
+        console.log(`[VideoPostprocessService] ${label}: completed in ${(elapsedMs / 1000).toFixed(1)}s`);
         resolve();
         return;
       }
 
-      reject(new Error(`ffmpeg завершился с ошибкой: ${stderr.trim() || `code ${code}`}`));
+      reject(new Error(`ffmpeg завершился с ошибкой (${label}): ${stderr.trim() || `code ${code}`}`));
     });
   });
 }
@@ -593,6 +638,10 @@ export class VideoPostprocessService {
 
     const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
     const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
+    const audioMode = shouldTrimVideoToAudio ? 'trim_video_to_audio' : 'loop_audio_to_video';
+    console.log(
+      `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0})`
+    );
 
     if (!input.textOverlays?.length) {
       const ffmpegArgs = [
@@ -622,7 +671,11 @@ export class VideoPostprocessService {
         outputPath,
       );
 
-      await runFfmpeg(ffmpegArgs);
+      await runFfmpeg(ffmpegArgs, {
+        label: `task ${input.taskId} ffmpeg (no-overlays)`,
+      });
+
+      console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (no overlays).`);
 
       return outputPath;
     }
@@ -633,8 +686,12 @@ export class VideoPostprocessService {
 
     try {
       try {
+        console.log(`[VideoPostprocessService] Task ${input.taskId}: rendering overlay frames with Chromium...`);
         const overlayFrames = await renderOverlayFramesWithChromium(input.taskId, preparedOverlays, resolvedTextStyle);
         if (overlayFrames.length > 0) {
+          console.log(
+            `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), running ffmpeg overlay graph...`
+          );
           const { graph, finalLabel } = buildOverlayFilterGraph(overlayFrames);
           const ffmpegArgs = [
             '-y',
@@ -678,9 +735,14 @@ export class VideoPostprocessService {
             outputPath
           );
 
-          await runFfmpeg(ffmpegArgs);
+          await runFfmpeg(ffmpegArgs, {
+            label: `task ${input.taskId} ffmpeg (chromium-overlays)`,
+          });
+          console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (chromium overlays).`);
           return outputPath;
         }
+
+        console.warn(`[VideoPostprocessService] Task ${input.taskId}: Chromium produced 0 overlay frames, fallback to ASS.`);
       } catch (error: any) {
         console.warn('[VideoPostprocessService] Chromium overlay renderer failed, fallback to ASS:', error?.message || error);
       }
@@ -688,6 +750,7 @@ export class VideoPostprocessService {
       const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
       const relativeAssPath = path.relative(process.cwd(), assFilePath);
       const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+      console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles fallback...`);
 
       await runFfmpeg([
         '-y',
@@ -716,7 +779,10 @@ export class VideoPostprocessService {
         '-movflags',
         '+faststart',
         outputPath,
-      ]);
+      ], {
+        label: `task ${input.taskId} ffmpeg (ass-fallback)`,
+      });
+      console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (ASS fallback).`);
     } finally {
       await fs.remove(overlayWorkDir);
     }

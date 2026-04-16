@@ -76,6 +76,9 @@ export class ManualGenerationService {
   }
 
   private static async processTask(task: GenerationTask, project: Project, initialLibraryItem: ReferenceLibraryItem) {
+    console.log(
+      `[ManualGenerationService] Task ${task.id}: starting processing (project=${project.id}, libraryItem=${initialLibraryItem.id})`
+    );
     await generationTaskStore.updateTask(task.id, {
       status: 'processing',
       startedAt: task.startedAt || nowIso(),
@@ -143,16 +146,22 @@ export class ManualGenerationService {
       }
 
       const projectReferenceImageUrls = await projectStore.getReferenceImageDataUrls(project.referenceImages);
-      const promptText = await GeminiService.generateClonningPrompt({
-        videoAnalysis: analysis,
-        targetModel: project.selectedModel,
-        project,
-        projectReferenceImageUrls,
-      });
+      const promptText =
+        task.promptText ||
+        await GeminiService.generateClonningPrompt({
+          videoAnalysis: analysis,
+          targetModel: project.selectedModel,
+          project,
+          projectReferenceImageUrls,
+        });
 
-      await generationTaskStore.updateTask(task.id, {
-        promptText,
-      });
+      if (!task.promptText) {
+        await generationTaskStore.updateTask(task.id, {
+          promptText,
+        });
+      } else {
+        console.log(`[ManualGenerationService] Task ${task.id}: reusing previously generated prompt.`);
+      }
 
       const generationReferenceImageUrl = await ProjectReferenceService.getGenerationReferenceImageUrl(
         project
@@ -163,19 +172,30 @@ export class ManualGenerationService {
 
       const audio = await ReferenceAudioService.ensureAudioTrack(libraryItem);
 
-      const generationResult = await VideoGenerationService.generateWithFallback({
-        prompt: promptText,
-        imageUrl: generationReferenceImageUrl,
-        model: project.selectedModel,
-        referenceDurationSeconds: audio.durationSeconds,
-      });
-      resultVideoUrl = generationResult.resultVideoUrl;
-      await generationTaskStore.updateTask(task.id, {
-        provider: generationResult.provider,
-        providerTaskId: generationResult.providerTaskId,
-        resultVideoUrl,
-      });
+      if (task.resultVideoUrl) {
+        resultVideoUrl = task.resultVideoUrl;
+        console.log(
+          `[ManualGenerationService] Task ${task.id}: reusing existing generated video URL and continuing from postprocess.`
+        );
+      } else {
+        const generationResult = await VideoGenerationService.generateWithFallback({
+          prompt: promptText,
+          imageUrl: generationReferenceImageUrl,
+          model: project.selectedModel,
+          referenceDurationSeconds: audio.durationSeconds,
+        });
+        console.log(
+          `[ManualGenerationService] Task ${task.id}: generation completed by ${generationResult.provider} (providerTaskId=${generationResult.providerTaskId})`
+        );
+        resultVideoUrl = generationResult.resultVideoUrl;
+        await generationTaskStore.updateTask(task.id, {
+          provider: generationResult.provider,
+          providerTaskId: generationResult.providerTaskId,
+          resultVideoUrl,
+        });
+      }
 
+      console.log(`[ManualGenerationService] Task ${task.id}: starting postprocess with ffmpeg...`);
       mergedVideoPath = await VideoPostprocessService.applyAudioTrack({
         taskId: task.id,
         generatedVideoUrl: resultVideoUrl,
@@ -184,6 +204,7 @@ export class ManualGenerationService {
         textOverlays: textOverlays,
         textStyle: project.textStyle,
       });
+      console.log(`[ManualGenerationService] Task ${task.id}: postprocess completed, uploading to Yandex Disk...`);
 
       const storedVideo = await YandexDiskService.uploadGeneratedVideoFile({
         projectName: project.name,
@@ -203,8 +224,10 @@ export class ManualGenerationService {
       if (!completedTask) {
         throw new Error(`Task disappeared while completing: ${task.id}`);
       }
+      console.log(`[ManualGenerationService] Task ${task.id}: completed successfully.`);
       return completedTask;
     } catch (error: any) {
+      console.error(`[ManualGenerationService] Task ${task.id}: failed:`, error?.message || error);
       await generationTaskStore.updateTask(task.id, {
         status: 'failed',
         errorMessage: error.message,
