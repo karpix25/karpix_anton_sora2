@@ -114,6 +114,11 @@ interface OverlayLineLayout {
   width: number;
 }
 
+interface ConcatScriptEntry {
+  imagePath: string;
+  duration: number;
+}
+
 interface TextRenderStyle {
   fontFamily: string;
   fontSize: number;
@@ -231,6 +236,32 @@ function runFfmpeg(args: string[], options?: RunFfmpegOptions): Promise<void> {
       }
 
       reject(new Error(`ffmpeg завершился с ошибкой (${label}): ${stderr.trim() || `code ${code}`}`));
+    });
+  });
+}
+
+async function getVideoDuration(videoPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const process = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      videoPath
+    ]);
+
+    let output = '';
+    process.stdout.on('data', (data) => {
+      output += String(data);
+    });
+
+    process.on('error', (err) => reject(err));
+    process.on('close', (code) => {
+      if (code === 0) {
+        const duration = parseFloat(output.trim());
+        resolve(Number.isFinite(duration) ? duration : 0);
+      } else {
+        reject(new Error(`ffprobe failed with code ${code}`));
+      }
     });
   });
 }
@@ -863,59 +894,75 @@ export class VideoPostprocessService {
           try {
             console.log(`[VideoPostprocessService] Task ${input.taskId}: emoji detected, rendering overlays via Canvas+Twemoji...`);
             const overlayFrames = await renderOverlayFramesWithCanvas(input.taskId, preparedOverlays, resolvedTextStyle);
+            
             if (overlayFrames.length > 0) {
+              const videoDuration = await getVideoDuration(input.generatedVideoUrl).catch(() => 0);
               console.log(
-                `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), running ffmpeg overlay graph...`
+                `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), duration=${videoDuration.toFixed(2)}s. Building concat script...`
               );
-              const { graph, finalLabel } = buildOverlayFilterGraph(overlayFrames);
-              const ffmpegArgs = [
-                '-y',
-                '-i',
-                input.generatedVideoUrl,
-              ];
 
-              if (!shouldTrimVideoToAudio) {
-                ffmpegArgs.push('-stream_loop', '-1');
+              // 1. Create a blank transparent frame for gaps
+              const blankImagePath = path.join(overlayWorkDir, 'blank.png');
+              const blankCanvas = createCanvas(frameWidthPx, frameHeightPx);
+              await fs.writeFile(blankImagePath, blankCanvas.toBuffer('image/png'));
+
+              // 2. Build Concat Script
+              // Sort overlays by time to ensure sequential concat
+              const sortedFrames = [...overlayFrames].sort((a, b) => a.startSeconds - b.startSeconds);
+              const concatEntries: ConcatScriptEntry[] = [];
+              let currentTime = 0;
+
+              for (const frame of sortedFrames) {
+                // Gap before this frame
+                if (frame.startSeconds > currentTime + 0.01) {
+                  concatEntries.push({ imagePath: blankImagePath, duration: frame.startSeconds - currentTime });
+                }
+                // The frame itself
+                concatEntries.push({ imagePath: frame.imagePath, duration: frame.endSeconds - frame.startSeconds });
+                currentTime = frame.endSeconds;
               }
 
-              ffmpegArgs.push(
-                '-i',
-                input.audioFilePath,
-              );
+              // Final gap if video is longer
+              if (videoDuration > currentTime + 0.01) {
+                concatEntries.push({ imagePath: blankImagePath, duration: videoDuration - currentTime });
+              }
 
-              overlayFrames.forEach((frame) => {
-                ffmpegArgs.push('-loop', '1', '-i', frame.imagePath);
+              const concatScriptPath = path.join(overlayWorkDir, 'overlays.txt');
+              const concatLines = concatEntries.map(e => {
+                // FFmpeg concat demuxer requires escaping paths
+                const escaped = e.imagePath.replace(/'/g, "'\\''");
+                return `file '${escaped}'\nduration ${e.duration.toFixed(4)}`;
               });
+              // Last entry duration is often ignored by concat demuxer unless repeated,
+              // but we use it as a stream for overlay so it's fine.
+              await fs.writeFile(concatScriptPath, concatLines.join('\n'), 'utf8');
 
-              ffmpegArgs.push(
-                '-filter_complex',
-                graph,
-                '-map',
-                `[${finalLabel}]`,
-                '-map',
-                '1:a:0',
-                '-c:v',
-                'libx264',
-                '-threads',
-                ffmpegThreads,
-                '-preset',
-                ffmpegPreset,
-                '-crf',
-                ffmpegCrf,
-                '-pix_fmt',
-                'yuv420p',
-                '-c:a',
-                'aac',
+              const ffmpegArgs = [
+                '-y',
+                '-i', input.generatedVideoUrl,
+                ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
+                '-i', input.audioFilePath,
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', concatScriptPath,
+                '-filter_complex', '[0:v][2:v]overlay=x=0:y=0',
+                '-map', '0:v:0', // Note: using 0:v:0 to get correct stream if looped
+                '-map', '1:a:0',
+                '-c:v', 'libx264',
+                '-threads', ffmpegThreads,
+                '-preset', ffmpegPreset,
+                '-crf', ffmpegCrf,
+                '-pix_fmt', 'yuv420p',
+                '-c:a', 'aac',
                 '-shortest',
-                '-movflags',
-                '+faststart',
+                '-movflags', '+faststart',
                 outputPath
-              );
+              ];
 
               await runFfmpeg(ffmpegArgs, {
                 label: `task ${input.taskId} ffmpeg (emoji-canvas-overlays)`,
               });
-              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (emoji canvas overlays).`);
+              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (emoji concat overlays).`);
               return outputPath;
             }
 

@@ -94,6 +94,17 @@ async function gracefulShutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   }
 }
 
+process.on('uncaughtException', (error) => {
+  console.error('🔥 UNCAUGHT EXCEPTION:');
+  console.error(error?.stack || error);
+  // We don't exit immediately to allow potential graceful shutdown or logging
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('🌊 UNHANDLED REJECTION:');
+  console.error(reason instanceof Error ? reason.stack : reason);
+});
+
 bootstrap().catch((error: Error) => {
   console.error('❌ Application startup failed:', error.message);
   process.exitCode = 1;
