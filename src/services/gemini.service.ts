@@ -164,13 +164,15 @@ export class GeminiService {
               content: [
                 {
                   type: 'text',
-                  text: `                  Выполни глубокий технический и режиссерский реверс-инжиниринг видео по протоколу Regisseur Protocol v3.0. Твоя цель — создать исчерпывающее описание (Prompt Sheet), которое позволит нейросети Veo 3.1 или Sora 2 воссоздать это видео с сохранением физики, эмоций и стиля.
-
-                  1. Аналитический блок:
-                  - Semantic Core: В чем заключается главный визуальный хук или физический механизм (морфинг, левитация, резкая смена планов, комедийный тайминг).
+                  text: `                  Выполни глубокий технический и режиссерский реверс-инжиниринг видео по протоколу Regisseur Protocol v3.0. Твоя цель — создать исчерпывающее описание (Prompt Sheet), которое позволит ней                  - Semantic Core: В чем заключается главный визуальный хук или физический механизм (морфинг, левитация, резкая смена планов, комедийный тайминг).
                   - Acting & Emotions Map (CRITICAL): Опиши мимику персонажа, направление взгляда и микро-эмоции. Как меняется выражение лица в ответ на события?
                   - Prop & Environment Scan: Перечисли все важные предметы в кадре (наушники, телефон, аксессуары) и опиши их взаимодействие с персонажем.
+                  - Object State & Readiness (CRITICAL): Фиксируй состояние ключевых объектов (крышка открыта/закрыта, дозатор нажат/отпущен, защитная мембрана снята). Это критично для логики взаимодействия (например, нельзя лить воду из закрытой бутылки).
                   - Optical Geometry & Continuity: Определи тип линзы и глубину резкости. Укажи тип съемки: ONE-SHOT (один непрерывный план без склеек) или MULTI-SHOT (наличие монтажных склеек).
+                  - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
+                  - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
+                  - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
+                  - Product Effect & Transformation (CRITICAL): Выяви «До» и «После». Какое влияние оказывает товар на окружение или субъект? (например: поверхность была грязной — стала чистой; волосы были тусклыми — стала сияющими). Опиши механику этого изменения.T (наличие монтажных склеек).
                   - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
                   - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
                   - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
@@ -268,6 +270,11 @@ export class GeminiService {
         - Describe immediate action or camera movement from frame 0.0.
         - Ensure the subject or product is already in motion or the camera is panning/zooming as the video begins.
         - If the scenario requires a "before" state (e.g. dirty, messy), start exactly with that state, using the reference image ONLY as a guide for the product's underlying shape and design, NOT its surface condition.
+
+        PHYSICAL LOGIC & CAUSAL CONSISTENCY (STRICT):
+        - Containers & Lids: If liquid is poured, squeezed, or flowed, the container MUST be explicitly described as OPEN, UNSCREWED, or WITHOUT A LID. No content should ever pass through a closed surface.
+        - Action Prerequisites: Describe the prerequisite state (e.g., "The bottle is open," "The cap is off") before or during the dispensing action.
+        - Object Logic: If a character interacts with a product, the interaction must follow real-world physics (e.g., pressing a pump to get cream, tilting a cup to drink).
 
         PRODUCT CONSISTENCY & STATE ANCHOR (STRICT):
         - Your main mission is a "Universal Product Re-skin".
