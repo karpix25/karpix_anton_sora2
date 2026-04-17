@@ -171,6 +171,7 @@ export class GeminiService {
                   - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
                   - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
                   - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
+                  - Product Effect & Transformation (CRITICAL): Выяви «До» и «После». Какое влияние оказывает товар на окружение или субъект? (например: поверхность была грязной — стала чистой; волосы были тусклыми — стали сияющими). Опиши механику этого изменения.
 
                   3. Text & Overlays Detection (CRITICAL):
                   - Выяви все текстовые элементы на видео.
@@ -183,7 +184,8 @@ export class GeminiService {
                   - Action: Техническое описание движения.
                   - Acting/Emotions: Детальное описание мимики и настроения.
                   - Camera & Continuity: Движение камеры и подтверждение отсутствия склеек (если это длинный план).
-                  - Physics & Props: Нюансы физики и взаимодействие с предметами (например, наушники).
+                  - Physics & Props: Нюансы физики и взаимодействие с предметами.
+                  - State Transformation: Опиши изменение состояния объекта или окружения в этом блоке (если происходит).
                   - Text Overlay: Присутствует ли текст?
                   
                   В конце добавь отдельный блок "SUMMARY OF TEXT OVERLAYS" со списком всех найденных текстов.`,
@@ -257,6 +259,18 @@ export class GeminiService {
         - Keep the prompt compact but vivid.
         - One clear action per time beat.
         - Do not explain the analysis. Turn it into a cinematic storyboard.
+
+        ANTI-STATIC DYNAMIC START (CRITICAL):
+        - The video MUST NOT start with a static frame or a "freeze" of the reference image.
+        - Describe immediate action or camera movement from frame 0.0.
+        - Ensure the subject or product is already in motion or the camera is panning/zooming as the video begins.
+        - If the scenario requires a "before" state (e.g. dirty, messy), start exactly with that state, using the reference image ONLY as a guide for the product's underlying shape and design, NOT its surface condition.
+
+        PRODUCT CONSISTENCY & STATE ANCHOR (STRICT):
+        - Your main mission is a "Universal Product Re-skin".
+        - Maintain the product's physical identity (size, proportions, key design elements, materials) 100% identically from the first frame to the last.
+        - Once a "Product Effect" or "State Change" is achieved (e.g., surface becomes clean, hair becomes shiny, light turns on), this new state MUST persist and remain stable until the very end of the video. Never revert the product to its initial state unless the reference video explicitly does so.
+        - Do not allow the product's design or dimensions to drift or change between beats.
 
         EMOTIONS & PROPS (STRICT):
         - Describe facial micro-expressions (smiles, looking surprised, serious gaze).
@@ -338,9 +352,9 @@ export class GeminiService {
         - Do not add a forced "final reveal" unless the reference itself clearly has a reveal beat.
 
         TARGET STYLE EXAMPLE:
-        0.0s – 3.0s: Medium-shot on an 85mm lens. A woman with soft golden hour lighting slowly brushes her hair and looks at the result in a mirror, smiling gently.
-        3.0s – 6.0s: She runs her hand through her hair, naturally handling the product within the same motion and showing the effect.
-        6.0s – 8.0s: She finishes the original action with a satisfied expression, keeping the product integrated in the scene context.
+        0.0s – 3.0s: Action begins immediately. Medium-shot on an 85mm lens. A woman is already in motion, satisfied and smiling as she turns toward a mirror, holding the product.
+        3.0s – 6.0s: She demonstrates the product effect clearly; the surface becomes instantly polished and remains sparkling as she moves.
+        6.0s – 8.0s: She finishes the action, looking into the camera satisfyingly, with the product and its effect (polished surface) remaining perfectly consistent and visible.
       `;
 
       const userContent: Array<
