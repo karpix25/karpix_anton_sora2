@@ -533,142 +533,85 @@ bot.on(message('text'), async (ctx) => {
     }
 
     const targetModel = boundProject.selectedModel;
-    const libraryItem = await referenceLibraryStore.createItem({
+    let libraryItem = await referenceLibraryStore.createItem({
       projectId: boundProject.id,
       sourceUrl: reelUrl,
       status: 'received',
     });
 
-    let statusMsg: any = null;
+    // 1. Parsing Instagram Reel (Keep in foreground for quick validation)
+    const initialStatusMsg = await ctx.reply('⏳ Начинаю обработку Reel...', replyParams);
     const chatId = ctx.chat.id;
-    let analysisSaved = false;
 
     const updateStatus = async (text: string) => {
       try {
-        if (statusMsg) {
-          await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, text);
-        } else {
-          statusMsg = await ctx.reply(text, replyParams);
-        }
+        await ctx.telegram.editMessageText(chatId, initialStatusMsg.message_id, undefined, text);
       } catch (err: any) {
-        console.error(`[Bot] Failed to update status to "${text}":`, err.message);
-        // If editing fails, try a new reply
-        try {
-          statusMsg = await ctx.reply(text, replyParams);
-        } catch (innerErr) {
-          console.error('[Bot] Critical failure: could not even send a fresh status reply.');
-        }
+        console.error(`[Bot] Failed to update status:`, err.message);
       }
     };
 
-    let videoLocalPath: string | null = null;
-
+    let reel: any;
     try {
-      // 1. Parsing Instagram Reel
       await updateStatus('⏳ Разбираю Reel...');
       await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
-      const reel = await InstagramService.getReelInfo(reelUrl);
-
-      // 2. Download Video for Base64 Analysis
-      await updateStatus('⏳ Скачиваю видео для стабильного анализа...');
-      videoLocalPath = await InstagramService.downloadVideo(reel.url);
-
-      // 3. Analyzing Video
-      await updateStatus('⏳ Анализирую стиль через Gemini...');
-      const updatedLibraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
-        directVideoUrl: reel.url,
-        thumbnailUrl: reel.thumbnail ?? '',
-        status: 'analyzing',
-      });
-      if (!updatedLibraryItem) {
-        throw new Error('Не удалось обновить элемент библиотеки после парсинга Reel');
-      }
-
-      await updateStatus('⏳ Сохраняю аудио из Reel...');
-      await ReferenceAudioService.ensureAudioTrack(updatedLibraryItem);
-      await updateStatus('⏳ Анализирую стиль через Gemini...');
-
-      const analysis = await GeminiService.analyzeVideo({ localPath: videoLocalPath, videoUrl: reel.url });
-      const textOverlays = await TextOverlayService.extractFromVideo({
-        localPath: videoLocalPath,
-        videoUrl: reel.url,
-        analysis,
-      });
-
-      await referenceLibraryStore.updateItem(libraryItem.id, {
-        directVideoUrl: reel.url,
-        thumbnailUrl: reel.thumbnail ?? '',
-        textOverlays,
-        analysis,
-        status: 'analyzed',
-        errorMessage: '',
-      });
-      analysisSaved = true;
-
-      await updateStatus('⏳ Собираю промпт и запускаю генерацию видео...');
-      const generationTask = await ManualGenerationService.runFromLibraryItem({
-        projectId: boundProject.id,
-        referenceLibraryItemId: libraryItem.id,
-        triggerMode: 'telegram_manual',
-      });
-      if (!generationTask?.resultVideoUrl) {
-        throw new Error('Generation completed without a result video URL');
-      }
-
-      const finalVideoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
-      const generationProvider = (generationTask.provider || 'kie').toUpperCase();
-
-      // 6. Send Result
-      if (statusMsg) {
-        await ctx.telegram.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
-      }
-      await sendGenerationResultVideo(ctx, {
-        taskId: generationTask.id,
-        videoUrl: finalVideoUrl,
-        targetModel,
-        generationProvider,
-        referenceUrl: reelUrl,
-        replyParams,
-      });
-    } catch (error: any) {
-      const errorMsg = error.message || String(error) || 'Unknown error';
-      console.error('Process Error details:', error);
+      reel = await InstagramService.getReelInfo(reelUrl);
       
-      if (!analysisSaved) {
-        await referenceLibraryStore.updateItem(libraryItem.id, {
-          status: 'failed',
-          errorMessage: errorMsg,
+      libraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
+        directVideoUrl: reel.url,
+        thumbnailUrl: reel.thumbnail ?? '',
+        status: 'parsed',
+      }) || libraryItem;
+    } catch (error: any) {
+      await updateStatus(`❌ Ошибка парсинга: ${error.message}`);
+      await referenceLibraryStore.updateItem(libraryItem.id, { status: 'failed', errorMessage: error.message });
+      return;
+    }
+
+    // 2. Spawn Background Worker
+    await updateStatus('✅ Reel принят в очередь. Начинаю анализ и генерацию видео...');
+    
+    // Background process - don't await
+    (async () => {
+      let analysisSaved = false;
+      try {
+        // Enrichment + Generation is now handled by ManualGenerationService, 
+        // which we've parallelized for better performance.
+        const generationTask = await ManualGenerationService.runFromLibraryItem({
+          projectId: boundProject.id,
+          referenceLibraryItemId: libraryItem.id,
+          triggerMode: 'telegram_manual',
         });
-      }
 
-      const isInstagramParseError = error instanceof InstagramParseError;
-      const errorText = isInstagramParseError
-        ? `❌ Ошибка обработки: ${errorMsg}\n\nПолный ответ RapidAPI приложен файлом.`
-        : analysisSaved
-          ? `❌ Ошибка генерации: ${errorMsg}\n\nСсылка на Reel и его анализ уже сохранены в библиотеке проекта.`
-          : `❌ Ошибка обработки: ${errorMsg}`;
+        if (!generationTask?.resultVideoUrl) {
+          throw new Error('Generation completed without a result video URL');
+        }
 
-      if (statusMsg) {
-        await ctx.telegram.editMessageText(chatId, statusMsg.message_id, undefined, errorText).catch(() => {
+        const finalVideoUrl = generationTask.yandexDownloadUrl || generationTask.resultVideoUrl;
+        const generationProvider = (generationTask.provider || 'kie').toUpperCase();
+
+        // 6. Send Result
+        await ctx.telegram.deleteMessage(chatId, initialStatusMsg.message_id).catch(() => {});
+        await sendGenerationResultVideo(ctx, {
+          taskId: generationTask.id,
+          videoUrl: finalVideoUrl,
+          targetModel,
+          generationProvider,
+          referenceUrl: reelUrl,
+          replyParams,
+        });
+      } catch (error: any) {
+        const errorMsg = error.message || String(error) || 'Unknown error';
+        console.error('Background Process Error:', error);
+        
+        const errorText = `❌ Ошибка генерации для ${reelUrl}:\n\n${errorMsg}`;
+        await ctx.telegram.editMessageText(chatId, initialStatusMsg.message_id, undefined, errorText).catch(() => {
           ctx.reply(errorText, replyParams).catch(() => {});
         });
-      } else {
-        await ctx.reply(errorText, replyParams).catch(() => {});
       }
+    })().catch(err => console.error('[Bot] Background worker crash:', err));
 
-      if (isInstagramParseError && error.debugFilePath) {
-        await ctx.replyWithDocument(Input.fromLocalFile(error.debugFilePath), {
-          caption: 'Полный JSON-ответ RapidAPI для этого Reel.',
-          ...replyParams,
-        });
-      }
-    } finally {
-      if (videoLocalPath) {
-        fs.remove(videoLocalPath).catch((err) => {
-          console.error(`[Bot] Failed to cleanup temp video ${videoLocalPath}:`, err.message);
-        });
-      }
-    }
+  } catch (error: any) {
   } catch (error: any) {
     const updateId = (ctx.update as any)?.update_id;
     const messageThreadId = getMessageThreadId(ctx);

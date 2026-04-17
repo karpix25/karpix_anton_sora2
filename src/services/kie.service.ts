@@ -233,10 +233,11 @@ export class KieService {
    * @param taskId The ID of the task to poll.
    */
   public static async pollStatus(taskId: string): Promise<string> {
-    const maxRetries = 120; // up to ~20 minutes polling
-    const delay = 10000; // 10 seconds
-
+    const maxRetries = 150; 
+    
     for (let i = 0; i < maxRetries; i++) {
+      // Adaptive polling: longer delay at start, shorter towards end
+      const delay = i < 4 ? 15000 : 5000; 
       try {
         const response = await axios.get(
           `${config.kieAi.baseUrl}/jobs/recordInfo`,

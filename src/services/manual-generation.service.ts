@@ -111,15 +111,22 @@ export class ManualGenerationService {
             videoLocalPath = await InstagramService.downloadVideo(libraryItem.directVideoUrl);
           }
 
-          if (!analysis) {
-            console.log('[ManualGenerationService] Running video analysis...');
-            analysis = await GeminiService.analyzeVideo({
-              videoUrl: libraryItem.directVideoUrl,
-              ...(videoLocalPath ? { localPath: videoLocalPath } : {}),
-            });
-            needsUpdate = true;
-          }
+          // 1. Parallelize Video Analysis and Audio Extraction
+          console.log('[ManualGenerationService] Running video analysis and audio extraction in parallel...');
+          const [analysisResult] = await Promise.all([
+            !analysis 
+              ? GeminiService.analyzeVideo({
+                  videoUrl: libraryItem.directVideoUrl,
+                  ...(videoLocalPath ? { localPath: videoLocalPath } : {}),
+                })
+              : Promise.resolve(analysis),
+            ReferenceAudioService.ensureAudioTrack(libraryItem),
+          ]);
 
+          analysis = analysisResult;
+          needsUpdate = true;
+
+          // 2. Text extraction depends on analysis result
           if (!textOverlays.length) {
             console.log('[ManualGenerationService] Running text overlay extraction...');
             textOverlays = await TextOverlayService.extractFromVideo({
@@ -172,6 +179,7 @@ export class ManualGenerationService {
         throw new Error('Нет доступного фото товара. Загрузите референс в проект (нужно минимум одно фото).');
       }
 
+      // Audio was already ensured in the parallel pre-processing block above
       const audio = await ReferenceAudioService.ensureAudioTrack(libraryItem);
 
       if (task.resultVideoUrl) {

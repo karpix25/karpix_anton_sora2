@@ -1,7 +1,9 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import fs from 'fs-extra';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import http from 'node:http';
+import https from 'node:https';
 import { config } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -9,6 +11,14 @@ const __dirname = path.dirname(__filename);
 const debugDir = path.resolve(__dirname, '../../data/instagram-debug');
 const tempDir = path.resolve(__dirname, '../../data/temp-videos');
 const downloadRetryDelaysMs = [2500, 7000];
+
+// Persistent axios instance with Keep-Alive for better performance
+const downloadAgent = new https.Agent({ keepAlive: true });
+const downloadClient = axios.create({
+  httpsAgent: downloadAgent,
+  httpAgent: new http.Agent({ keepAlive: true }),
+  timeout: 45000,
+});
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -183,11 +193,10 @@ export class InstagramService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const response = await axios({
+        const response = await downloadClient({
           method: 'get',
           url: videoUrl,
           responseType: 'stream',
-          timeout: 45000,
           family: 4,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
