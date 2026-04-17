@@ -273,7 +273,40 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   const generationsRoute = getProjectGenerationsRouteParams(pathname);
   if (generationsRoute.projectId && req.method === 'GET') {
     const tasks = await generationTaskStore.listProjectTasks(generationsRoute.projectId);
-    sendJson(res, 200, { tasks });
+
+    if (!YandexDiskService.isConfigured()) {
+      sendJson(res, 200, { tasks });
+      return true;
+    }
+
+    const hydratedTasks = [];
+    for (const task of tasks) {
+      if (task.status !== 'completed' || !task.yandexDiskPath) {
+        hydratedTasks.push(task);
+        continue;
+      }
+
+      try {
+        const refreshedDownloadUrl = await YandexDiskService.getDownloadUrlForPath(task.yandexDiskPath);
+        if (!refreshedDownloadUrl || refreshedDownloadUrl === task.yandexDownloadUrl) {
+          hydratedTasks.push(task);
+          continue;
+        }
+
+        const updatedTask = await generationTaskStore.updateTask(task.id, {
+          yandexDownloadUrl: refreshedDownloadUrl,
+        });
+        hydratedTasks.push(updatedTask || { ...task, yandexDownloadUrl: refreshedDownloadUrl });
+      } catch (error: any) {
+        console.warn(
+          `[WebServer] Failed to refresh Yandex download URL for generation task ${task.id}:`,
+          error?.message || error
+        );
+        hydratedTasks.push(task);
+      }
+    }
+
+    sendJson(res, 200, { tasks: hydratedTasks });
     return true;
   }
 

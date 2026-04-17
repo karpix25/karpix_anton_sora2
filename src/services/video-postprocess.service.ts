@@ -1,9 +1,10 @@
 import path from 'node:path';
-import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import fs from 'fs-extra';
-import puppeteer from 'puppeteer-core';
+import axios from 'axios';
+import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
+import { parse as parseEmojiEntities, toCodePoints } from '@twemoji/parser';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,40 @@ const ffmpegThreads = (() => {
   }
   return '2';
 })();
+const frameWidthPx = 720;
+const frameHeightPx = 1280;
+const emojiScale = 1.08;
+const emojiFetchTimeoutMs = 15000;
+const localTwemojiAssetsDir = path.resolve(process.cwd(), 'node_modules/emoji-datasource-twitter/img/twitter/64');
+type LoadedCanvasImage = Awaited<ReturnType<typeof loadImage>>;
+const emojiImageCache = new Map<string, Promise<LoadedCanvasImage>>();
+let textFontRegistered = false;
+
+function ensureCanvasFonts(fontFamily: string): void {
+  if (textFontRegistered) {
+    return;
+  }
+
+  const candidates = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/local/share/fonts/DejaVuSans.ttf',
+    '/Library/Fonts/Arial Unicode.ttf',
+    '/Library/Fonts/Arial Unicode MS.ttf',
+    '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        GlobalFonts.registerFromPath(candidate, fontFamily);
+        textFontRegistered = true;
+        return;
+      }
+    } catch {
+      // best-effort
+    }
+  }
+}
 
 interface RunFfmpegOptions {
   timeoutMs?: number;
@@ -63,6 +98,20 @@ interface OverlayFrame {
   startSeconds: number;
   endSeconds: number;
   imagePath: string;
+}
+
+type OverlaySegmentType = 'text' | 'emoji';
+
+interface OverlaySegment {
+  type: OverlaySegmentType;
+  value: string;
+  width: number;
+  emojiUrl?: string;
+}
+
+interface OverlayLineLayout {
+  segments: OverlaySegment[];
+  width: number;
 }
 
 interface TextRenderStyle {
@@ -241,36 +290,6 @@ function escapeAssDialogueText(value: string): string {
     .replace(/\n/g, '\\N');
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function escapeCssString(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
-function toGoogleFontFamilyParam(fontFamily: string): string {
-  return fontFamily
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => encodeURIComponent(token))
-    .join('+');
-}
-
-function toRgba(hex: string, alpha: number): string {
-  const normalized = normalizeHexColor(hex, '#000000');
-  const r = Number.parseInt(normalized.slice(1, 3), 16);
-  const g = Number.parseInt(normalized.slice(3, 5), 16);
-  const b = Number.parseInt(normalized.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
-}
-
 function toAssAlignment(textAlign: TextRenderStyle['textAlign']): number {
   if (textAlign === 'left') {
     return 1;
@@ -279,122 +298,6 @@ function toAssAlignment(textAlign: TextRenderStyle['textAlign']): number {
     return 3;
   }
   return 2;
-}
-
-function resolveChromiumExecutablePath(): string {
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROMIUM_PATH,
-    process.env.CHROMIUM_BIN,
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  ].filter((value): value is string => Boolean(value && value.trim()));
-
-  const found = candidates.find((filePath) => existsSync(filePath));
-  if (!found) {
-    throw new Error('Chromium executable is not available. Set PUPPETEER_EXECUTABLE_PATH or install chromium.');
-  }
-
-  return found;
-}
-
-function buildOverlayFrameHtml(text: string, style: TextRenderStyle): string {
-  const frameWidth = 720;
-  const frameHeight = 1280;
-  const textFrameWidthPx = Math.max(120, Math.floor((style.frameWidthPercent / 100) * frameWidth));
-  const marginBottomPx = Math.floor(style.verticalMargin * 2.5);
-  const fontFamily = escapeCssString(style.fontFamily);
-  const googleFontFamily = toGoogleFontFamilyParam(style.fontFamily);
-  const hasEmoji = /\p{Extended_Pictographic}/u.test(text);
-  const escapedText = escapeHtml(text).replace(/\n/g, '<br />');
-  const frameStyles = [
-    `position:absolute`,
-    `left:${style.frameXPercent}%`,
-    `transform:translateX(-50%)`,
-    `bottom:${marginBottomPx}px`,
-    `width:${textFrameWidthPx}px`,
-    `max-width:${frameWidth}px`,
-    `box-sizing:border-box`,
-    `margin:0`,
-  ];
-
-  const baseTextStyles = [
-    `position:relative`,
-    `width:100%`,
-    `font-family:"${fontFamily}","Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","DejaVu Sans",sans-serif`,
-    `font-size:${style.fontSize}px`,
-    `font-weight:${style.fontWeight}`,
-    `color:${style.fontColor}`,
-    `line-height:${style.lineHeight}`,
-    `letter-spacing:0`,
-    `text-align:${style.textAlign}`,
-    `white-space:pre-wrap`,
-    `word-break:break-word`,
-    `overflow-wrap:anywhere`,
-    `box-sizing:border-box`,
-    `padding:0`,
-    `margin:0`,
-  ];
-
-  if (style.borderStyle === 3) {
-    baseTextStyles.push(
-      `background:${toRgba(style.backgroundColor, style.backgroundOpacity)}`,
-      `padding:${style.boxPaddingY}px ${style.boxPaddingX}px`,
-      `border-radius:${style.boxRadius}px`,
-      `text-shadow:none`,
-      `-webkit-text-stroke:0 transparent`
-    );
-  } else if (hasEmoji) {
-    baseTextStyles.push(
-      `text-shadow:0 2px 6px rgba(0,0,0,0.58)`,
-      `-webkit-text-stroke:0 transparent`
-    );
-  } else {
-    baseTextStyles.push(
-      `-webkit-text-stroke:${style.outlineWidth}px ${style.outlineColor}`,
-      `text-shadow:0 2px 6px rgba(0,0,0,0.55)`,
-      `background:transparent`
-    );
-  }
-
-  return `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${googleFontFamily}:wght@400;700;900&display=swap" />
-    <style>
-      html, body {
-        margin: 0;
-        width: ${frameWidth}px;
-        height: ${frameHeight}px;
-        background: transparent;
-        overflow: hidden;
-      }
-      .frame {
-        position: relative;
-        width: ${frameWidth}px;
-        height: ${frameHeight}px;
-        background: transparent;
-      }
-      .subtitle {
-        ${baseTextStyles.join(';\n        ')};
-      }
-      .subtitle-frame {
-        ${frameStyles.join(';\n        ')};
-      }
-    </style>
-  </head>
-  <body>
-    <div class="frame">
-      <div class="subtitle-frame">
-        <div class="subtitle">${escapedText}</div>
-      </div>
-    </div>
-  </body>
-</html>`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -623,60 +526,276 @@ function buildOverlayFilterGraph(frames: OverlayFrame[]): { graph: string; final
   };
 }
 
-async function renderOverlayFramesWithChromium(taskId: string, overlays: PreparedOverlay[], style: TextRenderStyle): Promise<OverlayFrame[]> {
-  const executablePath = resolveChromiumExecutablePath();
+function toRgbaColor(hex: string, alpha: number): string {
+  const normalized = normalizeHexColor(hex, '#000000');
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+}
+
+function buildCanvasFont(style: TextRenderStyle): string {
+  return `${style.fontWeight} ${style.fontSize}px "${style.fontFamily}", "DejaVu Sans", sans-serif`;
+}
+
+function buildLineLayout(
+  line: string,
+  measureText: (value: string) => number,
+  style: TextRenderStyle
+): OverlayLineLayout {
+  if (!line) {
+    return { segments: [], width: 0 };
+  }
+
+  const emojiEntities = parseEmojiEntities(line, { assetType: 'png' });
+  if (!emojiEntities.length) {
+    return {
+      segments: [{ type: 'text', value: line, width: measureText(line) }],
+      width: measureText(line),
+    };
+  }
+
+  const segments: OverlaySegment[] = [];
+  let totalWidth = 0;
+  let cursor = 0;
+
+  for (const entity of emojiEntities) {
+    const [start, end] = entity.indices;
+    if (start > cursor) {
+      const plainText = line.slice(cursor, start);
+      const textWidth = measureText(plainText);
+      segments.push({ type: 'text', value: plainText, width: textWidth });
+      totalWidth += textWidth;
+    }
+
+    const emojiToken = line.slice(start, end);
+    const emojiWidth = style.fontSize * emojiScale;
+    segments.push({
+      type: 'emoji',
+      value: emojiToken,
+      width: emojiWidth,
+      emojiUrl: entity.url,
+    });
+    totalWidth += emojiWidth;
+    cursor = end;
+  }
+
+  if (cursor < line.length) {
+    const tailText = line.slice(cursor);
+    const tailWidth = measureText(tailText);
+    segments.push({ type: 'text', value: tailText, width: tailWidth });
+    totalWidth += tailWidth;
+  }
+
+  return { segments, width: totalWidth };
+}
+
+function resolveLocalTwemojiPath(emojiToken: string, emojiUrl: string): string {
+  if (emojiUrl) {
+    try {
+      const parsed = new URL(emojiUrl);
+      const baseName = path.basename(parsed.pathname).replace(/\.svg$/i, '.png');
+      if (baseName) {
+        return path.join(localTwemojiAssetsDir, baseName);
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  const codePoints = toCodePoints(emojiToken);
+  if (!Array.isArray(codePoints) || !codePoints.length) {
+    return '';
+  }
+
+  return path.join(localTwemojiAssetsDir, `${codePoints.join('-')}.png`);
+}
+
+async function getEmojiImage(emojiToken: string, url: string): Promise<LoadedCanvasImage | null> {
+  if (!emojiToken && !url) {
+    return null;
+  }
+
+  const localAssetPath = resolveLocalTwemojiPath(emojiToken, url);
+  if (localAssetPath && await fs.pathExists(localAssetPath)) {
+    const localCacheKey = `file:${localAssetPath}`;
+    const localCached = emojiImageCache.get(localCacheKey);
+    if (localCached) {
+      return localCached.catch(() => null);
+    }
+
+    const localPromise = fs.readFile(localAssetPath).then((buffer) => loadImage(buffer));
+    emojiImageCache.set(localCacheKey, localPromise);
+    try {
+      return await localPromise;
+    } catch {
+      emojiImageCache.delete(localCacheKey);
+      // fallback to remote branch
+    }
+  }
+
+  const cacheKey = url || emojiToken;
+  const cached = emojiImageCache.get(cacheKey);
+  if (cached) {
+    return cached.catch(() => null);
+  }
+
+  const nextPromise = (async () => {
+    if (!url) {
+      throw new Error('emoji url is missing');
+    }
+
+    const response = await axios.get<ArrayBuffer>(url, {
+      responseType: 'arraybuffer',
+      timeout: emojiFetchTimeoutMs,
+      maxContentLength: 1024 * 1024,
+      maxBodyLength: 1024 * 1024,
+    });
+    return loadImage(Buffer.from(response.data));
+  })();
+
+  emojiImageCache.set(cacheKey, nextPromise);
+
+  try {
+    return await nextPromise;
+  } catch (error) {
+    emojiImageCache.delete(cacheKey);
+    return null;
+  }
+}
+
+function buildTextFrameGeometry(style: TextRenderStyle): {
+  left: number;
+  width: number;
+  bottomMargin: number;
+} {
+  const frameWidth = Math.max(120, Math.floor((style.frameWidthPercent / 100) * frameWidthPx));
+  const centerX = Math.floor((style.frameXPercent / 100) * frameWidthPx);
+  const left = Math.round(clamp(centerX - Math.floor(frameWidth / 2), 0, frameWidthPx - frameWidth));
+  const bottomMargin = Math.floor(style.verticalMargin * 2.5);
+  return { left, width: frameWidth, bottomMargin };
+}
+
+function drawRoundRect(
+  ctx: any,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const safeRadius = clamp(radius, 0, Math.min(width, height) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, safeRadius);
+  ctx.arcTo(x + width, y + height, x, y + height, safeRadius);
+  ctx.arcTo(x, y + height, x, y, safeRadius);
+  ctx.arcTo(x, y, x + width, y, safeRadius);
+  ctx.closePath();
+}
+
+async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedOverlay[], style: TextRenderStyle): Promise<OverlayFrame[]> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   const framesDir = path.join(overlayDir, 'frames');
   await fs.ensureDir(framesDir);
+  ensureCanvasFonts(style.fontFamily);
 
-  const browser = await puppeteer.launch({
-    executablePath,
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--font-render-hinting=medium',
-    ],
-  });
+  const frames: OverlayFrame[] = [];
+  const lineHeightPx = Math.max(style.fontSize * style.lineHeight, style.fontSize + 2);
+  const textFrame = buildTextFrameGeometry(style);
 
-  try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 720, height: 1280, deviceScaleFactor: 1 });
-
-    const frames: OverlayFrame[] = [];
-    for (const [index, item] of overlays.entries()) {
-      const startSeconds = item.overlay.startSeconds;
-      const endSeconds = item.overlay.endSeconds;
-      if (!(endSeconds > startSeconds)) {
-        continue;
-      }
-
-      const imagePath = path.join(framesDir, `overlay-${String(index + 1).padStart(3, '0')}.png`);
-      const html = buildOverlayFrameHtml(item.text, style);
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
-      await page.evaluate(async () => {
-        if (document.fonts?.ready) {
-          await document.fonts.ready;
-        }
-      });
-      await page.screenshot({
-        path: imagePath,
-        type: 'png',
-        omitBackground: true,
-      });
-
-      frames.push({
-        startSeconds,
-        endSeconds,
-        imagePath,
-      });
+  for (const [index, item] of overlays.entries()) {
+    const startSeconds = item.overlay.startSeconds;
+    const endSeconds = item.overlay.endSeconds;
+    if (!(endSeconds > startSeconds)) {
+      continue;
     }
 
-    return frames;
-  } finally {
-    await browser.close();
+    const canvas = createCanvas(frameWidthPx, frameHeightPx);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, frameWidthPx, frameHeightPx);
+    ctx.font = buildCanvasFont(style);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = style.fontColor;
+    ctx.strokeStyle = style.outlineColor;
+    ctx.lineWidth = Math.max(0.5, style.outlineWidth * 1.2);
+
+    const lines = item.text.split('\n');
+    const lineLayouts = lines.map((line) => buildLineLayout(line, (value) => ctx.measureText(value).width, style));
+    const contentWidth = lineLayouts.reduce((max, layout) => Math.max(max, layout.width), 0);
+    const textAreaWidth = style.borderStyle === 3
+      ? Math.max(40, textFrame.width - style.boxPaddingX * 2)
+      : textFrame.width;
+    const overlayWidth = Math.min(textAreaWidth, Math.max(1, contentWidth));
+    const textHeight = Math.max(lineHeightPx, lineLayouts.length * lineHeightPx);
+    const boxHeight = style.borderStyle === 3 ? textHeight + style.boxPaddingY * 2 : textHeight;
+    const top = Math.round(clamp(frameHeightPx - textFrame.bottomMargin - boxHeight, 0, frameHeightPx - 1));
+    const textTop = style.borderStyle === 3 ? top + style.boxPaddingY : top;
+    const textAreaLeft = style.borderStyle === 3 ? textFrame.left + style.boxPaddingX : textFrame.left;
+
+    if (style.borderStyle === 3) {
+      const boxWidth = Math.min(
+        textFrame.width,
+        Math.max(style.boxPaddingX * 2 + overlayWidth, Math.min(textFrame.width, 120))
+      );
+      let boxLeft = textFrame.left;
+      if (style.textAlign === 'center') {
+        boxLeft = textFrame.left + Math.round((textFrame.width - boxWidth) / 2);
+      } else if (style.textAlign === 'right') {
+        boxLeft = textFrame.left + textFrame.width - boxWidth;
+      }
+      ctx.fillStyle = toRgbaColor(style.backgroundColor, style.backgroundOpacity);
+      drawRoundRect(ctx, boxLeft, top, boxWidth, boxHeight, style.boxRadius);
+      ctx.fill();
+      ctx.fillStyle = style.fontColor;
+    }
+
+    for (const [lineIndex, layout] of lineLayouts.entries()) {
+      const baselineY = textTop + style.fontSize + (lineIndex * lineHeightPx);
+      let cursorX = textAreaLeft;
+      if (style.textAlign === 'center') {
+        cursorX = textAreaLeft + Math.max(0, (textAreaWidth - layout.width) / 2);
+      } else if (style.textAlign === 'right') {
+        cursorX = textAreaLeft + Math.max(0, textAreaWidth - layout.width);
+      }
+
+      for (const segment of layout.segments) {
+        if (segment.type === 'text') {
+          if (segment.value && style.borderStyle !== 3) {
+            ctx.strokeText(segment.value, cursorX, baselineY);
+          }
+          if (segment.value) {
+            ctx.fillText(segment.value, cursorX, baselineY);
+          }
+          cursorX += segment.width;
+          continue;
+        }
+
+        const emojiUrl = segment.emojiUrl || '';
+        const emojiImage = await getEmojiImage(segment.value, emojiUrl);
+        const emojiSize = style.fontSize * emojiScale;
+        const emojiY = baselineY - (style.fontSize * 0.9);
+        if (emojiImage) {
+          ctx.drawImage(emojiImage, cursorX, emojiY, emojiSize, emojiSize);
+        } else if (segment.value) {
+          // Fallback for network/CDN hiccups.
+          ctx.fillText(segment.value, cursorX, baselineY);
+        }
+        cursorX += segment.width;
+      }
+    }
+
+    const imagePath = path.join(framesDir, `overlay-${String(index + 1).padStart(3, '0')}.png`);
+    await fs.writeFile(imagePath, canvas.toBuffer('image/png'));
+    frames.push({
+      startSeconds,
+      endSeconds,
+      imagePath,
+    });
   }
+
+  return frames;
 }
 
 export class VideoPostprocessService {
@@ -742,8 +861,8 @@ export class VideoPostprocessService {
       try {
         if (containsEmoji) {
           try {
-            console.log(`[VideoPostprocessService] Task ${input.taskId}: emoji detected, rendering overlays via Chromium...`);
-            const overlayFrames = await renderOverlayFramesWithChromium(input.taskId, preparedOverlays, resolvedTextStyle);
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: emoji detected, rendering overlays via Canvas+Twemoji...`);
+            const overlayFrames = await renderOverlayFramesWithCanvas(input.taskId, preparedOverlays, resolvedTextStyle);
             if (overlayFrames.length > 0) {
               console.log(
                 `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), running ffmpeg overlay graph...`
@@ -794,15 +913,15 @@ export class VideoPostprocessService {
               );
 
               await runFfmpeg(ffmpegArgs, {
-                label: `task ${input.taskId} ffmpeg (chromium-overlays)`,
+                label: `task ${input.taskId} ffmpeg (emoji-canvas-overlays)`,
               });
-              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (chromium overlays).`);
+              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (emoji canvas overlays).`);
               return outputPath;
             }
 
-            console.warn(`[VideoPostprocessService] Task ${input.taskId}: Chromium produced 0 overlay frames, fallback to ASS.`);
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: Canvas emoji renderer produced 0 overlay frames, fallback to ASS.`);
           } catch (error: any) {
-            console.warn('[VideoPostprocessService] Chromium overlay renderer failed, fallback to ASS:', error?.message || error);
+            console.warn('[VideoPostprocessService] Canvas emoji renderer failed, fallback to ASS:', error?.message || error);
           }
         } else {
           console.log(`[VideoPostprocessService] Task ${input.taskId}: no emoji in overlays, using ASS renderer.`);
