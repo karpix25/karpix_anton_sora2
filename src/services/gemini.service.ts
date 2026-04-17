@@ -154,7 +154,10 @@ export class GeminiService {
       const response = await createChatCompletionWithRetry(
         {
           model: config.openRouter.models.flash,
-          provider: buildProviderRouting(),
+          provider: {
+            order: ['google-vertex'],
+            allow_fallbacks: false,
+          },
           messages: [
             {
               role: 'user',
