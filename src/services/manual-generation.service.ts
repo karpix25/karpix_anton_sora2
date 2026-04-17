@@ -23,6 +23,7 @@ export class ManualGenerationService {
     projectId: string;
     referenceLibraryItemId: string;
     triggerMode: GenerationTriggerMode;
+    promptText?: string;
     fallbackReferenceImageUrl?: string;
   }) {
     const project = await projectStore.getProject(input.projectId);
@@ -42,6 +43,7 @@ export class ManualGenerationService {
       targetModel: project.selectedModel,
       provider: 'kie',
       status: 'pending',
+      promptText: typeof input.promptText === 'string' ? input.promptText.trim() : '',
     });
 
     return this.processTask(task, project, libraryItem);

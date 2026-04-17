@@ -7,8 +7,11 @@ import { GeminiService } from '../services/gemini.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
 import { TextOverlayService } from '../services/text-overlay.service.js';
+import { generationTaskStore } from '../storage/generation-task-store.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
+
+const repeatGenerationCallbackPrefix = 'repeat_generation:';
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -35,11 +38,21 @@ function getWebInterfaceUrl(projectId = ''): string {
 }
 
 function getMessageThreadId(ctx: Context): string {
-  const messageThreadId = 'message' in ctx && ctx.message && 'message_thread_id' in ctx.message
-    ? ctx.message.message_thread_id
-    : undefined;
+  const messageThreadId =
+    ('message' in ctx && ctx.message && 'message_thread_id' in ctx.message
+      ? ctx.message.message_thread_id
+      : undefined) ??
+    getCallbackQueryMessage(ctx)?.message_thread_id;
 
   return typeof messageThreadId === 'number' ? String(messageThreadId) : 'main';
+}
+
+function getCallbackQueryMessage(ctx: Context): any {
+  if (!('callbackQuery' in ctx) || !ctx.callbackQuery || !('message' in ctx.callbackQuery)) {
+    return undefined;
+  }
+
+  return (ctx.callbackQuery as any).message;
 }
 
 function extractTopicNameFromContext(ctx: Context, fallback = ''): string {
@@ -77,11 +90,41 @@ async function getBoundProject(ctx: Context) {
 
 function getReplyParams(ctx: Context): { reply_parameters?: { message_id: number } } {
   const message = 'message' in ctx ? (ctx.message as any) : undefined;
-  const messageId = message?.message_id;
+  const callbackMessage = getCallbackQueryMessage(ctx);
+  const messageId =
+    typeof message?.message_id === 'number'
+      ? message.message_id
+      : callbackMessage?.message_id;
   if (typeof messageId === 'number') {
     return { reply_parameters: { message_id: messageId } };
   }
   return {};
+}
+
+function getRepeatGenerationCallbackData(taskId: string): string {
+  return `${repeatGenerationCallbackPrefix}${taskId}`;
+}
+
+async function sendGenerationResultVideo(
+  ctx: Context,
+  input: {
+    taskId: string;
+    videoUrl: string;
+    targetModel: string;
+    generationProvider: string;
+    referenceUrl: string;
+    replyParams?: { reply_parameters?: { message_id: number } };
+  }
+): Promise<void> {
+  await ctx.replyWithVideo(input.videoUrl, {
+    caption:
+      `✨ Сгенерировано через ${input.targetModel.toUpperCase()} (${input.generationProvider})\n\n` +
+      `Референс: ${input.referenceUrl}`,
+    ...input.replyParams,
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🔁 Повторить', getRepeatGenerationCallbackData(input.taskId))],
+    ]),
+  });
 }
 
 export const bot = new Telegraf(config.telegram.token, {
@@ -366,6 +409,83 @@ bot.command('project_status', async (ctx) => {
   );
 });
 
+bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
+  const taskId = normalizeString((ctx as any).match?.[1]);
+
+  if (!ctx.chat || !taskId) {
+    await ctx.answerCbQuery('Не удалось определить задачу для повтора.', { show_alert: true }).catch(() => {});
+    return;
+  }
+
+  const replyParams = getReplyParams(ctx);
+  let statusMsg: any = null;
+
+  try {
+    const sourceTask = await generationTaskStore.getTask(taskId);
+    if (!sourceTask) {
+      await ctx.answerCbQuery('Исходная генерация не найдена.', { show_alert: true }).catch(() => {});
+      return;
+    }
+
+    if (!sourceTask.promptText) {
+      await ctx.answerCbQuery('У исходной генерации нет сохранённого промпта.', { show_alert: true }).catch(() => {});
+      return;
+    }
+
+    const sourceProject = await projectStore.getProject(sourceTask.projectId);
+    if (!sourceProject) {
+      await ctx.answerCbQuery('Проект исходной генерации не найден.', { show_alert: true }).catch(() => {});
+      return;
+    }
+
+    const currentChatId = String(ctx.chat.id);
+    const currentThreadId = getMessageThreadId(ctx);
+    if (sourceProject.telegramChatId !== currentChatId || sourceProject.telegramTopicId !== currentThreadId) {
+      await ctx.answerCbQuery('Эта кнопка относится к другому проекту или теме.', { show_alert: true }).catch(() => {});
+      return;
+    }
+
+    await ctx.answerCbQuery('Запускаю повторную генерацию...').catch(() => {});
+    statusMsg = await ctx.reply('⏳ Повторяю генерацию по сохранённому промпту...', replyParams);
+
+    const repeatedTask = await ManualGenerationService.runFromLibraryItem({
+      projectId: sourceTask.projectId,
+      referenceLibraryItemId: sourceTask.referenceLibraryItemId,
+      triggerMode: 'telegram_manual',
+      promptText: sourceTask.promptText,
+    });
+    if (!repeatedTask?.resultVideoUrl) {
+      throw new Error('Generation completed without a result video URL');
+    }
+
+    const sourceLibraryItem = await referenceLibraryStore.getItem(repeatedTask.referenceLibraryItemId);
+    const finalVideoUrl = repeatedTask.yandexDownloadUrl || repeatedTask.resultVideoUrl;
+    const generationProvider = (repeatedTask.provider || 'kie').toUpperCase();
+
+    if (statusMsg) {
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+    }
+
+    await sendGenerationResultVideo(ctx, {
+      taskId: repeatedTask.id,
+      videoUrl: finalVideoUrl,
+      targetModel: repeatedTask.targetModel,
+      generationProvider,
+      referenceUrl: sourceLibraryItem?.sourceUrl || '(не указан)',
+      replyParams,
+    });
+  } catch (error: any) {
+    const errorText = `❌ Ошибка повторной генерации: ${error?.message || String(error)}`;
+    if (statusMsg) {
+      await ctx.telegram
+        .editMessageText(ctx.chat.id, statusMsg.message_id, undefined, errorText)
+        .catch(() => ctx.reply(errorText, replyParams).catch(() => {}));
+    } else {
+      await ctx.reply(errorText, replyParams).catch(() => {});
+    }
+  }
+});
+
 // Handle Photo
 bot.on(message('photo'), async (ctx) => {
   const boundProject = await getBoundProject(ctx);
@@ -513,9 +633,13 @@ bot.on(message('text'), async (ctx) => {
       if (statusMsg) {
         await ctx.telegram.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
       }
-      await ctx.replyWithVideo(finalVideoUrl, {
-        caption: `✨ Сгенерировано через ${targetModel.toUpperCase()} (${generationProvider})\n\nРеференс: ${reelUrl}`,
-        ...replyParams,
+      await sendGenerationResultVideo(ctx, {
+        taskId: generationTask.id,
+        videoUrl: finalVideoUrl,
+        targetModel,
+        generationProvider,
+        referenceUrl: reelUrl,
+        replyParams,
       });
     } catch (error: any) {
       const errorMsg = error.message || String(error) || 'Unknown error';
