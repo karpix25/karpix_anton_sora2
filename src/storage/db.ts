@@ -139,7 +139,11 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_library_project_source
+    DROP INDEX IF EXISTS idx_reference_library_project_source;
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_reference_library_project_source
       ON reference_library(project_id, source_url_key);
   `);
 

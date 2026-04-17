@@ -20,6 +20,34 @@ const ffmpegTimeoutMs = (() => {
   }
   return 20 * 60 * 1000; // 20 minutes
 })();
+const ffmpegPreset = (() => {
+  const parsed = String(process.env.FFMPEG_PRESET || '').trim();
+  if (parsed) {
+    return parsed;
+  }
+  return 'veryfast';
+})();
+const ffmpegCrf = (() => {
+  const parsed = Number(process.env.FFMPEG_CRF);
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 51) {
+    return String(Math.floor(parsed));
+  }
+  return '20';
+})();
+const postprocessConcurrency = (() => {
+  const parsed = Number(process.env.VIDEO_POSTPROCESS_CONCURRENCY);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return 1;
+})();
+const ffmpegThreads = (() => {
+  const parsed = Number(process.env.FFMPEG_THREADS);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return String(Math.floor(parsed));
+  }
+  return '2';
+})();
 
 interface RunFfmpegOptions {
   timeoutMs?: number;
@@ -76,6 +104,28 @@ const defaultTextRenderStyle: TextRenderStyle = {
   boxPaddingY: 12,
   boxRadius: 10,
 };
+
+let activePostprocessJobs = 0;
+const postprocessWaitQueue: Array<() => void> = [];
+
+async function withPostprocessSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activePostprocessJobs >= postprocessConcurrency) {
+    await new Promise<void>((resolve) => {
+      postprocessWaitQueue.push(resolve);
+    });
+  }
+
+  activePostprocessJobs += 1;
+  try {
+    return await fn();
+  } finally {
+    activePostprocessJobs = Math.max(0, activePostprocessJobs - 1);
+    const next = postprocessWaitQueue.shift();
+    if (next) {
+      next();
+    }
+  }
+}
 
 function runFfmpeg(args: string[], options?: RunFfmpegOptions): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -176,6 +226,10 @@ function normalizeEmojiPresentation(value: string): string {
   // libass in ffmpeg typically cannot render colored emoji sequences.
   // Removing emoji variation selectors improves fallback to monochrome glyph fonts.
   return value.replace(/[\uFE0E\uFE0F]/g, '');
+}
+
+function hasEmojiGlyphs(value: string): boolean {
+  return /\p{Extended_Pictographic}/u.test(value);
 }
 
 function escapeAssDialogueText(value: string): string {
@@ -446,7 +500,7 @@ function wrapLineByWords(line: string, maxCharsPerLine: number): string[] {
 }
 
 function wrapOverlayText(text: string, maxCharsPerLine: number): string {
-  const normalizedText = normalizeEmojiPresentation(text).normalize('NFC');
+  const normalizedText = text.normalize('NFC');
   const normalizedMaxChars = Math.max(10, maxCharsPerLine);
   const sourceLines = normalizedText.replace(/\r/g, '').split('\n');
   if (sourceLines.length > 1) {
@@ -519,8 +573,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const { overlay, text } = prepared;
     const start = formatSecondsToAssTime(overlay.startSeconds);
     const end = formatSecondsToAssTime(overlay.endSeconds);
-    
-    const escapedText = escapeAssDialogueText(text);
+
+    const escapedText = escapeAssDialogueText(normalizeEmojiPresentation(text));
     
     return `Dialogue: 0,${start},${end},Default,,0,0,0,,${escapedText}`;
   });
@@ -635,158 +689,168 @@ export class VideoPostprocessService {
     textStyle?: unknown;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
-
-    const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
-    const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
-    const audioMode = shouldTrimVideoToAudio ? 'trim_video_to_audio' : 'loop_audio_to_video';
-    console.log(
-      `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0})`
-    );
-
-    if (!input.textOverlays?.length) {
-      const ffmpegArgs = [
-        '-y',
-        '-i',
-        input.generatedVideoUrl,
-      ];
-
-      if (!shouldTrimVideoToAudio) {
-        ffmpegArgs.push('-stream_loop', '-1');
-      }
-
-      ffmpegArgs.push(
-        '-i',
-        input.audioFilePath,
-        '-map',
-        '0:v:0',
-        '-map',
-        '1:a:0',
-        '-c:v',
-        'copy',
-        '-c:a',
-        'aac',
-        '-shortest',
-        '-movflags',
-        '+faststart',
-        outputPath,
+    return withPostprocessSlot(async () => {
+      const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
+      const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
+      const audioMode = shouldTrimVideoToAudio ? 'trim_video_to_audio' : 'loop_audio_to_video';
+      console.log(
+        `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0}, preset=${ffmpegPreset}, crf=${ffmpegCrf}, threads=${ffmpegThreads}, queue_limit=${postprocessConcurrency})`
       );
 
-      await runFfmpeg(ffmpegArgs, {
-        label: `task ${input.taskId} ffmpeg (no-overlays)`,
-      });
+      if (!input.textOverlays?.length) {
+        const ffmpegArgs = [
+          '-y',
+          '-i',
+          input.generatedVideoUrl,
+        ];
 
-      console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (no overlays).`);
-
-      return outputPath;
-    }
-
-    const resolvedTextStyle = resolveTextStyle(input.textStyle);
-    const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
-    const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
-
-    try {
-      try {
-        console.log(`[VideoPostprocessService] Task ${input.taskId}: rendering overlay frames with Chromium...`);
-        const overlayFrames = await renderOverlayFramesWithChromium(input.taskId, preparedOverlays, resolvedTextStyle);
-        if (overlayFrames.length > 0) {
-          console.log(
-            `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), running ffmpeg overlay graph...`
-          );
-          const { graph, finalLabel } = buildOverlayFilterGraph(overlayFrames);
-          const ffmpegArgs = [
-            '-y',
-            '-i',
-            input.generatedVideoUrl,
-          ];
-
-          if (!shouldTrimVideoToAudio) {
-            ffmpegArgs.push('-stream_loop', '-1');
-          }
-
-          ffmpegArgs.push(
-            '-i',
-            input.audioFilePath,
-          );
-
-          overlayFrames.forEach((frame) => {
-            ffmpegArgs.push('-loop', '1', '-i', frame.imagePath);
-          });
-
-          ffmpegArgs.push(
-            '-filter_complex',
-            graph,
-            '-map',
-            `[${finalLabel}]`,
-            '-map',
-            '1:a:0',
-            '-c:v',
-            'libx264',
-            '-preset',
-            'medium',
-            '-crf',
-            '18',
-            '-pix_fmt',
-            'yuv420p',
-            '-c:a',
-            'aac',
-            '-shortest',
-            '-movflags',
-            '+faststart',
-            outputPath
-          );
-
-          await runFfmpeg(ffmpegArgs, {
-            label: `task ${input.taskId} ffmpeg (chromium-overlays)`,
-          });
-          console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (chromium overlays).`);
-          return outputPath;
+        if (!shouldTrimVideoToAudio) {
+          ffmpegArgs.push('-stream_loop', '-1');
         }
 
-        console.warn(`[VideoPostprocessService] Task ${input.taskId}: Chromium produced 0 overlay frames, fallback to ASS.`);
-      } catch (error: any) {
-        console.warn('[VideoPostprocessService] Chromium overlay renderer failed, fallback to ASS:', error?.message || error);
+        ffmpegArgs.push(
+          '-i',
+          input.audioFilePath,
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-shortest',
+          '-movflags',
+          '+faststart',
+          outputPath,
+        );
+
+        await runFfmpeg(ffmpegArgs, {
+          label: `task ${input.taskId} ffmpeg (no-overlays)`,
+        });
+
+        console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (no overlays).`);
+
+        return outputPath;
       }
 
-      const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
-      const relativeAssPath = path.relative(process.cwd(), assFilePath);
-      const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
-      console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles fallback...`);
+      const resolvedTextStyle = resolveTextStyle(input.textStyle);
+      const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
+      const containsEmoji = preparedOverlays.some((item) => hasEmojiGlyphs(item.text));
+      const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
-      await runFfmpeg([
-        '-y',
-        '-i',
-        input.generatedVideoUrl,
-        ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
-        '-i',
-        input.audioFilePath,
-        '-vf',
-        filter,
-        '-map',
-        '0:v:0',
-        '-map',
-        '1:a:0',
-        '-c:v',
-        'libx264',
-        '-preset',
-        'medium',
-        '-crf',
-        '18',
-        '-pix_fmt',
-        'yuv420p',
-        '-c:a',
-        'aac',
-        '-shortest',
-        '-movflags',
-        '+faststart',
-        outputPath,
-      ], {
-        label: `task ${input.taskId} ffmpeg (ass-fallback)`,
-      });
-      console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (ASS fallback).`);
-    } finally {
-      await fs.remove(overlayWorkDir);
-    }
+      try {
+        if (containsEmoji) {
+          try {
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: emoji detected, rendering overlays via Chromium...`);
+            const overlayFrames = await renderOverlayFramesWithChromium(input.taskId, preparedOverlays, resolvedTextStyle);
+            if (overlayFrames.length > 0) {
+              console.log(
+                `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), running ffmpeg overlay graph...`
+              );
+              const { graph, finalLabel } = buildOverlayFilterGraph(overlayFrames);
+              const ffmpegArgs = [
+                '-y',
+                '-i',
+                input.generatedVideoUrl,
+              ];
 
-    return outputPath;
+              if (!shouldTrimVideoToAudio) {
+                ffmpegArgs.push('-stream_loop', '-1');
+              }
+
+              ffmpegArgs.push(
+                '-i',
+                input.audioFilePath,
+              );
+
+              overlayFrames.forEach((frame) => {
+                ffmpegArgs.push('-loop', '1', '-i', frame.imagePath);
+              });
+
+              ffmpegArgs.push(
+                '-filter_complex',
+                graph,
+                '-map',
+                `[${finalLabel}]`,
+                '-map',
+                '1:a:0',
+                '-c:v',
+                'libx264',
+                '-threads',
+                ffmpegThreads,
+                '-preset',
+                ffmpegPreset,
+                '-crf',
+                ffmpegCrf,
+                '-pix_fmt',
+                'yuv420p',
+                '-c:a',
+                'aac',
+                '-shortest',
+                '-movflags',
+                '+faststart',
+                outputPath
+              );
+
+              await runFfmpeg(ffmpegArgs, {
+                label: `task ${input.taskId} ffmpeg (chromium-overlays)`,
+              });
+              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (chromium overlays).`);
+              return outputPath;
+            }
+
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: Chromium produced 0 overlay frames, fallback to ASS.`);
+          } catch (error: any) {
+            console.warn('[VideoPostprocessService] Chromium overlay renderer failed, fallback to ASS:', error?.message || error);
+          }
+        } else {
+          console.log(`[VideoPostprocessService] Task ${input.taskId}: no emoji in overlays, using ASS renderer.`);
+        }
+
+        const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
+        const relativeAssPath = path.relative(process.cwd(), assFilePath);
+        const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+        console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
+
+        await runFfmpeg([
+          '-y',
+          '-i',
+          input.generatedVideoUrl,
+          ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
+          '-i',
+          input.audioFilePath,
+          '-vf',
+          filter,
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-c:v',
+          'libx264',
+          '-threads',
+          ffmpegThreads,
+          '-preset',
+          ffmpegPreset,
+          '-crf',
+          ffmpegCrf,
+          '-pix_fmt',
+          'yuv420p',
+          '-c:a',
+          'aac',
+          '-shortest',
+          '-movflags',
+          '+faststart',
+          outputPath,
+        ], {
+          label: `task ${input.taskId} ffmpeg (ass-overlays)`,
+        });
+        console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (ASS overlays).`);
+      } finally {
+        await fs.remove(overlayWorkDir);
+      }
+
+      return outputPath;
+    });
   }
 }

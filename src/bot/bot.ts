@@ -523,17 +523,6 @@ bot.on(message('text'), async (ctx) => {
       return;
     }
 
-    const duplicateLibraryItem = await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl);
-    if (duplicateLibraryItem) {
-      await ctx.reply(
-        `ℹ️ Этот Reel уже есть в проекте "${boundProject.name}".\n` +
-        `Статус: ${duplicateLibraryItem.status}.\n` +
-        'Повторно не сохраняю.',
-        replyParams
-      );
-      return;
-    }
-
     if (!boundProject.referenceImages.length) {
       await ctx.reply(
         `У проекта "${boundProject.name}" нет фото-референсов.\n` +
