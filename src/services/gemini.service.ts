@@ -276,6 +276,12 @@ export class GeminiService {
         - Action Prerequisites: Describe the prerequisite state (e.g., "The bottle is open," "The cap is off") before or during the dispensing action.
         - Object Logic: If a character interacts with a product, the interaction must follow real-world physics (e.g., pressing a pump to get cream, tilting a cup to drink).
 
+        HUMAN NATURALISM & BEHAVIORAL LOGIC (STRICT):
+        - Tool Lifecycle: Any auxiliary tool (spoon, phone, key, opener) must have a logical cycle: Picked up -> Used -> Placed aside. Never describe an action where a tool is used and then ignored or "absorbed" into the next action.
+        - Common Sense Habits: Follow standard human social norms and common sense. For example, a person must REMOVE a stirrer or spoon from a glass before drinking from it. They must open a package before taking something out.
+        - Natural Transitions: Explicitly describe the "transition" movements (e.g., "sets the spoon on the saucer," "wipes hands with a cloth") to ensure behavioral continuity and avoid surreal "glitches" in human actions.
+        - Single Focus: Humans generally don't perform two incompatible complex actions simultaneously. Ensure actions follow a logical sequential order.
+
         PRODUCT CONSISTENCY & STATE ANCHOR (STRICT):
         - Your main mission is a "Universal Product Re-skin".
         - Maintain the product's physical identity (size, proportions, key design elements, materials) 100% identically from the first frame to the last.
