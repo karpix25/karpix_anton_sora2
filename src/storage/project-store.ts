@@ -49,6 +49,7 @@ interface ProjectRow {
   primary_reference_image_id: string;
   reference_images: unknown;
   text_style: unknown;
+  end_frame_text: string;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -238,6 +239,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     primaryReferenceImageId: resolvedPrimaryReferenceImageId,
     referenceImages,
     textStyle,
+    endFrameText: normalizeString(input.endFrameText ?? existing?.endFrameText),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -264,6 +266,7 @@ function mapRowToProject(row: ProjectRow): Project {
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
     referenceImages: parseJSON(row.reference_images, []),
     textStyle: normalizeTextStyle(row.text_style, defaultTextStyle),
+    endFrameText: normalizeString(row.end_frame_text),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
@@ -313,12 +316,13 @@ async function upsertProject(project: Project): Promise<Project> {
         primary_reference_image_id,
         reference_images,
         text_style,
+        end_frame_text,
         created_at,
         updated_at
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20::timestamptz, $21::timestamptz
+        $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20, $21::timestamptz, $22::timestamptz
       )
       ON CONFLICT (id) DO UPDATE
       SET
@@ -340,6 +344,7 @@ async function upsertProject(project: Project): Promise<Project> {
         primary_reference_image_id = EXCLUDED.primary_reference_image_id,
         reference_images = EXCLUDED.reference_images,
         text_style = EXCLUDED.text_style,
+        end_frame_text = EXCLUDED.end_frame_text,
         updated_at = EXCLUDED.updated_at
       RETURNING *
     `,
@@ -363,6 +368,7 @@ async function upsertProject(project: Project): Promise<Project> {
       project.primaryReferenceImageId,
       JSON.stringify(project.referenceImages),
       JSON.stringify(project.textStyle || {}),
+      project.endFrameText || '',
       project.createdAt,
       project.updatedAt,
     ]

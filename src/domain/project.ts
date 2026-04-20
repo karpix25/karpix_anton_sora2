@@ -56,6 +56,7 @@ export interface Project {
   primaryReferenceImageId: string;
   referenceImages: ReferenceImage[];
   textStyle?: TextStyle;
+  endFrameText: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,4 +80,5 @@ export interface ProjectInput {
   primaryReferenceImageId?: string;
   referenceImages?: ReferenceImage[];
   textStyle?: TextStyle;
+  endFrameText?: string;
 }

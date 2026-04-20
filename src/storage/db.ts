@@ -81,6 +81,11 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT NOT NULL DEFAULT '';
+  `);
+
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS reference_library (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

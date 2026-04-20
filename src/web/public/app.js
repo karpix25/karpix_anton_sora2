@@ -19,6 +19,7 @@ const defaultProject = () => ({
   trimVideoToAudio: false,
   primaryReferenceImageId: '',
   referenceImages: [],
+  endFrameText: '',
   textStyle: {
     fontFamily: 'Montserrat',
     fontSize: 30,
@@ -102,9 +103,12 @@ const elements = {
       boxPaddingY: document.getElementById('textStyle-boxPaddingY'),
       boxRadius: document.getElementById('textStyle-boxRadius'),
     },
+    endFrameText: document.getElementById('endFrameText'),
   },
   textPreviewFrame: document.getElementById('text-style-preview-frame'),
   textPreview: document.getElementById('text-style-preview-element'),
+  endFramePreviewFrame: document.getElementById('end-frame-preview-frame'),
+  endFramePreview: document.getElementById('end-frame-preview-element'),
 };
 
 function setStatus(message) {
@@ -210,6 +214,7 @@ function snapshotFromForm() {
       boxPaddingY: Number(elements.fields.textStyle.boxPaddingY.value),
       boxRadius: Number(elements.fields.textStyle.boxRadius.value),
     },
+    endFrameText: (elements.fields.endFrameText?.value || '').trim(),
   };
 }
 
@@ -261,6 +266,35 @@ function updateTextPreview() {
   }
 
   toggleBoxControls(style.borderStyle === 3);
+  updateEndFramePreview();
+}
+
+function updateEndFramePreview() {
+  const text = (elements.fields.endFrameText?.value || '').trim();
+  const frame = elements.endFramePreviewFrame;
+  const el = elements.endFramePreview;
+  if (!frame || !el) return;
+
+  if (!text) {
+    frame.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+
+  const style = state.currentProject.textStyle;
+  frame.style.display = 'flex';
+  el.textContent = text;
+
+  if (style) {
+    el.style.fontFamily = `'${style.fontFamily}', sans-serif`;
+    el.style.fontSize = `${style.fontSize}px`;
+    el.style.color = style.fontColor;
+    el.style.fontWeight = style.fontWeight;
+    el.style.textAlign = style.textAlign || 'center';
+    el.style.lineHeight = String(style.lineHeight || 1.24);
+    el.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor || '#000000'}`;
+    el.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+  }
 }
 
 function toggleBoxControls(enabled) {
@@ -455,6 +489,10 @@ function applyProjectToForm(project) {
   elements.fields.textStyle.boxPaddingY.value = String(style.boxPaddingY);
   elements.fields.textStyle.boxRadius.value = String(style.boxRadius);
 
+  if (elements.fields.endFrameText) {
+    elements.fields.endFrameText.value = state.currentProject.endFrameText || '';
+  }
+
   updateTextPreview();
   syncProjectIdToUrl(state.currentProject.id || '');
 
@@ -640,6 +678,15 @@ function bindEvents() {
       updateTextPreview();
     });
   });
+
+  // End frame text live preview
+  if (elements.fields.endFrameText) {
+    elements.fields.endFrameText.addEventListener('input', () => {
+      state.currentProject = snapshotFromForm();
+      updateEndFramePreview();
+    });
+  }
+
   console.log('✅ Event listeners bound');
 }
 

@@ -837,6 +837,7 @@ export class VideoPostprocessService {
     trimVideoToAudio?: boolean;
     textOverlays?: ReferenceTextOverlay[];
     textStyle?: unknown;
+    endFrameText?: string;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
     return withPostprocessSlot(async () => {
@@ -847,7 +848,42 @@ export class VideoPostprocessService {
         `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0}, preset=${ffmpegPreset}, crf=${ffmpegCrf}, threads=${ffmpegThreads}, queue_limit=${postprocessConcurrency})`
       );
 
-      if (!input.textOverlays?.length) {
+      const endFrameTextTrimmed = typeof input.endFrameText === 'string' ? input.endFrameText.trim() : '';
+      let effectiveTextOverlays = input.textOverlays ? [...input.textOverlays] : [];
+
+      if (endFrameTextTrimmed) {
+        try {
+          const totalDuration = await getVideoDuration(input.generatedVideoUrl);
+          if (totalDuration > 3) {
+            const endFrameStart = Math.max(0, totalDuration - 3);
+            const endFrameEnd = totalDuration;
+            effectiveTextOverlays = [
+              ...effectiveTextOverlays,
+              {
+                id: 'end-frame-text',
+                text: endFrameTextTrimmed,
+                startSeconds: endFrameStart,
+                endSeconds: endFrameEnd,
+                anchor: 'bottom-center' as const,
+                xPercent: 0.5,
+                yPercent: 0.85,
+                fontSizePercent: 0.036,
+                textColor: '#FFFFFF',
+                box: false,
+                boxColor: '#000000',
+                boxOpacity: 0,
+              },
+            ];
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: endFrameText overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
+          } else {
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for endFrameText (${totalDuration.toFixed(2)}s < 3s), skipping`);
+          }
+        } catch (err: any) {
+          console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to get video duration for endFrameText: ${err?.message || err}`);
+        }
+      }
+
+      if (!effectiveTextOverlays.length) {
         const ffmpegArgs = [
           '-y',
           '-i',
@@ -885,7 +921,7 @@ export class VideoPostprocessService {
       }
 
       const resolvedTextStyle = resolveTextStyle(input.textStyle);
-      const preparedOverlays = input.textOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
+      const preparedOverlays = effectiveTextOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
       const containsEmoji = preparedOverlays.some((item) => hasEmojiGlyphs(item.text));
       const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 

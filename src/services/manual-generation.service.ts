@@ -213,6 +213,7 @@ export class ManualGenerationService {
         trimVideoToAudio: project.trimVideoToAudio,
         textOverlays: textOverlays,
         textStyle: project.textStyle,
+        endFrameText: project.endFrameText || '',
       });
       console.log(`[ManualGenerationService] Task ${task.id}: postprocess completed, uploading to Yandex Disk...`);
 

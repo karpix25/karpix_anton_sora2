@@ -612,7 +612,6 @@ bot.on(message('text'), async (ctx) => {
     })().catch(err => console.error('[Bot] Background worker crash:', err));
 
   } catch (error: any) {
-  } catch (error: any) {
     const updateId = (ctx.update as any)?.update_id;
     const messageThreadId = getMessageThreadId(ctx);
 

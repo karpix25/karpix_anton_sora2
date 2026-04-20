@@ -22,3 +22,12 @@ pnpm-debug.log*
 # Build
 coverage/
 dist/
+
+# Compiled TypeScript output in src/ (build artefacts)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+# But keep web static files
+!src/web/public/*.js
+!src/web/public/*.css

@@ -242,6 +242,12 @@
                 <span>Скругление бокса (px)</span>
                 <input id="textStyle-boxRadius" type="range" min="0" max="120" step="1" />
               </label>
+
+              <label class="full-width end-frame-label">
+                <span>Текст финального фрейма (за 3 сек. до конца)</span>
+                <input id="endFrameText" type="text" placeholder="Например: Пиши в директ 👉" />
+                <small class="end-frame-hint">Появится за 3 секунды до конца видео поверх субтитров</small>
+              </label>
             </div>
 
             <div class="preview-9-16-container">
@@ -251,6 +257,9 @@
                 <div id="text-style-preview-element" class="preview-text-overlay">
                   Пример текста субтитров в вашем проекте
                 </div>
+              </div>
+              <div id="end-frame-preview-frame" class="preview-end-frame-frame">
+                <div id="end-frame-preview-element" class="preview-end-frame-overlay"></div>
               </div>
             </div>
           </div>
