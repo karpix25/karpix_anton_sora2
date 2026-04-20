@@ -640,10 +640,37 @@ textarea {
   flex-direction: column;
   gap: 8px;
   border: 1px solid rgba(182, 87, 42, 0.28);
-  border-radius: 16px;
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
   padding: 16px 18px;
   background: rgba(182, 87, 42, 0.05);
   color: var(--muted);
+}
+
+.cta-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(182, 87, 42, 0.03);
+  border: 1px solid rgba(182, 87, 42, 0.2);
+  border-radius: 0 0 16px 16px;
+}
+
+.cta-layout-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cta-layout-grid span {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cta-layout-grid input[type="range"] {
+  width: 100%;
 }
 
 .end-frame-label span {
@@ -660,31 +687,26 @@ textarea {
 /* End frame preview overlay — appears in bottom third of 9:16 preview */
 .preview-end-frame-frame {
   position: absolute;
-  bottom: 12%;
-  left: 0;
-  right: 0;
-  display: none; /* shown via JS when text is set */
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12%;
+  left: 50%;
+  bottom: 25%;
+  transform: translateX(-50%);
+  width: 60%;
+  transition: all 0.2s ease;
   z-index: 10;
+  pointer-events: none;
+  border: 1px dashed rgba(255, 255, 255, 0.4);
 }
 
 .preview-end-frame-overlay {
   width: 100%;
   text-align: center;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.3;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.7), 0 0 8px rgba(0,0,0,0.5);
-  padding: 8px 12px;
-  background: linear-gradient(135deg, rgba(182, 87, 42, 0.75), rgba(122, 51, 20, 0.85));
-  border-radius: 10px;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-  transition: all 0.2s ease;
+  color: #fff;
+  font-size: 24px;
+  white-space: pre-wrap;
   word-break: break-word;
+  background: linear-gradient(to bottom, rgba(182, 87, 42, 0.2), rgba(182, 87, 42, 0.6));
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }

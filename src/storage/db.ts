@@ -80,9 +80,10 @@ export async function initDatabase(): Promise<void> {
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS trim_video_to_audio BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
-  await db.query(`
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT NOT NULL DEFAULT '';
-  `);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT DEFAULT ''`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_vertical_margin INTEGER DEFAULT 320`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_width_percent INTEGER DEFAULT 50`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_x_percent INTEGER DEFAULT 50`);
 
 
   await db.query(`

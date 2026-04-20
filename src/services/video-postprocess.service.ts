@@ -838,6 +838,9 @@ export class VideoPostprocessService {
     textOverlays?: ReferenceTextOverlay[];
     textStyle?: unknown;
     endFrameText?: string;
+    endFrameVerticalMargin?: number;
+    endFrameWidthPercent?: number;
+    endFrameXPercent?: number;
   }): Promise<string> {
     await fs.ensureDir(dataDir);
     return withPostprocessSlot(async () => {
@@ -857,6 +860,10 @@ export class VideoPostprocessService {
           if (totalDuration > 3) {
             const endFrameStart = Math.max(0, totalDuration - 3);
             const endFrameEnd = totalDuration;
+            const endFrameVerticalMargin = input.endFrameVerticalMargin ?? 320;
+            const endFrameWidthPercent = input.endFrameWidthPercent ?? 50;
+            const endFrameXPercent = input.endFrameXPercent ?? 50;
+
             effectiveTextOverlays = [
               ...effectiveTextOverlays,
               {
@@ -865,9 +872,9 @@ export class VideoPostprocessService {
                 startSeconds: endFrameStart,
                 endSeconds: endFrameEnd,
                 anchor: 'bottom-center' as const,
-                xPercent: 0.5,
-                yPercent: 0.85,
-                fontSizePercent: 0.036,
+                xPercent: endFrameXPercent / 100,
+                yPercent: 1 - (endFrameVerticalMargin / 1280),
+                fontSizePercent: 0.036, // Keep standard size for now unless user asks for slider
                 textColor: '#FFFFFF',
                 box: false,
                 boxColor: '#000000',

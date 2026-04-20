@@ -50,7 +50,10 @@ interface ProjectRow {
   reference_images: unknown;
   text_style: unknown;
   end_frame_text: string;
-  created_at: Date | string;
+  end_frame_vertical_margin: number;
+  end_frame_width_percent: number;
+  end_frame_x_percent: number;
+  created_at: string;
   updated_at: Date | string;
 }
 
@@ -240,6 +243,9 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     referenceImages,
     textStyle,
     endFrameText: normalizeString(input.endFrameText ?? existing?.endFrameText),
+    endFrameVerticalMargin: normalizeNumber(input.endFrameVerticalMargin ?? existing?.endFrameVerticalMargin, 320),
+    endFrameWidthPercent: normalizeNumber(input.endFrameWidthPercent ?? existing?.endFrameWidthPercent, 50),
+    endFrameXPercent: normalizeNumber(input.endFrameXPercent ?? existing?.endFrameXPercent, 50),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -266,8 +272,11 @@ function mapRowToProject(row: ProjectRow): Project {
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
     referenceImages: parseJSON(row.reference_images, []),
     textStyle: normalizeTextStyle(row.text_style, defaultTextStyle),
-    endFrameText: normalizeString(row.end_frame_text),
-    createdAt: toIsoString(row.created_at),
+    endFrameText: row.end_frame_text,
+    endFrameVerticalMargin: row.end_frame_vertical_margin,
+    endFrameWidthPercent: row.end_frame_width_percent,
+    endFrameXPercent: row.end_frame_x_percent,
+    createdAt: row.created_at,
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -294,86 +303,76 @@ function safeFileExtension(mimeType: string, fallbackName: string): string {
 }
 
 async function upsertProject(project: Project): Promise<Project> {
-  const result = await query<ProjectRow>(
-    `
-      INSERT INTO projects (
-        id,
-        name,
-        telegram_chat_id,
-        telegram_topic_id,
-        telegram_topic_name,
-        product_name,
-        product_description,
-        extra_prompting_rules,
-        target_audience,
-        cta,
-        mode,
-        automation_enabled,
-        daily_generation_limit,
-        selected_model,
-        is_active,
-        trim_video_to_audio,
-        primary_reference_image_id,
-        reference_images,
-        text_style,
-        end_frame_text,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20, $21::timestamptz, $22::timestamptz
-      )
-      ON CONFLICT (id) DO UPDATE
-      SET
-        name = EXCLUDED.name,
-        telegram_chat_id = EXCLUDED.telegram_chat_id,
-        telegram_topic_id = EXCLUDED.telegram_topic_id,
-        telegram_topic_name = EXCLUDED.telegram_topic_name,
-        product_name = EXCLUDED.product_name,
-        product_description = EXCLUDED.product_description,
-        extra_prompting_rules = EXCLUDED.extra_prompting_rules,
-        target_audience = EXCLUDED.target_audience,
-        cta = EXCLUDED.cta,
-        mode = EXCLUDED.mode,
-        automation_enabled = EXCLUDED.automation_enabled,
-        daily_generation_limit = EXCLUDED.daily_generation_limit,
-        selected_model = EXCLUDED.selected_model,
-        is_active = EXCLUDED.is_active,
-        trim_video_to_audio = EXCLUDED.trim_video_to_audio,
-        primary_reference_image_id = EXCLUDED.primary_reference_image_id,
-        reference_images = EXCLUDED.reference_images,
-        text_style = EXCLUDED.text_style,
-        end_frame_text = EXCLUDED.end_frame_text,
-        updated_at = EXCLUDED.updated_at
-      RETURNING *
-    `,
-    [
-      project.id,
-      project.name,
-      project.telegramChatId,
-      project.telegramTopicId,
-      project.telegramTopicName,
-      project.productName,
-      project.productDescription,
-      project.extraPromptingRules,
-      project.targetAudience,
-      project.cta,
-      project.mode,
-      project.automationEnabled,
-      project.dailyGenerationLimit,
-      project.selectedModel,
-      project.isActive,
-      project.trimVideoToAudio,
-      project.primaryReferenceImageId,
-      JSON.stringify(project.referenceImages),
-      JSON.stringify(project.textStyle || {}),
-      project.endFrameText || '',
-      project.createdAt,
-      project.updatedAt,
-    ]
-  );
+  const queryText = `
+    INSERT INTO projects (
+      id, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
+      product_name, product_description, extra_prompting_rules, target_audience, cta,
+      mode, automation_enabled, daily_generation_limit, selected_model, is_active,
+      trim_video_to_audio, primary_reference_image_id, reference_images, text_style,
+      end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
+      created_at, updated_at
+    )
+    VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+      $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
+      $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      telegram_chat_id = EXCLUDED.telegram_chat_id,
+      telegram_topic_id = EXCLUDED.telegram_topic_id,
+      telegram_topic_name = EXCLUDED.telegram_topic_name,
+      product_name = EXCLUDED.product_name,
+      product_description = EXCLUDED.product_description,
+      extra_prompting_rules = EXCLUDED.extra_prompting_rules,
+      target_audience = EXCLUDED.target_audience,
+      cta = EXCLUDED.cta,
+      mode = EXCLUDED.mode,
+      automation_enabled = EXCLUDED.automation_enabled,
+      daily_generation_limit = EXCLUDED.daily_generation_limit,
+      selected_model = EXCLUDED.selected_model,
+      is_active = EXCLUDED.is_active,
+      trim_video_to_audio = EXCLUDED.trim_video_to_audio,
+      primary_reference_image_id = EXCLUDED.primary_reference_image_id,
+      reference_images = EXCLUDED.reference_images,
+      text_style = EXCLUDED.text_style,
+      end_frame_text = EXCLUDED.end_frame_text,
+      end_frame_vertical_margin = EXCLUDED.end_frame_vertical_margin,
+      end_frame_width_percent = EXCLUDED.end_frame_width_percent,
+      end_frame_x_percent = EXCLUDED.end_frame_x_percent,
+      updated_at = EXCLUDED.updated_at
+    RETURNING *
+  `;
 
+  const values = [
+    project.id,
+    project.name,
+    project.telegramChatId,
+    project.telegramTopicId,
+    project.telegramTopicName,
+    project.productName,
+    project.productDescription,
+    project.extraPromptingRules,
+    project.targetAudience,
+    project.cta,
+    project.mode,
+    project.automationEnabled,
+    project.dailyGenerationLimit,
+    project.selectedModel,
+    project.isActive,
+    project.trimVideoToAudio,
+    project.primaryReferenceImageId,
+    JSON.stringify(project.referenceImages),
+    JSON.stringify(project.textStyle || {}),
+    project.endFrameText || '',
+    project.endFrameVerticalMargin ?? 320,
+    project.endFrameWidthPercent ?? 50,
+    project.endFrameXPercent ?? 50,
+    project.createdAt,
+    project.updatedAt,
+  ];
+
+  const result = await query<ProjectRow>(queryText, values);
   return mapRowToProject(result.rows[0] as ProjectRow);
 }
 

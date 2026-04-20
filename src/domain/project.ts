@@ -57,6 +57,9 @@ export interface Project {
   referenceImages: ReferenceImage[];
   textStyle?: TextStyle;
   endFrameText: string;
+  endFrameVerticalMargin: number;
+  endFrameWidthPercent: number;
+  endFrameXPercent: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,4 +84,7 @@ export interface ProjectInput {
   referenceImages?: ReferenceImage[];
   textStyle?: TextStyle;
   endFrameText?: string;
+  endFrameVerticalMargin?: number;
+  endFrameWidthPercent?: number;
+  endFrameXPercent?: number;
 }

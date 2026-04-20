@@ -214,6 +214,9 @@ export class ManualGenerationService {
         textOverlays: textOverlays,
         textStyle: project.textStyle,
         endFrameText: project.endFrameText || '',
+        endFrameVerticalMargin: project.endFrameVerticalMargin,
+        endFrameWidthPercent: project.endFrameWidthPercent,
+        endFrameXPercent: project.endFrameXPercent,
       });
       console.log(`[ManualGenerationService] Task ${task.id}: postprocess completed, uploading to Yandex Disk...`);
 

@@ -104,6 +104,9 @@ const elements = {
       boxRadius: document.getElementById('textStyle-boxRadius'),
     },
     endFrameText: document.getElementById('endFrameText'),
+    endFrameVerticalMargin: document.getElementById('endFrameVerticalMargin'),
+    endFrameWidthPercent: document.getElementById('endFrameWidthPercent'),
+    endFrameXPercent: document.getElementById('endFrameXPercent'),
   },
   textPreviewFrame: document.getElementById('text-style-preview-frame'),
   textPreview: document.getElementById('text-style-preview-element'),
@@ -215,6 +218,9 @@ function snapshotFromForm() {
       boxRadius: Number(elements.fields.textStyle.boxRadius.value),
     },
     endFrameText: (elements.fields.endFrameText?.value || '').trim(),
+    endFrameVerticalMargin: Number(elements.fields.endFrameVerticalMargin?.value || 320),
+    endFrameWidthPercent: Number(elements.fields.endFrameWidthPercent?.value || 50),
+    endFrameXPercent: Number(elements.fields.endFrameXPercent?.value || 50),
   };
 }
 
@@ -281,9 +287,19 @@ function updateEndFramePreview() {
     return;
   }
 
-  const style = state.currentProject.textStyle;
+  const project = state.currentProject;
+  const style = project.textStyle;
   frame.style.display = 'flex';
   el.textContent = text;
+
+  // Apply position and width
+  const vMargin = Number(elements.fields.endFrameVerticalMargin?.value || 320);
+  const widthPercent = Number(elements.fields.endFrameWidthPercent?.value || 50);
+  const xPercent = Number(elements.fields.endFrameXPercent?.value || 50);
+
+  frame.style.bottom = `${(vMargin / 1280) * 100}%`;
+  frame.style.width = `${widthPercent}%`;
+  frame.style.left = `${xPercent}%`;
 
   if (style) {
     el.style.fontFamily = `'${style.fontFamily}', sans-serif`;
@@ -292,8 +308,21 @@ function updateEndFramePreview() {
     el.style.fontWeight = style.fontWeight;
     el.style.textAlign = style.textAlign || 'center';
     el.style.lineHeight = String(style.lineHeight || 1.24);
-    el.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor || '#000000'}`;
-    el.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+
+    if (style.borderStyle === 3) {
+      const normalizedOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity ?? 0.82)));
+      el.style.backgroundColor = hexToRgba(style.backgroundColor || '#000000', normalizedOpacity);
+      el.style.padding = `${style.boxPaddingY ?? 12}px ${style.boxPaddingX ?? 18}px`;
+      el.style.webkitTextStroke = '0';
+      el.style.textShadow = 'none';
+      el.style.borderRadius = `${style.boxRadius ?? 10}px`;
+    } else {
+      el.style.backgroundColor = 'transparent';
+      el.style.padding = '0';
+      el.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor || '#000000'}`;
+      el.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+      el.style.borderRadius = '0';
+    }
   }
 }
 
@@ -491,6 +520,9 @@ function applyProjectToForm(project) {
 
   if (elements.fields.endFrameText) {
     elements.fields.endFrameText.value = state.currentProject.endFrameText || '';
+    elements.fields.endFrameVerticalMargin.value = state.currentProject.endFrameVerticalMargin ?? 320;
+    elements.fields.endFrameWidthPercent.value = state.currentProject.endFrameWidthPercent ?? 50;
+    elements.fields.endFrameXPercent.value = state.currentProject.endFrameXPercent ?? 50;
   }
 
   updateTextPreview();
@@ -680,12 +712,22 @@ function bindEvents() {
   });
 
   // End frame text live preview
-  if (elements.fields.endFrameText) {
-    elements.fields.endFrameText.addEventListener('input', () => {
-      state.currentProject = snapshotFromForm();
-      updateEndFramePreview();
-    });
-  }
+  const ctaFields = [
+    elements.fields.endFrameText,
+    elements.fields.endFrameVerticalMargin,
+    elements.fields.endFrameWidthPercent,
+    elements.fields.endFrameXPercent
+  ];
+
+  ctaFields.forEach(field => {
+    if (field) {
+      field.addEventListener('input', () => {
+        state.currentProject = snapshotFromForm();
+        updateEndFramePreview();
+      });
+      field.addEventListener('change', debouncedSave);
+    }
+  });
 
   console.log('✅ Event listeners bound');
 }
