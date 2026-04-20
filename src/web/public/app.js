@@ -51,8 +51,18 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.1.1-audio-duration-mode';
+const DEBUG_VERSION = '1.2.0-cta-layout-fixed';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
+
+// Diagnostic check for the user
+window.addEventListener('DOMContentLoaded', () => {
+  const ctaElement = document.getElementById('endFrameText');
+  if (ctaElement) {
+    console.log('✅ Found endFrameText element in DOM');
+  } else {
+    console.error('❌ CRITICAL: endFrameText element NOT found in DOM. The browser is likely serving an old version of index.html.');
+  }
+});
 
 const elements = {
   projectList: document.getElementById('project-list'),
