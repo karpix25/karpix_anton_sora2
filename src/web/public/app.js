@@ -732,7 +732,7 @@ function bindEvents() {
   console.log('✅ Event listeners bound');
 }
 
-console.log('🔄 Initializing app...');
+console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
   loadProjects().then(() => {

@@ -631,46 +631,39 @@ textarea {
 }
 
 /* End frame text field */
-.end-frame-field-wrap {
-  margin-top: 18px;
+.cta-main-wrap {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(182, 87, 42, 0.15);
 }
 
 .end-frame-label {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid rgba(182, 87, 42, 0.28);
-  border-bottom: 0;
-  border-radius: 16px 16px 0 0;
-  padding: 16px 18px;
-  background: rgba(182, 87, 42, 0.05);
-  color: var(--muted);
+  margin-bottom: 12px;
 }
 
-.cta-layout-grid {
+.cta-mini-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  padding: 14px 18px;
-  background: rgba(182, 87, 42, 0.03);
-  border: 1px solid rgba(182, 87, 42, 0.2);
-  border-radius: 0 0 16px 16px;
+  gap: 16px;
+  background: rgba(182, 87, 42, 0.05);
+  padding: 14px;
+  border-radius: 16px;
 }
 
-.cta-layout-grid label {
+.cta-mini-grid label {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.cta-layout-grid span {
+.cta-mini-grid label span {
   font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.cta-layout-grid input[type="range"] {
-  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
 }
 
 .end-frame-label span {

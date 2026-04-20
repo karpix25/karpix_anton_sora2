@@ -146,6 +146,27 @@
 
           <div class="text-styling-grid">
             <div class="form-grid" style="margin-top: 0;">
+              <div class="full-width cta-main-wrap">
+                <label class="end-frame-label">
+                  <span>🎬 Текст финального фрейма (CTA)</span>
+                  <input id="endFrameText" type="text" placeholder="Например: Переходи по ссылке →" />
+                </label>
+                <div class="cta-mini-grid">
+                  <label>
+                    <span>Y (Отступ)</span>
+                    <input id="endFrameVerticalMargin" type="range" min="0" max="1000" step="5" />
+                  </label>
+                  <label>
+                    <span>Ширина (%)</span>
+                    <input id="endFrameWidthPercent" type="range" min="20" max="100" step="1" />
+                  </label>
+                  <label>
+                    <span>X (%)</span>
+                    <input id="endFrameXPercent" type="range" min="0" max="100" step="1" />
+                  </label>
+                </div>
+              </div>
+
               <label class="full-width">
                 <span>Шрифт (Google Fonts)</span>
                 <select id="textStyle-fontFamily">
@@ -256,31 +277,6 @@
               <div id="end-frame-preview-frame" class="preview-end-frame-frame">
                 <div id="end-frame-preview-element" class="preview-end-frame-overlay"></div>
               </div>
-            </div>
-          </div>
-
-          <div class="end-frame-field-wrap">
-            <label class="end-frame-label">
-              <span>🎬 Текст финального фрейма <em>(появится за 3 сек. до конца видео)</em></span>
-              <input id="endFrameText" type="text" placeholder="Например: Пиши в директ 👉" />
-              <small class="end-frame-hint">Появится поверх субтитров за 3 секунды до конца. Оставьте пустым, чтобы отключить.</small>
-            </label>
-
-            <div class="cta-layout-grid">
-              <label>
-                <span>Отступ снизу (CTA)</span>
-                <input id="endFrameVerticalMargin" type="range" min="0" max="1000" step="5" />
-              </label>
-
-              <label>
-                <span>Ширина фрейма (CTA, %)</span>
-                <input id="endFrameWidthPercent" type="range" min="20" max="100" step="1" />
-              </label>
-
-              <label>
-                <span>Позиция по X (CTA, %)</span>
-                <input id="endFrameXPercent" type="range" min="0" max="100" step="1" />
-              </label>
             </div>
           </div>
 
