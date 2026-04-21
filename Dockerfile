@@ -15,7 +15,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 # Runtime uses ts-node directly, so TypeScript and type packages from devDependencies are required.
-RUN npm ci && npm cache clean --force
+RUN npm install && npm cache clean --force
 
 COPY tsconfig.json ./
 COPY src ./src
