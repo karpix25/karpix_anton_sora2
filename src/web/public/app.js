@@ -735,7 +735,6 @@ function bindEvents() {
         state.currentProject = snapshotFromForm();
         updateEndFramePreview();
       });
-      field.addEventListener('change', debouncedSave);
     }
   });
 
