@@ -92,6 +92,7 @@ interface RunFfmpegOptions {
 interface PreparedOverlay {
   overlay: ReferenceTextOverlay;
   text: string;
+  style: TextRenderStyle;
 }
 
 interface OverlayFrame {
@@ -331,6 +332,16 @@ function toAssAlignment(textAlign: TextRenderStyle['textAlign']): number {
   return 2;
 }
 
+function toAssFrameMargins(style: TextRenderStyle): { marginL: number; marginR: number; marginV: number } {
+  const frameWidth = Math.floor((frameWidthPx * style.frameWidthPercent) / 100);
+  const centerX = Math.floor((frameWidthPx * style.frameXPercent) / 100);
+  const halfFrame = Math.floor(frameWidth / 2);
+  const marginL = Math.round(clamp(centerX - halfFrame, 0, frameWidthPx - 1));
+  const marginR = Math.round(clamp(frameWidthPx - (centerX + halfFrame), 0, frameWidthPx - 1));
+  const marginV = Math.round(clamp(style.verticalMargin, 0, frameHeightPx - 1));
+  return { marginL, marginR, marginV };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -463,14 +474,7 @@ function formatSecondsToAssTime(seconds: number): string {
 }
 
 function generateAssFileContent(overlays: PreparedOverlay[], style: TextRenderStyle): string {
-  // Styles and configuration for the ASS file.
-  // MarginV controls the vertical distance from the bottom.
-  const marginV = Math.floor(style.verticalMargin * 2.5); // Scaled for 720x1280
-  const frameWidthPx = Math.floor((720 * style.frameWidthPercent) / 100);
-  const centerXPx = Math.floor((720 * style.frameXPercent) / 100);
-  const halfFrame = Math.floor(frameWidthPx / 2);
-  const marginL = Math.round(clamp(centerXPx - halfFrame, 0, 719));
-  const marginR = Math.round(clamp(720 - (centerXPx + halfFrame), 0, 719));
+  const defaultMargins = toAssFrameMargins(style);
   const alignment = toAssAlignment(style.textAlign);
 
   const toAssColor = (hex: string, alpha = 0) => {
@@ -495,7 +499,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,${alignment},${marginL},${marginR},${marginV},1
+Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,${alignment},${defaultMargins.marginL},${defaultMargins.marginR},${defaultMargins.marginV},1
 `;
 
   const events = `
@@ -504,13 +508,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   const lines = overlays.map((prepared) => {
-    const { overlay, text } = prepared;
+    const { overlay, text, style: overlayStyle } = prepared;
     const start = formatSecondsToAssTime(overlay.startSeconds);
     const end = formatSecondsToAssTime(overlay.endSeconds);
+    const margins = toAssFrameMargins(overlayStyle);
 
     const escapedText = escapeAssDialogueText(normalizeEmojiPresentation(text));
-    
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${escapedText}`;
+
+    return `Dialogue: 0,${start},${end},Default,,${margins.marginL},${margins.marginR},${margins.marginV},,${escapedText}`;
   });
 
   return header + events + lines.join('\n');
@@ -523,6 +528,7 @@ function prepareOverlayForRender(overlay: ReferenceTextOverlay, style: TextRende
   return {
     overlay,
     text,
+    style,
   };
 }
 
@@ -703,7 +709,7 @@ function buildTextFrameGeometry(style: TextRenderStyle): {
   const frameWidth = Math.max(120, Math.floor((style.frameWidthPercent / 100) * frameWidthPx));
   const centerX = Math.floor((style.frameXPercent / 100) * frameWidthPx);
   const left = Math.round(clamp(centerX - Math.floor(frameWidth / 2), 0, frameWidthPx - frameWidth));
-  const bottomMargin = Math.floor(style.verticalMargin * 2.5);
+  const bottomMargin = Math.round(clamp(style.verticalMargin, 0, frameHeightPx - 1));
   return { left, width: frameWidth, bottomMargin };
 }
 
@@ -725,22 +731,24 @@ function drawRoundRect(
   ctx.closePath();
 }
 
-async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedOverlay[], style: TextRenderStyle): Promise<OverlayFrame[]> {
+async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedOverlay[]): Promise<OverlayFrame[]> {
   const overlayDir = path.join(dataDir, `${taskId}-overlays`);
   const framesDir = path.join(overlayDir, 'frames');
   await fs.ensureDir(framesDir);
-  ensureCanvasFonts(style.fontFamily);
 
   const frames: OverlayFrame[] = [];
-  const lineHeightPx = Math.max(style.fontSize * style.lineHeight, style.fontSize + 2);
-  const textFrame = buildTextFrameGeometry(style);
 
   for (const [index, item] of overlays.entries()) {
+    const style = item.style;
     const startSeconds = item.overlay.startSeconds;
     const endSeconds = item.overlay.endSeconds;
     if (!(endSeconds > startSeconds)) {
       continue;
     }
+    ensureCanvasFonts(style.fontFamily);
+
+    const lineHeightPx = Math.max(style.fontSize * style.lineHeight, style.fontSize + 2);
+    const textFrame = buildTextFrameGeometry(style);
 
     const canvas = createCanvas(frameWidthPx, frameHeightPx);
     const ctx = canvas.getContext('2d');
@@ -928,15 +936,32 @@ export class VideoPostprocessService {
       }
 
       const resolvedTextStyle = resolveTextStyle(input.textStyle);
-      const preparedOverlays = effectiveTextOverlays.map((overlay) => prepareOverlayForRender(overlay, resolvedTextStyle));
-      const containsEmoji = preparedOverlays.some((item) => hasEmojiGlyphs(item.text));
+      const endFrameStyle: TextRenderStyle = {
+        ...resolvedTextStyle,
+        verticalMargin: Math.round(
+          clamp(toFiniteNumber(input.endFrameVerticalMargin) ?? resolvedTextStyle.verticalMargin, 0, 500)
+        ),
+        frameWidthPercent: Math.round(
+          clamp(toFiniteNumber(input.endFrameWidthPercent) ?? resolvedTextStyle.frameWidthPercent, 20, 100)
+        ),
+        frameXPercent: Math.round(
+          clamp(toFiniteNumber(input.endFrameXPercent) ?? resolvedTextStyle.frameXPercent, 0, 100)
+        ),
+      };
+      const preparedOverlays = effectiveTextOverlays.map((overlay) => {
+        const overlayStyle = overlay.id === 'end-frame-text' ? endFrameStyle : resolvedTextStyle;
+        return prepareOverlayForRender(overlay, overlayStyle);
+      });
+      const requiresCanvasRenderer = preparedOverlays.some(
+        (item) => item.style.borderStyle === 3 || hasEmojiGlyphs(item.text)
+      );
       const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
       try {
-        if (containsEmoji) {
+        if (requiresCanvasRenderer) {
           try {
-            console.log(`[VideoPostprocessService] Task ${input.taskId}: emoji detected, rendering overlays via Canvas+Twemoji...`);
-            const overlayFrames = await renderOverlayFramesWithCanvas(input.taskId, preparedOverlays, resolvedTextStyle);
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: rendering overlays via Canvas...`);
+            const overlayFrames = await renderOverlayFramesWithCanvas(input.taskId, preparedOverlays);
             
             if (overlayFrames.length > 0) {
               const videoDuration = await getVideoDuration(input.generatedVideoUrl).catch(() => 0);
@@ -1003,18 +1028,18 @@ export class VideoPostprocessService {
               ];
 
               await runFfmpeg(ffmpegArgs, {
-                label: `task ${input.taskId} ffmpeg (emoji-canvas-overlays)`,
+                label: `task ${input.taskId} ffmpeg (canvas-overlays)`,
               });
-              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (emoji concat overlays).`);
+              console.log(`[VideoPostprocessService] Task ${input.taskId}: postprocess complete (canvas overlays).`);
               return outputPath;
             }
 
-            console.warn(`[VideoPostprocessService] Task ${input.taskId}: Canvas emoji renderer produced 0 overlay frames, fallback to ASS.`);
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: Canvas renderer produced 0 overlay frames, fallback to ASS.`);
           } catch (error: any) {
-            console.warn('[VideoPostprocessService] Canvas emoji renderer failed, fallback to ASS:', error?.message || error);
+            console.warn('[VideoPostprocessService] Canvas renderer failed, fallback to ASS:', error?.message || error);
           }
         } else {
-          console.log(`[VideoPostprocessService] Task ${input.taskId}: no emoji in overlays, using ASS renderer.`);
+          console.log(`[VideoPostprocessService] Task ${input.taskId}: using ASS renderer.`);
         }
 
         const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
