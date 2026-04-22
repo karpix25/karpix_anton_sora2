@@ -865,8 +865,8 @@ export class VideoPostprocessService {
       if (endFrameTextTrimmed) {
         try {
           const totalDuration = await getVideoDuration(input.generatedVideoUrl);
-          if (totalDuration > 3) {
-            const endFrameStart = Math.max(0, totalDuration - 3);
+          if (totalDuration > 0.1) {
+            const endFrameStart = 0;
             const endFrameEnd = totalDuration;
             const endFrameVerticalMargin = input.endFrameVerticalMargin ?? 320;
             const endFrameWidthPercent = input.endFrameWidthPercent ?? 50;
@@ -875,23 +875,23 @@ export class VideoPostprocessService {
             effectiveTextOverlays = [
               ...effectiveTextOverlays,
               {
-                id: 'end-frame-text',
+                id: 'static-overlay-text',
                 text: endFrameTextTrimmed,
                 startSeconds: endFrameStart,
                 endSeconds: endFrameEnd,
                 anchor: 'bottom-center' as const,
                 xPercent: endFrameXPercent / 100,
                 yPercent: 1 - (endFrameVerticalMargin / 1280),
-                fontSizePercent: 0.036, // Keep standard size for now unless user asks for slider
+                fontSizePercent: 0.036,
                 textColor: '#FFFFFF',
                 box: false,
                 boxColor: '#000000',
                 boxOpacity: 0,
               },
             ];
-            console.log(`[VideoPostprocessService] Task ${input.taskId}: endFrameText overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: static overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
           } else {
-            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for endFrameText (${totalDuration.toFixed(2)}s < 3s), skipping`);
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for overlay (${totalDuration.toFixed(2)}s), skipping`);
           }
         } catch (err: any) {
           console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to get video duration for endFrameText: ${err?.message || err}`);
@@ -1014,7 +1014,7 @@ export class VideoPostprocessService {
                 '-safe', '0',
                 '-i', concatScriptPath,
                 '-filter_complex', '[0:v][2:v]overlay=x=0:y=0',
-                '-map', '0:v:0', // Note: using 0:v:0 to get correct stream if looped
+                '-map', '0:v:0',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
                 '-threads', ffmpegThreads,

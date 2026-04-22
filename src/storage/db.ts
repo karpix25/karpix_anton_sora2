@@ -85,6 +85,9 @@ export async function initDatabase(): Promise<void> {
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_width_percent INTEGER DEFAULT 50`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_x_percent INTEGER DEFAULT 50`);
 
+  // Migrate all existing projects to use the new "Video is Master" default behavior
+  await db.query(`UPDATE projects SET trim_video_to_audio = FALSE`);
+
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS reference_library (
