@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import https from 'node:https';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -170,10 +171,27 @@ export class InstagramService {
         throw new Error('Некорректный запрос к Instagram API. Пожалуйста, убедитесь, что ссылка правильная.');
       }
 
+      const details = `RapidAPI [${status}]: ${detail || error.message}`;
+      const lowercaseDetails = details.toLowerCase();
+
+      // Detect balance/limit errors
+      if (
+        status === 429 || 
+        lowercaseDetails.includes('insufficient') || 
+        lowercaseDetails.includes('credit') || 
+        lowercaseDetails.includes('limit') || 
+        lowercaseDetails.includes('subscription')
+      ) {
+        console.warn('[InstagramService] Detected RapidAPI limit/credit error. Notifying admins...');
+        AdminNotifierService.notifyBalanceError('Instagram (RapidAPI)', details).catch(err => 
+          console.error('[InstagramService] Failed to notify admins:', err.message)
+        );
+      }
+
       if (error instanceof InstagramParseError) {
         throw error;
       }
-      throw new Error(`Ошибка при разборе Instagram Reel: ${error.message}`);
+      throw new Error(`Ошибка при разборе Instagram Reel: ${details}`);
     }
   }
 

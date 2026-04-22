@@ -1,6 +1,7 @@
 import axios from 'axios';
 import fs from 'fs-extra';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
 import type { Project } from '../domain/project.js';
 
 function sleep(ms: number): Promise<void> {
@@ -98,6 +99,19 @@ export async function createChatCompletionWithRetry(
       }
 
       if (!retryable || isLastAttempt) {
+        const lowercaseError = formattedError.toLowerCase();
+        // Detect balance errors (OpenRouter uses 402 or specific message)
+        if (
+          status === 402 || 
+          lowercaseError.includes('insufficient') || 
+          lowercaseError.includes('credit') || 
+          lowercaseError.includes('balance')
+        ) {
+          console.warn(`[GeminiService] Detected OpenRouter balance/credit error. Notifying admins...`);
+          AdminNotifierService.notifyBalanceError('OpenRouter (Gemini)', formattedError).catch(err => 
+            console.error('[GeminiService] Failed to notify admins:', err.message)
+          );
+        }
         throw new Error(formattedError);
       }
 

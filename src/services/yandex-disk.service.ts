@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'node:path';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
 
 const requestOptions = {
   family: 4 as const,
@@ -78,22 +79,27 @@ export class YandexDiskService {
     await this.ensureFolder(this.rootFolder);
     await this.ensureFolder(folderPath);
 
-    const uploadUrl = await this.getUploadUrl(diskPath);
-    await axios.put(uploadUrl, await fs.readFile(input.filePath), {
-      headers: {
-        'Content-Type': 'application/octet-stream',
-      },
-      ...requestOptions,
-      maxBodyLength: Infinity,
-    });
+    try {
+      const uploadUrl = await this.getUploadUrl(diskPath);
+      await axios.put(uploadUrl, await fs.readFile(input.filePath), {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+        ...requestOptions,
+        maxBodyLength: Infinity,
+      });
 
-    const downloadUrl = await this.getDownloadUrlForPath(diskPath);
+      const downloadUrl = await this.getDownloadUrlForPath(diskPath);
 
-    return {
-      diskPath,
-      downloadUrl,
-      syncedAt: new Date().toISOString(),
-    };
+      return {
+        diskPath,
+        downloadUrl,
+        syncedAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      this.handleDiskError('Upload Reference', error);
+      throw error;
+    }
   }
 
   public static async deleteResource(diskPath: string): Promise<void> {
@@ -112,6 +118,7 @@ export class YandexDiskService {
       });
     } catch (error: any) {
       if (error.response?.status !== 404) {
+        this.handleDiskError('Delete Resource', error);
         throw error;
       }
     }
@@ -189,24 +196,45 @@ export class YandexDiskService {
     await this.ensureFolder(path.posix.dirname(folderPath));
     await this.ensureFolder(folderPath);
 
-    const uploadUrl = await this.getUploadUrl(diskPath);
-    await axios.put(uploadUrl, fs.createReadStream(input.filePath), {
-      headers: {
-        'Content-Type': 'video/mp4',
-      },
-      ...requestOptions,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      timeout: 600000,
-    });
+    try {
+      const uploadUrl = await this.getUploadUrl(diskPath);
+      await axios.put(uploadUrl, fs.createReadStream(input.filePath), {
+        headers: {
+          'Content-Type': 'video/mp4',
+        },
+        ...requestOptions,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 600000,
+      });
 
-    const downloadUrl = await this.getDownloadUrlForPath(diskPath);
+      const downloadUrl = await this.getDownloadUrlForPath(diskPath);
 
-    return {
-      diskPath,
-      downloadUrl,
-      syncedAt: new Date().toISOString(),
-    };
+      return {
+        diskPath,
+        downloadUrl,
+        syncedAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      this.handleDiskError('Upload Generated Video File', error);
+      throw error;
+    }
+  }
+
+  private static handleDiskError(operation: string, error: any): void {
+    const status = error.response?.status;
+    const errorData = error.response?.data;
+    const details = errorData ? JSON.stringify(errorData) : error.message;
+
+    console.error(`[YandexDiskService] ${operation} error (status=${status}):`, details);
+
+    // Detect auth or space errors
+    if (status === 401 || status === 403 || status === 507) {
+      console.warn(`[YandexDiskService] Detected critical Yandex Disk error (${status}). Notifying admins...`);
+      AdminNotifierService.notifyBalanceError('Yandex Disk', `[${status}] ${details}`).catch(err => 
+        console.error('[YandexDiskService] Failed to notify admins:', err.message)
+      );
+    }
   }
 
   private static async ensureFolder(folderPath: string): Promise<void> {
