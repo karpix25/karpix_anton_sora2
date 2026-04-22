@@ -92,6 +92,7 @@ function normalizeOverlays(value: unknown): ReferenceTextOverlay[] {
         box: Boolean(overlay.box),
         boxColor: typeof overlay.boxColor === 'string' ? overlay.boxColor : '#000000',
         boxOpacity: clamp(toNumberOr(overlay.boxOpacity, 0), 0, 1),
+        isStatic: Boolean(overlay.isStatic),
       } satisfies ReferenceTextOverlay;
     })
     .filter((item): item is ReferenceTextOverlay => Boolean(item));
@@ -155,7 +156,8 @@ export class TextOverlayService {
       "textColor": "#FFFFFF",
       "box": false,
       "boxColor": "#000000",
-      "boxOpacity": 0.0
+      "boxOpacity": 0.0,
+      "isStatic": false
     }
   ]
 }
@@ -164,6 +166,7 @@ export class TextOverlayService {
 - Возвращай только валидный JSON, без markdown.
 - Если текста нет, верни {"overlays":[]}.
 - Определи все видимые тексты, их тайминг и примерное положение на кадре.
+- Помечай "isStatic": true для текста, который присутствует на протяжении почти всего ролика (вотермарки, подписи автора, логотип канала).
 - anchor используй только из набора: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right.
 - xPercent и yPercent в диапазоне 0..1.
 - fontSizePercent тоже в долях высоты кадра, обычно 0.025..0.08.

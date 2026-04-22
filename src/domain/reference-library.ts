@@ -29,6 +29,7 @@ export interface ReferenceTextOverlay {
   box: boolean;
   boxColor: string;
   boxOpacity: number;
+  isStatic?: boolean;
 }
 
 export interface ReferenceLibraryItem {

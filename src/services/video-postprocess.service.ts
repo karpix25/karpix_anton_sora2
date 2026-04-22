@@ -862,11 +862,26 @@ export class VideoPostprocessService {
       const endFrameTextTrimmed = typeof input.endFrameText === 'string' ? input.endFrameText.trim() : '';
       let effectiveTextOverlays = input.textOverlays ? [...input.textOverlays] : [];
 
-      if (endFrameTextTrimmed) {
-        try {
-          const totalDuration = await getVideoDuration(input.generatedVideoUrl);
-          if (totalDuration > 0.1) {
-            const endFrameStart = 0;
+      try {
+        const totalDuration = await getVideoDuration(input.generatedVideoUrl);
+        
+        // Handle static overlays from reference (extend to full duration)
+        effectiveTextOverlays = effectiveTextOverlays.map(overlay => {
+          if (overlay.isStatic) {
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: extending static overlay "${overlay.text.slice(0, 20)}..." to full duration (0.00s–${totalDuration.toFixed(2)}s)`);
+            return {
+              ...overlay,
+              startSeconds: 0,
+              endSeconds: totalDuration,
+            };
+          }
+          return overlay;
+        });
+
+        // Handle custom end-frame CTA (last 3 seconds)
+        if (endFrameTextTrimmed) {
+          if (totalDuration > 3) {
+            const endFrameStart = Math.max(0, totalDuration - 3);
             const endFrameEnd = totalDuration;
             const endFrameVerticalMargin = input.endFrameVerticalMargin ?? 320;
             const endFrameWidthPercent = input.endFrameWidthPercent ?? 50;
@@ -875,7 +890,7 @@ export class VideoPostprocessService {
             effectiveTextOverlays = [
               ...effectiveTextOverlays,
               {
-                id: 'static-overlay-text',
+                id: 'end-frame-text',
                 text: endFrameTextTrimmed,
                 startSeconds: endFrameStart,
                 endSeconds: endFrameEnd,
@@ -889,13 +904,13 @@ export class VideoPostprocessService {
                 boxOpacity: 0,
               },
             ];
-            console.log(`[VideoPostprocessService] Task ${input.taskId}: static overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: endFrameText overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
           } else {
-            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for overlay (${totalDuration.toFixed(2)}s), skipping`);
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for end-frame CTA (${totalDuration.toFixed(2)}s < 3s), skipping`);
           }
-        } catch (err: any) {
-          console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to get video duration for endFrameText: ${err?.message || err}`);
         }
+      } catch (err: any) {
+        console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to get video duration for overlays: ${err?.message || err}`);
       }
 
       if (!effectiveTextOverlays.length) {
