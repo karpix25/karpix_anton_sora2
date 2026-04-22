@@ -220,8 +220,12 @@ export class KieService {
               continue;
             }
           }
-          console.error('Kie.ai Generation Error:', error.response?.data || error.message);
-          throw new Error(`Video generation start failed: ${error.message}`);
+          const errorData = error.response?.data;
+          const status = error.response?.status;
+          console.error(`[KieService] Generation error (status=${status}):`, errorData || error.message);
+          
+          const details = errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData)) : error.message;
+          throw new Error(`Video generation start failed (Kie): ${details}`);
         }
       }
       throw new Error('Failed to start video generation after multiple rate-limit retries.');

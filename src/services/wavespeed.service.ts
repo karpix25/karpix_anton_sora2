@@ -35,28 +35,37 @@ export class WaveSpeedService {
     const duration = normalizeDurationSeconds(referenceDurationSeconds);
     console.log(`[WaveSpeedService] Creating Sora2 task: duration=${duration}s`);
 
-    const response = await axios.post(
-      `${config.waveSpeed.baseUrl}/openai/sora-2/image-to-video`,
-      {
-        image: imageUrl,
-        prompt,
-        duration,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${config.waveSpeed.apiKey}`,
-          'Content-Type': 'application/json',
+    try {
+      const response = await axios.post(
+        `${config.waveSpeed.baseUrl}/openai/sora-2/image-to-video`,
+        {
+          image_url: imageUrl,
+          prompt,
+          duration,
         },
+        {
+          headers: {
+            'Authorization': `Bearer ${config.waveSpeed.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const predictionId = response.data?.data?.id;
+      if (!predictionId) {
+        throw new Error('WaveSpeed did not return a prediction id');
       }
-    );
 
-    const predictionId = response.data?.data?.id;
-    if (!predictionId) {
-      throw new Error('WaveSpeed did not return a prediction id');
+      console.log(`[WaveSpeedService] Task created: predictionId=${predictionId}`);
+      return predictionId;
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      const status = error.response?.status;
+      console.error(`[WaveSpeedService] Generation error (status=${status}):`, errorData || error.message);
+      
+      const details = errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData)) : error.message;
+      throw new Error(`Video generation fallback failed (WaveSpeed): ${details}`);
     }
-
-    console.log(`[WaveSpeedService] Task created: predictionId=${predictionId}`);
-    return predictionId;
   }
 
   public static async pollStatus(predictionId: string): Promise<string> {

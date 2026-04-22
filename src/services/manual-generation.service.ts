@@ -169,8 +169,11 @@ export class ManualGenerationService {
           promptText,
         });
       } else {
-        console.log(`[ManualGenerationService] Task ${task.id}: reusing previously generated prompt.`);
+        console.log(`[ManualGenerationService] Task ${task.id}: reusing previously generated prompt (length: ${promptText.length}).`);
       }
+
+      // Sanitize prompt for providers (trim and reasonable length limit)
+      const sanitizedPrompt = promptText.trim().slice(0, 1000);
 
       const generationReferenceImageUrl = await ProjectReferenceService.getGenerationReferenceImageUrl(
         project
@@ -188,8 +191,9 @@ export class ManualGenerationService {
           `[ManualGenerationService] Task ${task.id}: reusing existing generated video URL and continuing from postprocess.`
         );
       } else {
+        console.log(`[ManualGenerationService] Task ${task.id}: starting generation with model=${project.selectedModel}, promptLength=${sanitizedPrompt.length}...`);
         const generationResult = await VideoGenerationService.generateWithFallback({
-          prompt: promptText,
+          prompt: sanitizedPrompt,
           imageUrl: generationReferenceImageUrl,
           model: project.selectedModel,
           referenceDurationSeconds: audio.durationSeconds,
