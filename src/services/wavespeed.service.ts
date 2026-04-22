@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
 
 function getResultVideoUrl(data: any): string {
   if (Array.isArray(data?.outputs) && data.outputs[0]) {
@@ -64,6 +65,22 @@ export class WaveSpeedService {
       console.error(`[WaveSpeedService] Generation error (status=${status}):`, errorData || error.message);
       
       const details = errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData)) : error.message;
+      const lowercaseDetails = details.toLowerCase();
+
+      // Detect balance errors
+      if (
+        status === 402 || 
+        lowercaseDetails.includes('insufficient') || 
+        lowercaseDetails.includes('balance') || 
+        lowercaseDetails.includes('credits') ||
+        lowercaseDetails.includes('not enough funds')
+      ) {
+        console.warn('[WaveSpeedService] Detected balance/credit error. Notifying admins...');
+        AdminNotifierService.notifyBalanceError('WaveSpeed', details).catch(err => 
+          console.error('[WaveSpeedService] Failed to notify admins:', err.message)
+        );
+      }
+
       throw new Error(`Video generation fallback failed (WaveSpeed): ${details}`);
     }
   }

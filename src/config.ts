@@ -98,11 +98,19 @@ function deriveWebhookPathFromUrl(webhookUrl: string): string {
   }
 }
 
+function parseCommaSeparated(value: string | undefined): string[] {
+  return (value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.TELEGRAM_BOT_TOKEN || ''),
     handlerTimeoutMs: parsePositiveInt(process.env.TELEGRAM_HANDLER_TIMEOUT_MS, 20 * 60 * 1000),
+    adminIds: parseCommaSeparated(process.env.TELEGRAM_ADMIN_IDS),
     webhook: {
       enabled: parseBoolean(process.env.TELEGRAM_USE_WEBHOOK, false),
       url: process.env.TELEGRAM_WEBHOOK_URL || '',

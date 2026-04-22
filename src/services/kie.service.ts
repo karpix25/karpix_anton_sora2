@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
 
 function pickFirstNonEmptyString(...values: unknown[]): string {
@@ -225,6 +226,22 @@ export class KieService {
           console.error(`[KieService] Generation error (status=${status}):`, errorData || error.message);
           
           const details = errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData)) : error.message;
+          const lowercaseDetails = details.toLowerCase();
+
+          // Detect balance errors
+          if (
+            status === 402 || 
+            lowercaseDetails.includes('insufficient') || 
+            lowercaseDetails.includes('balance') || 
+            lowercaseDetails.includes('credits') ||
+            lowercaseDetails.includes('not enough funds')
+          ) {
+            console.warn('[KieService] Detected balance/credit error. Notifying admins...');
+            AdminNotifierService.notifyBalanceError('Kie.ai', details).catch(err => 
+              console.error('[KieService] Failed to notify admins:', err.message)
+            );
+          }
+
           throw new Error(`Video generation start failed (Kie): ${details}`);
         }
       }
