@@ -191,7 +191,7 @@ export class InstagramService {
       if (error instanceof InstagramParseError) {
         throw error;
       }
-      throw new Error(`Ошибка при разборе Instagram Reel: ${details}`);
+      throw new Error(`Ошибка при разборе Instagram Reel (RapidAPI): ${details}`);
     }
   }
 

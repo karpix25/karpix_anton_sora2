@@ -98,7 +98,7 @@ export class YandexDiskService {
       };
     } catch (error: any) {
       this.handleDiskError('Upload Reference', error);
-      throw error;
+      throw new Error(`Yandex Disk operation failed (Yandex Disk): ${error.message}`);
     }
   }
 
@@ -119,7 +119,7 @@ export class YandexDiskService {
     } catch (error: any) {
       if (error.response?.status !== 404) {
         this.handleDiskError('Delete Resource', error);
-        throw error;
+        throw new Error(`Yandex Disk operation failed (Yandex Disk): ${error.message}`);
       }
     }
   }
@@ -217,7 +217,7 @@ export class YandexDiskService {
       };
     } catch (error: any) {
       this.handleDiskError('Upload Generated Video File', error);
-      throw error;
+      throw new Error(`Yandex Disk operation failed (Yandex Disk): ${error.message}`);
     }
   }
 

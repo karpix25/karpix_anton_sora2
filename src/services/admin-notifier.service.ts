@@ -29,9 +29,21 @@ export class AdminNotifierService {
 
   /**
    * Translates common technical errors into human-readable Russian.
+   * Now includes provider identification for better clarity.
    */
-  public static translateError(errorContent: string): string {
+  public static translateError(errorContent: string, explicitProvider?: string): string {
     const lowercase = errorContent.toLowerCase();
+    
+    // Try to extract provider from string if not provided (e.g. "(WaveSpeed)" or "(Kie)")
+    let provider = explicitProvider;
+    if (!provider) {
+      const match = errorContent.match(/\(([^)]+)\)/);
+      if (match) {
+        provider = match[1];
+      }
+    }
+
+    const providerSuffix = provider ? ` (${provider})` : '';
 
     if (
       lowercase.includes('insufficient') || 
@@ -39,23 +51,24 @@ export class AdminNotifierService {
       lowercase.includes('credits') ||
       lowercase.includes('not enough funds')
     ) {
-      return '❌ Недостаточно средств на балансе провайдера. Пожалуйста, пополните счет.';
+      return `❌ Недостаточно средств на балансе провайдера${providerSuffix}. Пожалуйста, пополните счет.`;
     }
 
     if (lowercase.includes('limit') || lowercase.includes('rate limit') || lowercase.includes('too many requests')) {
-      return '⏳ Исчерпан лимит запросов к сервису. Попробуйте позже.';
+      return `⏳ Исчерпан лимит запросов к сервису${providerSuffix}. Попробуйте позже.`;
     }
 
     if (lowercase.includes('invalid') && (lowercase.includes('token') || lowercase.includes('key'))) {
-      return '🔑 Ошибка авторизации: неверный API-ключ или токен.';
+      return `🔑 Ошибка авторизации${providerSuffix}: неверный API-ключ или токен.`;
     }
 
     if (lowercase.includes('timeout') || lowercase.includes('timed out')) {
-      return '⏱ Превышено время ожидания ответа от сервиса.';
+      return `⏱ Превышено время ожидания ответа от сервиса${providerSuffix}.`;
     }
 
     if (lowercase.includes('disk') && (lowercase.includes('full') || lowercase.includes('space') || lowercase.includes('507'))) {
-      return '💾 Недостаточно места на Яндекс Диске для сохранения видео.';
+      const diskLabel = provider || 'Яндекс Диск';
+      return `💾 Недостаточно места на ${diskLabel} для сохранения видео.`;
     }
 
     return errorContent; // Return original if unknown
