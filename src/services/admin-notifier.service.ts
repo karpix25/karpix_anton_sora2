@@ -28,6 +28,40 @@ export class AdminNotifierService {
   }
 
   /**
+   * Translates common technical errors into human-readable Russian.
+   */
+  public static translateError(errorContent: string): string {
+    const lowercase = errorContent.toLowerCase();
+
+    if (
+      lowercase.includes('insufficient') || 
+      lowercase.includes('balance') || 
+      lowercase.includes('credits') ||
+      lowercase.includes('not enough funds')
+    ) {
+      return '❌ Недостаточно средств на балансе провайдера. Пожалуйста, пополните счет.';
+    }
+
+    if (lowercase.includes('limit') || lowercase.includes('rate limit') || lowercase.includes('too many requests')) {
+      return '⏳ Исчерпан лимит запросов к сервису. Попробуйте позже.';
+    }
+
+    if (lowercase.includes('invalid') && (lowercase.includes('token') || lowercase.includes('key'))) {
+      return '🔑 Ошибка авторизации: неверный API-ключ или токен.';
+    }
+
+    if (lowercase.includes('timeout') || lowercase.includes('timed out')) {
+      return '⏱ Превышено время ожидания ответа от сервиса.';
+    }
+
+    if (lowercase.includes('disk') && (lowercase.includes('full') || lowercase.includes('space') || lowercase.includes('507'))) {
+      return '💾 Недостаточно места на Яндекс Диске для сохранения видео.';
+    }
+
+    return errorContent; // Return original if unknown
+  }
+
+  /**
    * Specifically handles balance/credit exhaustion errors.
    */
   public static async notifyBalanceError(providerName: string, errorDetails: string): Promise<void> {

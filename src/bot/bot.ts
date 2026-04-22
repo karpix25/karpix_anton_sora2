@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { InstagramService, InstagramParseError } from '../services/instagram.service.js';
 import { GeminiService } from '../services/gemini.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
+import { AdminNotifierService } from '../services/admin-notifier.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
 import { TextOverlayService } from '../services/text-overlay.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
@@ -475,7 +476,8 @@ bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
       replyParams,
     });
   } catch (error: any) {
-    const errorText = `❌ Ошибка повторной генерации: ${error?.message || String(error)}`;
+    const localizedMsg = AdminNotifierService.translateError(error?.message || String(error));
+    const errorText = `❌ Ошибка повторной генерации: ${localizedMsg}`;
     if (statusMsg) {
       await ctx.telegram
         .editMessageText(ctx.chat.id, statusMsg.message_id, undefined, errorText)
@@ -563,7 +565,8 @@ bot.on(message('text'), async (ctx) => {
         status: 'parsed',
       }) || libraryItem;
     } catch (error: any) {
-      await updateStatus(`❌ Ошибка парсинга: ${error.message}`);
+      const localizedMsg = AdminNotifierService.translateError(error.message);
+      await updateStatus(`❌ Ошибка парсинга: ${localizedMsg}`);
       await referenceLibraryStore.updateItem(libraryItem.id, { status: 'failed', errorMessage: error.message });
       return;
     }
@@ -602,9 +605,10 @@ bot.on(message('text'), async (ctx) => {
         });
       } catch (error: any) {
         const errorMsg = error.message || String(error) || 'Unknown error';
+        const localizedMsg = AdminNotifierService.translateError(errorMsg);
         console.error('Background Process Error:', error);
         
-        const errorText = `❌ Ошибка генерации для ${reelUrl}:\n\n${errorMsg}`;
+        const errorText = `❌ Ошибка генерации для ${reelUrl}:\n\n${localizedMsg}`;
         await ctx.telegram.editMessageText(chatId, initialStatusMsg.message_id, undefined, errorText).catch(() => {
           ctx.reply(errorText, replyParams).catch(() => {});
         });
