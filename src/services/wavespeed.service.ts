@@ -39,7 +39,7 @@ export class WaveSpeedService {
       const response = await axios.post(
         `${config.waveSpeed.baseUrl}/openai/sora-2/image-to-video`,
         {
-          image_url: imageUrl,
+          image: imageUrl,
           prompt,
           duration,
         },
