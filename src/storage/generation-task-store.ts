@@ -45,7 +45,11 @@ function normalizeStatus(value: unknown): GenerationTaskStatus {
 }
 
 function normalizeProvider(value: unknown): GenerationProvider {
-  return value === 'wavespeed' ? 'wavespeed' : 'kie';
+  const providers: GenerationProvider[] = ['kie', 'aihubmix', 'laozhang', 'defapi', 'defapi-stable'];
+  if (typeof value === 'string' && (providers as string[]).includes(value)) {
+    return value as GenerationProvider;
+  }
+  return 'kie';
 }
 
 function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): GenerationTask {

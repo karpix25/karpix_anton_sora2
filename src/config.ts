@@ -143,11 +143,20 @@ export const config = {
     apiKey: process.env.KIE_AI_API_KEY || '',
     baseUrl: 'https://api.kie.ai/api/v1',
   },
-  waveSpeed: {
-    apiKey: process.env.WAVESPEED_API_KEY || '',
-    baseUrl: 'https://api.wavespeed.ai/api/v3',
-    sora2DurationSeconds: Number(process.env.WAVESPEED_SORA2_DURATION || 4),
-    isConfigured: isConfiguredSecret(process.env.WAVESPEED_API_KEY || ''),
+  aihubmix: {
+    apiKey: process.env.AIHUBMIX_API_KEY || '',
+    baseUrl: 'https://aihubmix.com/v1',
+    isConfigured: isConfiguredSecret(process.env.AIHUBMIX_API_KEY || ''),
+  },
+  laozhang: {
+    apiKey: process.env.LAOZHANG_API_KEY || '',
+    baseUrl: 'https://api.laozhang.ai/v1',
+    isConfigured: isConfiguredSecret(process.env.LAOZHANG_API_KEY || ''),
+  },
+  defapi: {
+    apiKey: process.env.DEFAPI_API_KEY || '',
+    baseUrl: 'https://api.defapi.org', // Base without v1 for native API
+    isConfigured: isConfiguredSecret(process.env.DEFAPI_API_KEY || ''),
   },
   yandexDisk: {
     token: process.env.YANDEX_TOKEN || '',
@@ -164,6 +173,9 @@ if (
   !config.telegram.isConfigured ||
   !config.openRouter.apiKey ||
   !config.kieAi.apiKey ||
+  !config.aihubmix.apiKey ||
+  !config.laozhang.apiKey ||
+  !config.defapi.apiKey ||
   !config.rapidApi.key ||
   !config.yandexDisk.isConfigured
 ) {
