@@ -10,7 +10,7 @@ export class LaozhangService {
   ): Promise<string> {
     try {
       const response = await axios.post(
-        `${config.laozhang.baseUrl}/sora2/gen`,
+        `${config.laozhang.baseUrl}/videos`,
         {
           model: model,
           prompt: prompt,

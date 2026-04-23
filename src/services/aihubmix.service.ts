@@ -17,10 +17,10 @@ export class AihubmixService {
     imageUrl?: string,
     aspect_ratio: string = '9:16'
   ): Promise<string> {
-    const content: any[] = [{ type: 'text', text: prompt }];
+    const messageContent: any[] = [{ type: 'text', text: prompt }];
     
     if (imageUrl) {
-      content.push({
+      messageContent.push({
         type: 'image_url',
         image_url: { url: imageUrl }
       });
@@ -34,7 +34,7 @@ export class AihubmixService {
           messages: [
             {
               role: 'user',
-              content: content,
+              content: messageContent,
             },
           ],
         },
@@ -47,19 +47,19 @@ export class AihubmixService {
         }
       );
 
-      const content = response.data?.choices?.[0]?.message?.content || '';
-      if (!content) {
+      const responseContent = response.data?.choices?.[0]?.message?.content || '';
+      if (!responseContent) {
         throw new Error(`Empty response from aggregator (${config.model})`);
       }
 
       // Extract URL from content (markdown or plain text)
       const urlRegex = /(https?:\/\/[^\s\)]+)/g;
-      const matches = content.match(urlRegex);
+      const matches = responseContent.match(urlRegex);
 
       if (!matches || matches.length === 0) {
         // Some providers might return the video URL directly if they use image/video generation format
         // but since we are using chat/completions as requested for AIHUBMIX, we parse text.
-        throw new Error(`No video URL found in response from ${config.model}: ${content.substring(0, 100)}...`);
+        throw new Error(`No video URL found in response from ${config.model}: ${responseContent.substring(0, 100)}...`);
       }
 
       // Return the first URL found

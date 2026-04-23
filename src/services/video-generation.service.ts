@@ -68,7 +68,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'openai/sora-2', '9:16');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2', '9:16');
         const url = await DefApiService.pollStatus(taskId);
         if (typeof url !== 'string') throw new Error('Invalid URL returned from DefAPI');
         return { provider: 'defapi', providerTaskId: taskId, resultVideoUrl: url };
@@ -81,7 +81,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI Stable (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'openai/sora-2-stable', '9:16');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2-stable', '9:16');
         const url = await DefApiService.pollStatus(taskId);
         return { provider: 'defapi-stable', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
