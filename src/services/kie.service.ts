@@ -171,13 +171,12 @@ export class KieService {
    */
   public static async generateVideo(
     prompt: string,
-    imageUrls: string[],
+    imageUrl: string,
     model: string,
     options: {
       mode?: 'fun' | 'normal' | 'spicy';
       resolution?: '480p' | '720p';
       aspect_ratio?: string;
-      duration?: number;
     } = {}
   ): Promise<string> {
     return this.generationRateLimiter.schedule(async () => {
@@ -199,14 +198,13 @@ export class KieService {
 
           const input: any = {
             prompt,
-            image_urls: imageUrls,
+            image_urls: [imageUrl],
           };
 
           if (isGrok) {
              input.mode = options.mode || 'normal';
              input.resolution = options.resolution || '720p';
              input.aspect_ratio = options.aspect_ratio || '9:16';
-             input.duration = options.duration ? Math.min(15, Math.max(1, Math.round(options.duration))) : 10;
              input.nsfw_checker = false;
           } else {
              input.aspect_ratio = 'portrait';

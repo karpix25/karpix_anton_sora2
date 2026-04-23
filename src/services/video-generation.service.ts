@@ -16,7 +16,7 @@ export interface VideoGenerationResult {
 export class VideoGenerationService {
   public static async generateWithFallback(input: {
     prompt: string;
-    imageUrls: string[];
+    imageUrl: string;
     model: VideoModel;
     referenceDurationSeconds?: number;
   }): Promise<VideoGenerationResult> {
@@ -24,24 +24,31 @@ export class VideoGenerationService {
     const effectiveModel = sysConfig.forceGrokImagine ? 'grok-imagine' : input.model;
 
     console.log(
-      `[VideoGenerationService] Starting generation: model=${effectiveModel} (original=${input.model}), imageUrls=${input.imageUrls.length}`
+      `[VideoGenerationService] Starting generation: model=${effectiveModel} (original=${input.model}), imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
     );
-
-    const primaryImageUrl = input.imageUrls[0] || '';
-    const promptWithFormat = `${input.prompt} portrait, 9:16, 10 seconds`;
 
     // 1. KIE.AI (Primary)
     try {
       console.log(`[VideoGenerationService] Attempting Kie.ai (${effectiveModel})...`);
+      const isGrok = effectiveModel.includes('grok');
+      let promptWithFormat = input.prompt;
+
+      if (isGrok) {
+        // Grok requires referencing the image in the prompt as @image1
+        promptWithFormat = `@image1 ${input.prompt}`;
+      } else {
+        // Sora-specific format hints
+        promptWithFormat = `portrait, 9:16, 10 seconds, ${input.prompt}`;
+      }
+
       const taskId = await KieService.generateVideo(
         promptWithFormat, 
-        input.imageUrls, 
+        input.imageUrl, 
         effectiveModel,
         {
           mode: sysConfig.grokMode,
           resolution: sysConfig.grokResolution,
-          aspect_ratio: '9:16',
-          duration: input.referenceDurationSeconds
+          aspect_ratio: '9:16'
         }
       );
       const url = await KieService.pollStatus(taskId);
@@ -57,7 +64,7 @@ export class VideoGenerationService {
         const url = await AihubmixService.generateVideo(
           { ...config.aihubmix, model: 'web-sora-2' },
           promptWithFormat,
-          primaryImageUrl,
+          input.imageUrl,
           '9:16'
         );
         return { provider: 'aihubmix', providerTaskId: 'synced', resultVideoUrl: url };
@@ -70,7 +77,7 @@ export class VideoGenerationService {
     if (config.laozhang.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting Laozhang (Async)...');
-        const taskId = await LaozhangService.generateVideo(promptWithFormat, primaryImageUrl, 'sora-2', '9:16');
+        const taskId = await LaozhangService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2', '9:16');
         const url = await LaozhangService.pollStatus(taskId);
         if (typeof url !== 'string') throw new Error('Invalid URL returned from Laozhang');
         return { provider: 'laozhang', providerTaskId: taskId, resultVideoUrl: url };
@@ -83,7 +90,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, primaryImageUrl, 'sora-2', '9:16');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2', '9:16');
         const url = await DefApiService.pollStatus(taskId);
         if (typeof url !== 'string') throw new Error('Invalid URL returned from DefAPI');
         return { provider: 'defapi', providerTaskId: taskId, resultVideoUrl: url };
@@ -96,7 +103,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI Stable (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, primaryImageUrl, 'sora-2-stable', '9:16');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2-stable', '9:16');
         const url = await DefApiService.pollStatus(taskId);
         return { provider: 'defapi-stable', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
