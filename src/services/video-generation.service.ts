@@ -57,6 +57,7 @@ export class VideoGenerationService {
         console.log('[VideoGenerationService] Attempting Laozhang (Async)...');
         const taskId = await LaozhangService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2');
         const url = await LaozhangService.pollStatus(taskId);
+        if (typeof url !== 'string') throw new Error('Invalid URL returned from Laozhang');
         return { provider: 'laozhang', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
         console.warn('Laozhang failed, trying DefAPI...', error instanceof Error ? error.message : error);
@@ -69,6 +70,7 @@ export class VideoGenerationService {
         console.log('[VideoGenerationService] Attempting DefAPI (Async)...');
         const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2');
         const url = await DefApiService.pollStatus(taskId);
+        if (typeof url !== 'string') throw new Error('Invalid URL returned from DefAPI');
         return { provider: 'defapi', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
         console.warn('DefAPI failed, trying DefAPI Stable...', error instanceof Error ? error.message : error);

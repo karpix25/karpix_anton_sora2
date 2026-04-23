@@ -52,13 +52,18 @@ export class DefApiService {
         const rawStatus = (data.status || data.state || '').toLowerCase();
         
         // Exhaustive URL search
-        const url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
-                    root.video_url || root.url || root.result || root.videoUrl || root.download_url;
+        let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
+                  root.video_url || root.url || root.result || root.videoUrl || root.download_url;
 
-        if (['success', 'completed', 'succeeded', 'finished'].includes(rawStatus) || url) {
-          if (!url) {
-            console.warn(`[DefAPI] Task marked as done (${rawStatus}) but no URL found. Keys:`, Object.keys(data));
-            throw new Error('DefAPI task completed but no URL found');
+        // Ensure we have a string, as some APIs return nested objects in these fields
+        if (url && typeof url !== 'string') {
+          url = (url as any).url || (url as any).video_url || (url as any).playback || (url as any).download || null;
+        }
+
+        if (['success', 'completed', 'succeeded', 'finished'].includes(rawStatus) || (url && typeof url === 'string')) {
+          if (!url || typeof url !== 'string') {
+            console.warn(`[DefAPI] Task marked as done but no valid URL string found. Data:`, data);
+            throw new Error('DefAPI task completed but no valid URL found');
           }
           return url;
         }

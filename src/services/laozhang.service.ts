@@ -51,13 +51,18 @@ export class LaozhangService {
         const rawStatus = (data.status || data.state || root.status || root.state || '').toLowerCase();
         
         // Exhaustive URL search
-        const url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
-                    root.video_url || root.url || root.result || root.videoUrl || root.download_url;
+        let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
+                  root.video_url || root.url || root.result || root.videoUrl || root.download_url;
 
-        if (['completed', 'succeeded', 'success', 'finished'].includes(rawStatus) || url) {
-          if (!url) {
-            console.warn(`[Laozhang] Task marked as done (${rawStatus}) but no URL found. Keys:`, Object.keys(data));
-            throw new Error('Laozhang task completed but no URL found');
+        // Ensure we have a string, as some APIs return nested objects in these fields
+        if (url && typeof url !== 'string') {
+          url = (url as any).url || (url as any).video_url || (url as any).playback || (url as any).download || null;
+        }
+
+        if (['completed', 'succeeded', 'success', 'finished'].includes(rawStatus) || (url && typeof url === 'string')) {
+          if (!url || typeof url !== 'string') {
+            console.warn(`[Laozhang] Task marked as done but no valid URL string found. Data:`, data);
+            throw new Error('Laozhang task completed but no valid URL found');
           }
           return url;
         }
