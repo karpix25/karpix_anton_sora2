@@ -23,7 +23,7 @@ export class VideoGenerationService {
       `[VideoGenerationService] Starting generation: model=${input.model}, imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
     );
 
-    const promptWithFormat = `${input.prompt} (MANDATORY: vertical 9:16 portrait video only, NO horizontal bars)`;
+    const promptWithFormat = `${input.prompt} portrait, 9:16, 10 seconds`;
 
     // 1. KIE.AI (Primary)
     try {

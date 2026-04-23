@@ -17,10 +17,14 @@ export class AihubmixService {
     imageUrl?: string,
     aspect_ratio: string = '9:16'
   ): Promise<string> {
-    const fullPrompt = `${prompt} (Aspect Ratio: ${aspect_ratio}, portrait)`;
-    const messageContent = imageUrl 
-      ? `[Reference Image: ${imageUrl}]\n\n${fullPrompt}`
-      : fullPrompt;
+    const content: any[] = [{ type: 'text', text: prompt }];
+    
+    if (imageUrl) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: imageUrl }
+      });
+    }
 
     try {
       const response = await axios.post(
@@ -30,7 +34,7 @@ export class AihubmixService {
           messages: [
             {
               role: 'user',
-              content: messageContent,
+              content: content,
             },
           ],
         },
