@@ -9,11 +9,9 @@ export class DefApiService {
         {
           model: model,
           prompt: prompt,
-          image: imageUrl,
+          images: imageUrl ? [imageUrl] : [], // Documentation shows array "images"
           aspect_ratio: '9:16',
-          ratio: '9:16', // Duplicate for compatibility
-          width: 720,
-          height: 1280,
+          duration: '10', // Added as per documentation example
         },
         {
           headers: {

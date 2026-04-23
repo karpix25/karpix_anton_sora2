@@ -14,11 +14,9 @@ export class LaozhangService {
         {
           model: model,
           prompt: prompt,
-          image: imageUrl,
+          images: imageUrl ? [imageUrl] : [], // Array pattern
           aspect_ratio: aspect_ratio,
-          ratio: aspect_ratio, // Duplicate for compatibility
-          width: 720,
-          height: 1280,
+          duration: '10',
         },
         {
           headers: {
