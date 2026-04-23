@@ -76,7 +76,8 @@ export class DefApiService {
         }
 
         if (['fail', 'failed', 'error', 'canceled', 'cancelled'].includes(rawStatus)) {
-          throw new Error(`DefAPI task failed: ${data.message || data.error || 'Unknown error'}`);
+          const errMsg = data.status_reason?.message || data.message || data.error || root.message || 'Unknown error';
+          throw new Error(`DefAPI task failed: ${errMsg}`);
         }
 
         console.log(`[DefAPI] Task ${taskId} status: ${rawStatus || 'pending'}. Waiting...`);
