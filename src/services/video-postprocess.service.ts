@@ -236,6 +236,7 @@ function runFfmpeg(args: string[], options?: RunFfmpegOptions): Promise<void> {
         return;
       }
 
+      console.error(`[VideoPostprocessService] ${label} FAILED with code ${code}. Full stderr:\n${stderr}`);
       reject(new Error(`ffmpeg завершился с ошибкой (${label}): ${stderr.trim() || `code ${code}`}`));
     });
   });
@@ -255,13 +256,20 @@ async function getVideoDuration(videoPath: string): Promise<number> {
       output += String(data);
     });
 
-    process.on('error', (err) => reject(err));
+    let stderr = '';
+    process.stderr.on('data', (data) => {
+      stderr += String(data);
+    });
+
+    process.on('error', (err) => reject(new Error(`ffprobe process error: ${err.message}`)));
     process.on('close', (code) => {
       if (code === 0) {
         const duration = parseFloat(output.trim());
         resolve(Number.isFinite(duration) ? duration : 0);
       } else {
-        reject(new Error(`ffprobe failed with code ${code}`));
+        const errorMsg = stderr.trim() || `exit code ${code}`;
+        console.error(`[VideoPostprocessService] ffprobe failed for ${videoPath}. Error: ${errorMsg}`);
+        reject(new Error(`ffprobe failed: ${errorMsg}`));
       }
     });
   });
@@ -863,6 +871,16 @@ export class VideoPostprocessService {
       let effectiveTextOverlays = input.textOverlays ? [...input.textOverlays] : [];
 
       try {
+        if (input.generatedVideoUrl.startsWith('http')) {
+          console.log(`[VideoPostprocessService] Task ${input.taskId}: pre-checking remote video ${input.generatedVideoUrl.slice(0, 50)}...`);
+          try {
+            const head = await axios.head(input.generatedVideoUrl, { timeout: 10000 });
+            console.log(`[VideoPostprocessService] Task ${input.taskId}: remote video check: status=${head.status}, type=${head.headers['content-type']}, size=${head.headers['content-length']}`);
+          } catch (e: any) {
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: remote video HEAD check failed (but continuing): ${e.message}`);
+          }
+        }
+        
         const totalDuration = await getVideoDuration(input.generatedVideoUrl);
         
         // Handle static overlays from reference (extend to full duration)
