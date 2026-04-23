@@ -41,8 +41,17 @@ export class GenerationRecoveryService {
     for (const task of tasks) {
       try {
         console.log(`[GenerationRecovery] Resuming task ${task.id} (status=${task.status})`);
-        await ManualGenerationService.resumeTask(task.id);
-        console.log(`[GenerationRecovery] Task ${task.id} resumed successfully.`);
+        const result = await ManualGenerationService.resumeTask(task.id);
+        
+        // Notify admin/topic about completion
+        const { projectStore } = await import('../storage/project-store.js');
+        const project = await projectStore.getProject(task.projectId);
+        if (project) {
+          const { AdminNotifierService } = await import('./admin-notifier.service.js');
+          await AdminNotifierService.sendVideoToProject(project, result);
+        }
+
+        console.log(`[GenerationRecovery] Task ${task.id} resumed successfully and notified.`);
       } catch (error: any) {
         console.error(`[GenerationRecovery] Failed to recover task ${task.id}:`, error?.message || error);
       }

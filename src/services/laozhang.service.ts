@@ -2,15 +2,23 @@ import axios from 'axios';
 import { config } from '../config.js';
 
 export class LaozhangService {
-  public static async generateVideo(prompt: string, imageUrl: string, model: string): Promise<string> {
+  public static async generateVideo(
+    prompt: string, 
+    imageUrl: string, 
+    model: string,
+    aspect_ratio: string = '9:16'
+  ): Promise<string> {
     try {
       const response = await axios.post(
-        `${config.laozhang.baseUrl}/videos`,
+        `${config.laozhang.baseUrl}/sora2/gen`,
         {
-          model: model, // e.g. 'sora-2'
+          model: model,
           prompt: prompt,
-          image_url: imageUrl,
-          aspect_ratio: '9:16',
+          image: imageUrl,
+          aspect_ratio: aspect_ratio,
+          ratio: aspect_ratio, // Duplicate for compatibility
+          width: 720,
+          height: 1280,
         },
         {
           headers: {

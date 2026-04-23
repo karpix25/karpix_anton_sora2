@@ -86,6 +86,34 @@ export class AdminNotifierService {
       `<b>Детали:</b>\n<code>${errorDetails}</code>\n\n` +
       `⚠️ <i>Генерация видео может быть остановлена до пополнения средств.</i>`;
 
-    await this.sendAlert(message);
+  /**
+   * Sends a generated video to the associated Telegram project topic.
+   */
+  public static async sendVideoToProject(project: any, task: any): Promise<void> {
+    if (!project.telegramChatId || !project.telegramTopicId) {
+      console.warn(`[AdminNotifierService] Project ${project.id} not bound to Telegram. Notification skipped.`);
+      return;
+    }
+
+    const videoUrl = task.yandexDownloadUrl || task.resultVideoUrl;
+    if (!videoUrl) return;
+
+    const caption = 
+      `✨ <b>Видео готово!</b> (Восстановлено)\n\n` +
+      `<b>Модель:</b> ${task.targetModel.toUpperCase()}\n` +
+      `<b>Провайдер:</b> ${(task.provider || 'unknown').toUpperCase()}\n` +
+      `<b>ID задачи:</b> <code>${task.id}</code>\n\n` +
+      `<i>Этот ролик был автоматически завершен после перезапуска сервера.</i>`;
+
+    try {
+      await bot.telegram.sendVideo(project.telegramChatId, videoUrl, {
+        caption,
+        parse_mode: 'HTML',
+        message_thread_id: project.telegramTopicId === 'main' ? undefined : Number(project.telegramTopicId),
+      });
+      console.log(`[AdminNotifierService] Result video sent to project ${project.id} in Telegram.`);
+    } catch (error: any) {
+      console.error(`[AdminNotifierService] Failed to send video to Telegram for project ${project.id}:`, error.message);
+    }
   }
 }

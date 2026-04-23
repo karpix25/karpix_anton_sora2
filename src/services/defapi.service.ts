@@ -7,10 +7,13 @@ export class DefApiService {
       const response = await axios.post(
         `${config.defapi.baseUrl}/api/sora2/gen`,
         {
-          model: model, // 'sora-2' or 'sora-2-stable'
+          model: model,
           prompt: prompt,
           image: imageUrl,
           aspect_ratio: '9:16',
+          ratio: '9:16', // Duplicate for compatibility
+          width: 720,
+          height: 1280,
         },
         {
           headers: {
