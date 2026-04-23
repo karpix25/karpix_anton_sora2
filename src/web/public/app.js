@@ -122,6 +122,9 @@ const elements = {
     forceGrokImagine: document.getElementById('forceGrokImagine'),
     grokMode: document.getElementById('grokMode'),
     grokResolution: document.getElementById('grokResolution'),
+    grokDuration: document.getElementById('grokDuration'),
+    grokDurationLabel: document.getElementById('grokDurationLabel'),
+    useReferenceDuration: document.getElementById('useReferenceDuration'),
   },
   textPreviewFrame: document.getElementById('text-style-preview-frame'),
   textPreview: document.getElementById('text-style-preview-element'),
@@ -141,6 +144,15 @@ async function loadGlobalConfig() {
     if (elements.globalConfig.grokResolution) {
       elements.globalConfig.grokResolution.value = config.grokResolution || '720p';
     }
+    if (elements.globalConfig.grokDuration) {
+      elements.globalConfig.grokDuration.value = config.grokDuration || 10;
+      if (elements.globalConfig.grokDurationLabel) {
+        elements.globalConfig.grokDurationLabel.textContent = config.grokDuration || 10;
+      }
+    }
+    if (elements.globalConfig.useReferenceDuration) {
+      elements.globalConfig.useReferenceDuration.checked = !!config.useReferenceDuration;
+    }
   } catch (error) {
     console.error('Failed to load global config:', error);
   }
@@ -151,6 +163,8 @@ async function saveGlobalConfig() {
     forceGrokImagine: elements.globalConfig.forceGrokImagine?.checked || false,
     grokMode: elements.globalConfig.grokMode?.value || 'normal',
     grokResolution: elements.globalConfig.grokResolution?.value || '720p',
+    grokDuration: Number(elements.globalConfig.grokDuration?.value || 10),
+    useReferenceDuration: elements.globalConfig.useReferenceDuration?.checked || false,
   };
   try {
     await api('/api/system/config', { method: 'PUT', body: JSON.stringify(payload) });
@@ -783,6 +797,17 @@ function bindEvents() {
   }
   if (elements.globalConfig.grokResolution) {
     elements.globalConfig.grokResolution.addEventListener('change', saveGlobalConfig);
+  }
+  if (elements.globalConfig.grokDuration) {
+    elements.globalConfig.grokDuration.addEventListener('input', () => {
+      if (elements.globalConfig.grokDurationLabel) {
+        elements.globalConfig.grokDurationLabel.textContent = elements.globalConfig.grokDuration.value;
+      }
+    });
+    elements.globalConfig.grokDuration.addEventListener('change', saveGlobalConfig);
+  }
+  if (elements.globalConfig.useReferenceDuration) {
+    elements.globalConfig.useReferenceDuration.addEventListener('change', saveGlobalConfig);
   }
 
   console.log('✅ Event listeners bound');

@@ -31,14 +31,25 @@ export class VideoGenerationService {
     try {
       console.log(`[VideoGenerationService] Attempting Kie.ai (${effectiveModel})...`);
       const isGrok = effectiveModel.includes('grok');
+      
+      // 1.1 Calculate effective duration (5-30s range per user requirements)
+      let finalDuration = sysConfig.grokDuration || 10;
+      if (sysConfig.useReferenceDuration && input.referenceDurationSeconds) {
+        // Sync with reference video duration, clamped to 5-30s
+        finalDuration = Math.max(5, Math.min(30, Math.ceil(input.referenceDurationSeconds)));
+        console.log(`[VideoGenerationService] Syncing duration with reference: ${input.referenceDurationSeconds}s -> ${finalDuration}s`);
+      } else {
+        console.log(`[VideoGenerationService] Using fixed duration from settings: ${finalDuration}s`);
+      }
+
       let promptWithFormat = input.prompt;
 
       if (isGrok) {
         // Grok requires referencing the image in the prompt as @image1
-        promptWithFormat = `@image1 ${input.prompt}`;
+        promptWithFormat = `@image1 ${input.prompt} ${finalDuration} seconds`;
       } else {
         // Sora-specific format hints
-        promptWithFormat = `portrait, 9:16, 10 seconds, ${input.prompt}`;
+        promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${input.prompt}`;
       }
 
       const taskId = await KieService.generateVideo(
