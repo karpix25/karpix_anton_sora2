@@ -60,7 +60,7 @@ export class VideoGenerationService {
           aspect_ratio: '9:16'
         }
       );
-      const url = await KieService.pollStatus(taskId);
+      const url = await KieService.pollStatus(taskId, effectiveModel);
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {
       console.warn('Kie.ai failed, trying AIHUBMIX...', error instanceof Error ? error.message : error);

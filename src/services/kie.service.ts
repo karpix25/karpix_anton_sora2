@@ -286,14 +286,14 @@ export class KieService {
    * Polls the status of a Kie.ai task until it's finished or fails.
    * @param taskId The ID of the task to poll.
    */
-  public static async pollStatus(taskId: string): Promise<string> {
+  public static async pollStatus(taskId: string, model: string = ''): Promise<string> {
     const maxRetries = 150; 
-    const isVeoTask = taskId.includes('veo_task');
+    const isVeoModel = model.toLowerCase().includes('veo') || taskId.includes('veo_task');
     
     for (let i = 0; i < maxRetries; i++) {
       const delay = i < 4 ? 15000 : 5000; 
       try {
-        const endpoint = isVeoTask 
+        const endpoint = isVeoModel 
           ? `${config.kieAi.baseUrl}/veo/record-info`
           : `${config.kieAi.baseUrl}/jobs/recordInfo`;
 
@@ -310,10 +310,11 @@ export class KieService {
         const root = response.data ?? {};
         const data = root?.data ?? root;
 
-        if (isVeoTask) {
+        if (isVeoModel) {
           // Veo 3.1 specific logic (successFlag: 0=Gen, 1=Success, 2=Failed, 3=Gen Failed)
-          const successFlag = data?.successFlag;
-          const veoResponse = data?.response;
+          // Look at successFlag in data or root
+          const successFlag = data?.successFlag !== undefined ? data.successFlag : root?.successFlag;
+          const veoResponse = data?.response || root?.response;
           
           if (successFlag === 1) {
             const urls = veoResponse?.resultUrls || veoResponse?.originUrls || veoResponse?.fullResultUrls;
