@@ -161,6 +161,15 @@ export async function initDatabase(): Promise<void> {
       ON generation_tasks(project_id, created_at DESC);
   `);
 
+  // Check if system_config table exists and has proper 'id' column.
+  // If not, it might be a stale version from failed previous attempts.
+  try {
+    await db.query(`SELECT id FROM system_config LIMIT 1`);
+  } catch (err) {
+    console.warn('[DB] system_config seems missing "id" column. Dropping and recreating...');
+    await db.query(`DROP TABLE IF EXISTS system_config`);
+  }
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS system_config (
       id TEXT PRIMARY KEY,
@@ -172,7 +181,7 @@ export async function initDatabase(): Promise<void> {
   // Ensure global config exists
   await db.query(`
     INSERT INTO system_config (id, config)
-    VALUES ('global', '{}'::jsonb)
+    VALUES ('global', '{"forceGrokImagine": false, "grokMode": "normal", "grokResolution": "720p"}'::jsonb)
     ON CONFLICT (id) DO NOTHING;
   `);
 
