@@ -46,19 +46,27 @@ export class DefApiService {
 
         const root = response.data;
         const data = root?.data ?? root;
-        const status = (data.status || root.status || '').toLowerCase();
-        const url = data.video_url || data.url || root.video_url || root.url;
+        
+        // Status check - avoid accidental match with root.message ("ok" or "success")
+        const rawStatus = (data.status || data.state || '').toLowerCase();
+        
+        // Exhaustive URL search
+        const url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
+                    root.video_url || root.url || root.result || root.videoUrl || root.download_url;
 
-        if (status === 'success' || status === 'completed' || url) {
-          if (!url) throw new Error('DefAPI task completed but no URL found');
+        if (['success', 'completed', 'succeeded', 'finished'].includes(rawStatus) || url) {
+          if (!url) {
+            console.warn(`[DefAPI] Task marked as done (${rawStatus}) but no URL found. Keys:`, Object.keys(data));
+            throw new Error('DefAPI task completed but no URL found');
+          }
           return url;
         }
 
-        if (['fail', 'failed', 'error'].includes(status)) {
-          throw new Error(`DefAPI task failed: ${data.message || 'Unknown error'}`);
+        if (['fail', 'failed', 'error', 'canceled', 'cancelled'].includes(rawStatus)) {
+          throw new Error(`DefAPI task failed: ${data.message || data.error || 'Unknown error'}`);
         }
 
-        console.log(`[DefAPI] Task ${taskId} status: ${status}. Waiting...`);
+        console.log(`[DefAPI] Task ${taskId} status: ${rawStatus || 'pending'}. Waiting...`);
       } catch (error: any) {
         if (error.message.includes('failed')) throw error;
         console.warn(`[DefAPI] Polling error for ${taskId}:`, error.message);

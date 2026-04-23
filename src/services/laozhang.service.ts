@@ -43,20 +43,29 @@ export class LaozhangService {
           }
         );
 
-        const data = response.data?.data || response.data;
-        const status = (data.status || data.state || '').toLowerCase();
-        const url = data.video_url || data.url || data.result;
+        const root = response.data;
+        const data = root?.data ?? root;
+        
+        // Status check
+        const rawStatus = (data.status || data.state || root.status || root.state || '').toLowerCase();
+        
+        // Exhaustive URL search
+        const url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
+                    root.video_url || root.url || root.result || root.videoUrl || root.download_url;
 
-        if (status === 'completed' || status === 'succeeded' || url) {
-          if (!url) throw new Error('Laozhang task completed but no URL found');
+        if (['completed', 'succeeded', 'success', 'finished'].includes(rawStatus) || url) {
+          if (!url) {
+            console.warn(`[Laozhang] Task marked as done (${rawStatus}) but no URL found. Keys:`, Object.keys(data));
+            throw new Error('Laozhang task completed but no URL found');
+          }
           return url;
         }
 
-        if (['failed', 'error', 'canceled'].includes(status)) {
-          throw new Error(`Laozhang task failed: ${data.error || 'Unknown error'}`);
+        if (['failed', 'error', 'canceled', 'cancelled'].includes(rawStatus)) {
+          throw new Error(`Laozhang task failed: ${data.errorMessage || data.error || data.message || 'Unknown error'}`);
         }
 
-        console.log(`[Laozhang] Task ${taskId} status: ${status}. Waiting...`);
+        console.log(`[Laozhang] Task ${taskId} status: ${rawStatus || 'pending'}. Waiting...`);
       } catch (error: any) {
         if (error.message.includes('failed')) throw error;
         console.warn(`[Laozhang] Polling error for ${taskId}:`, error.message);
