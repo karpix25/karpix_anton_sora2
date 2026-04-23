@@ -119,7 +119,7 @@ const elements = {
     endFrameXPercent: document.getElementById('endFrameXPercent'),
   },
   globalConfig: {
-    forceGrokImagine: document.getElementById('forceGrokImagine'),
+    defaultVideoModel: document.getElementById('defaultVideoModel'),
     grokMode: document.getElementById('grokMode'),
     grokStyle: document.getElementById('grokStyle'),
     grokResolution: document.getElementById('grokResolution'),
@@ -136,8 +136,8 @@ const elements = {
 async function loadGlobalConfig() {
   try {
     const config = await api('/api/system/config');
-    if (elements.globalConfig.forceGrokImagine) {
-      elements.globalConfig.forceGrokImagine.checked = !!config.forceGrokImagine;
+    if (elements.globalConfig.defaultVideoModel) {
+      elements.globalConfig.defaultVideoModel.value = config.defaultVideoModel || 'sora-2';
     }
     if (elements.globalConfig.grokMode) {
       elements.globalConfig.grokMode.value = config.grokMode || 'normal';
@@ -164,7 +164,7 @@ async function loadGlobalConfig() {
 
 async function saveGlobalConfig() {
   const payload = {
-    forceGrokImagine: elements.globalConfig.forceGrokImagine?.checked || false,
+    defaultVideoModel: elements.globalConfig.defaultVideoModel?.value || 'sora-2',
     grokMode: elements.globalConfig.grokMode?.value || 'normal',
     grokStyle: elements.globalConfig.grokStyle?.value || 'vlog',
     grokResolution: elements.globalConfig.grokResolution?.value || '720p',
@@ -794,8 +794,8 @@ function bindEvents() {
     }
   });
 
-  if (elements.globalConfig.forceGrokImagine) {
-    elements.globalConfig.forceGrokImagine.addEventListener('change', saveGlobalConfig);
+  if (elements.globalConfig.defaultVideoModel) {
+    elements.globalConfig.defaultVideoModel.addEventListener('change', saveGlobalConfig);
   }
   if (elements.globalConfig.grokMode) {
     elements.globalConfig.grokMode.addEventListener('change', saveGlobalConfig);

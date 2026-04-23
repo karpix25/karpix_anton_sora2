@@ -186,35 +186,48 @@ export class KieService {
       while (retryCount <= maxRetries) {
         try {
           const isGrok = model.includes('grok');
+          const isVeo = model.includes('veo');
           
+          let endpoint = `${config.kieAi.baseUrl}/jobs/createTask`;
+          let targetModel = model;
+
           // Kie.ai model mapping.
           const modelMapping: Record<string, string> = {
             'sora-2': 'sora-2-image-to-video-stable',
-            'veo-3-1': 'veo-3-1',
+            'veo-3-1': 'veo3_fast', // Using veo3_fast as requested
             'grok-imagine': 'grok-imagine/image-to-video',
           };
 
-          const targetModel = modelMapping[model] || model;
+          targetModel = modelMapping[model] || model;
 
           const input: any = {
             prompt,
-            image_urls: [imageUrl],
           };
 
-          if (isGrok) {
-             input.mode = options.mode || 'normal';
-             input.resolution = options.resolution || '720p';
-             input.aspect_ratio = options.aspect_ratio || '9:16';
-             input.nsfw_checker = false;
+          if (isVeo) {
+            endpoint = `${config.kieAi.baseUrl}/api/v1/veo/generate`;
+            input.imageUrls = [imageUrl];
+            input.model = targetModel;
+            input.aspect_ratio = options.aspect_ratio || '9:16';
+            input.resolution = options.resolution || '720p';
+            input.generationType = 'FIRST_AND_LAST_FRAMES_2_VIDEO';
           } else {
-             input.aspect_ratio = 'portrait';
-             input.n_frames = '10';
-             input.upload_method = 's3';
+            input.image_urls = [imageUrl];
+            if (isGrok) {
+              input.mode = options.mode || 'normal';
+              input.resolution = options.resolution || '720p';
+              input.aspect_ratio = options.aspect_ratio || '9:16';
+              input.nsfw_checker = false;
+            } else {
+              input.aspect_ratio = 'portrait';
+              input.n_frames = '10';
+              input.upload_method = 's3';
+            }
           }
 
           const response = await axios.post(
-            `${config.kieAi.baseUrl}/jobs/createTask`,
-            {
+            endpoint,
+            isVeo ? input : {
               model: targetModel,
               input: input,
             },

@@ -37,14 +37,15 @@
           <div class="card-title-row">
             <div>
               <p class="card-eyebrow">Глобальные настройки</p>
-              <h3>Grok Imagine (Kie.ai)</h3>
+              <h3>Управление моделями</h3>
             </div>
             <div class="toggle-row">
-              <span style="font-weight: 500;">Принудительный Grok Mode</span>
-              <label class="switch">
-                <input type="checkbox" id="forceGrokImagine">
-                <span class="slider round"></span>
-              </label>
+               <span>Основной провайдер</span>
+               <select id="defaultVideoModel" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main);">
+                 <option value="sora-2">Sora 2</option>
+                 <option value="veo-3-1">Veo 3.1 (Google)</option>
+                 <option value="grok-imagine">Grok Imagine</option>
+               </select>
             </div>
           </div>
           <div class="form-grid" style="margin-top: 24px;">
