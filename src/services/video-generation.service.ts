@@ -3,6 +3,7 @@ import { AihubmixService } from './aihubmix.service.js';
 import { LaozhangService } from './laozhang.service.js';
 import { DefApiService } from './defapi.service.js';
 import { config } from '../config.js';
+import { systemConfigStore } from '../storage/system-config-store.js';
 import type { GenerationProvider } from '../domain/generation-task.js';
 import type { VideoModel } from '../domain/project.js';
 
@@ -19,16 +20,28 @@ export class VideoGenerationService {
     model: VideoModel;
     referenceDurationSeconds?: number;
   }): Promise<VideoGenerationResult> {
+    const sysConfig = await systemConfigStore.getConfig();
+    const effectiveModel = sysConfig.forceGrokImagine ? 'grok-imagine' : input.model;
+
     console.log(
-      `[VideoGenerationService] Starting generation: model=${input.model}, imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
+      `[VideoGenerationService] Starting generation: model=${effectiveModel} (original=${input.model}), imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
     );
 
     const promptWithFormat = `${input.prompt} portrait, 9:16, 10 seconds`;
 
     // 1. KIE.AI (Primary)
     try {
-      console.log('[VideoGenerationService] Attempting Kie.ai...');
-      const taskId = await KieService.generateVideo(promptWithFormat, input.imageUrl, input.model);
+      console.log(`[VideoGenerationService] Attempting Kie.ai (${effectiveModel})...`);
+      const taskId = await KieService.generateVideo(
+        promptWithFormat, 
+        input.imageUrl, 
+        effectiveModel,
+        {
+          mode: sysConfig.grokMode,
+          resolution: sysConfig.grokResolution,
+          aspect_ratio: '9:16'
+        }
+      );
       const url = await KieService.pollStatus(taskId);
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {

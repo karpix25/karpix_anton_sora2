@@ -162,8 +162,18 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_generation_tasks_reference_created
-      ON generation_tasks(reference_library_item_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS system_config (
+      id TEXT PRIMARY KEY,
+      config JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Ensure global config exists
+  await db.query(`
+    INSERT INTO system_config (id, config)
+    VALUES ('global', '{}'::jsonb)
+    ON CONFLICT (id) DO NOTHING;
   `);
 
   initialized = true;

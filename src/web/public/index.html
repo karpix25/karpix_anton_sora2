@@ -17,6 +17,29 @@
           </div>
           <button id="create-project-button" class="secondary-button" type="button">Новый проект</button>
         </div>
+        
+        <div class="sidebar-section">
+          <p class="eyebrow">Глобальные настройки</p>
+          <div class="toggle-row">
+            <span>Grok Mode (Kie.ai)</span>
+            <label class="switch">
+              <input type="checkbox" id="forceGrokImagine">
+              <span class="slider round"></span>
+            </label>
+          </div>
+          <div class="sidebar-config-controls">
+            <select id="grokMode">
+              <option value="normal">Normal Mode</option>
+              <option value="fun">Fun Mode</option>
+              <option value="spicy">Spicy Mode</option>
+            </select>
+            <select id="grokResolution">
+              <option value="480p">480p (Fast)</option>
+              <option value="720p" selected>720p (HD)</option>
+            </select>
+          </div>
+        </div>
+
         <div id="project-list" class="project-list"></div>
       </aside>
 
@@ -52,6 +75,7 @@
               <select id="selectedModel">
                 <option value="sora-2">Sora 2</option>
                 <option value="veo-3-1">Veo 3.1</option>
+                <option value="grok-imagine">Grok Imagine (Kie.ai)</option>
               </select>
             </label>
 

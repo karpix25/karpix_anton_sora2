@@ -118,11 +118,48 @@ const elements = {
     endFrameWidthPercent: document.getElementById('endFrameWidthPercent'),
     endFrameXPercent: document.getElementById('endFrameXPercent'),
   },
+  globalConfig: {
+    forceGrokImagine: document.getElementById('forceGrokImagine'),
+    grokMode: document.getElementById('grokMode'),
+    grokResolution: document.getElementById('grokResolution'),
+  },
   textPreviewFrame: document.getElementById('text-style-preview-frame'),
   textPreview: document.getElementById('text-style-preview-element'),
   endFramePreviewFrame: document.getElementById('end-frame-preview-frame'),
   endFramePreview: document.getElementById('end-frame-preview-element'),
 };
+
+async function loadGlobalConfig() {
+  try {
+    const config = await api('/api/system/config');
+    if (elements.globalConfig.forceGrokImagine) {
+      elements.globalConfig.forceGrokImagine.checked = !!config.forceGrokImagine;
+    }
+    if (elements.globalConfig.grokMode) {
+      elements.globalConfig.grokMode.value = config.grokMode || 'normal';
+    }
+    if (elements.globalConfig.grokResolution) {
+      elements.globalConfig.grokResolution.value = config.grokResolution || '720p';
+    }
+  } catch (error) {
+    console.error('Failed to load global config:', error);
+  }
+}
+
+async function saveGlobalConfig() {
+  const payload = {
+    forceGrokImagine: elements.globalConfig.forceGrokImagine?.checked || false,
+    grokMode: elements.globalConfig.grokMode?.value || 'normal',
+    grokResolution: elements.globalConfig.grokResolution?.value || '720p',
+  };
+  try {
+    await api('/api/system/config', { method: 'PUT', body: JSON.stringify(payload) });
+    setStatus('Системные настройки обновлены');
+  } catch (error) {
+    console.error('Failed to save global config:', error);
+    setStatus('Ошибка сохранения настроек');
+  }
+}
 
 function setStatus(message) {
   elements.statusText.textContent = message;
@@ -738,12 +775,23 @@ function bindEvents() {
     }
   });
 
+  if (elements.globalConfig.forceGrokImagine) {
+    elements.globalConfig.forceGrokImagine.addEventListener('change', saveGlobalConfig);
+  }
+  if (elements.globalConfig.grokMode) {
+    elements.globalConfig.grokMode.addEventListener('change', saveGlobalConfig);
+  }
+  if (elements.globalConfig.grokResolution) {
+    elements.globalConfig.grokResolution.addEventListener('change', saveGlobalConfig);
+  }
+
   console.log('✅ Event listeners bound');
 }
 
 console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
+  loadGlobalConfig();
   loadProjects().then(() => {
     console.log('✅ Projects loaded');
   }).catch((error) => {

@@ -185,6 +185,21 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     return true;
   }
 
+  if (pathname === '/api/system/config' && req.method === 'GET') {
+    const { systemConfigStore } = await import('../storage/system-config-store.js');
+    const config = await systemConfigStore.getConfig();
+    sendJson(res, 200, config);
+    return true;
+  }
+
+  if (pathname === '/api/system/config' && req.method === 'PUT') {
+    const { systemConfigStore } = await import('../storage/system-config-store.js');
+    const payload = await readJsonBody<any>(req);
+    const config = await systemConfigStore.updateConfig(payload);
+    sendJson(res, 200, config);
+    return true;
+  }
+
   if (pathname === '/api/projects' && req.method === 'GET') {
     const projects = await projectStore.listProjects();
     sendJson(res, 200, { projects });

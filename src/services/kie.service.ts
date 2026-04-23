@@ -172,7 +172,12 @@ export class KieService {
   public static async generateVideo(
     prompt: string,
     imageUrl: string,
-    model: 'sora-2' | 'veo-3-1'
+    model: string,
+    options: {
+      mode?: 'fun' | 'normal' | 'spicy';
+      resolution?: '480p' | '720p';
+      aspect_ratio?: string;
+    } = {}
   ): Promise<string> {
     return this.generationRateLimiter.schedule(async () => {
       let retryCount = 0;
@@ -180,23 +185,38 @@ export class KieService {
 
       while (retryCount <= maxRetries) {
         try {
-          // Kie.ai model mapping aligned with the current image-to-video flow.
+          const isGrok = model.includes('grok');
+          
+          // Kie.ai model mapping.
           const modelMapping: Record<string, string> = {
             'sora-2': 'sora-2-image-to-video-stable',
             'veo-3-1': 'veo-3-1',
+            'grok-imagine': 'grok-imagine/image-to-video',
           };
+
+          const targetModel = modelMapping[model] || model;
+
+          const input: any = {
+            prompt,
+            image_urls: [imageUrl],
+          };
+
+          if (isGrok) {
+             input.mode = options.mode || 'normal';
+             input.resolution = options.resolution || '720p';
+             input.aspect_ratio = options.aspect_ratio || '9:16';
+             input.nsfw_checker = false;
+          } else {
+             input.aspect_ratio = 'portrait';
+             input.n_frames = '10';
+             input.upload_method = 's3';
+          }
 
           const response = await axios.post(
             `${config.kieAi.baseUrl}/jobs/createTask`,
             {
-              model: modelMapping[model] || model,
-              input: {
-                prompt,
-                image_urls: [imageUrl],
-                aspect_ratio: 'portrait',
-                n_frames: '10',
-                upload_method: 's3',
-              },
+              model: targetModel,
+              input: input,
             },
             {
               headers: {
