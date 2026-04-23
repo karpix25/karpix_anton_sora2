@@ -51,12 +51,12 @@ export class LaozhangService {
         const rawStatus = (data.status || data.state || root.status || root.state || '').toLowerCase();
         
         // Exhaustive URL search
-        let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || 
-                  root.video_url || root.url || root.result || root.videoUrl || root.download_url;
+        let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || data.video ||
+                  root.video_url || root.url || root.result || root.videoUrl || root.download_url || root.video;
 
         // Ensure we have a string, as some APIs return nested objects in these fields
         if (url && typeof url !== 'string') {
-          url = (url as any).url || (url as any).video_url || (url as any).playback || (url as any).download || null;
+          url = (url as any).video || (url as any).url || (url as any).video_url || (url as any).playback || (url as any).download || null;
         }
 
         if (['completed', 'succeeded', 'success', 'finished'].includes(rawStatus) || (url && typeof url === 'string')) {
