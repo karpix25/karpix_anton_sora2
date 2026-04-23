@@ -121,6 +121,7 @@ const elements = {
   globalConfig: {
     forceGrokImagine: document.getElementById('forceGrokImagine'),
     grokMode: document.getElementById('grokMode'),
+    grokStyle: document.getElementById('grokStyle'),
     grokResolution: document.getElementById('grokResolution'),
     grokDuration: document.getElementById('grokDuration'),
     grokDurationLabel: document.getElementById('grokDurationLabel'),
@@ -140,6 +141,9 @@ async function loadGlobalConfig() {
     }
     if (elements.globalConfig.grokMode) {
       elements.globalConfig.grokMode.value = config.grokMode || 'normal';
+    }
+    if (elements.globalConfig.grokStyle) {
+      elements.globalConfig.grokStyle.value = config.grokStyle || 'vlog';
     }
     if (elements.globalConfig.grokResolution) {
       elements.globalConfig.grokResolution.value = config.grokResolution || '720p';
@@ -162,6 +166,7 @@ async function saveGlobalConfig() {
   const payload = {
     forceGrokImagine: elements.globalConfig.forceGrokImagine?.checked || false,
     grokMode: elements.globalConfig.grokMode?.value || 'normal',
+    grokStyle: elements.globalConfig.grokStyle?.value || 'vlog',
     grokResolution: elements.globalConfig.grokResolution?.value || '720p',
     grokDuration: Number(elements.globalConfig.grokDuration?.value || 10),
     useReferenceDuration: elements.globalConfig.useReferenceDuration?.checked || false,
@@ -794,6 +799,9 @@ function bindEvents() {
   }
   if (elements.globalConfig.grokMode) {
     elements.globalConfig.grokMode.addEventListener('change', saveGlobalConfig);
+  }
+  if (elements.globalConfig.grokStyle) {
+    elements.globalConfig.grokStyle.addEventListener('change', saveGlobalConfig);
   }
   if (elements.globalConfig.grokResolution) {
     elements.globalConfig.grokResolution.addEventListener('change', saveGlobalConfig);

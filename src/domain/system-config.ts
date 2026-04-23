@@ -4,6 +4,7 @@ export interface SystemConfig {
   grokResolution: '480p' | '720p';
   grokDuration: number;
   useReferenceDuration: boolean;
+  grokStyle: 'cinematic' | 'vlog';
 }
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
@@ -12,4 +13,5 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   grokResolution: '720p',
   grokDuration: 10,
   useReferenceDuration: false,
+  grokStyle: 'vlog',
 };

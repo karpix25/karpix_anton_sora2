@@ -263,6 +263,7 @@ export class GeminiService {
         - Target Audience: ${project?.targetAudience || 'Not specified'}
         - Call To Action: ${project?.cta || 'Not specified'}
         - Extra Prompting Rules: ${project?.extraPromptingRules || 'Not specified'}
+        - DESIRED SHOOTING STYLE: ${(await (await import('../storage/system-config-store.js')).systemConfigStore.getConfig()).grokStyle}
       `;
 
       const systemInstructions = `
@@ -284,6 +285,10 @@ export class GeminiService {
         - Describe immediate action or camera movement from frame 0.0.
         - Ensure the subject or product is already in motion or the camera is panning/zooming as the video begins.
         - If the scenario requires a "before" state (e.g. dirty, messy), start exactly with that state, using the reference image ONLY as a guide for the product's underlying shape and design, NOT its surface condition.
+        
+        CAMERAWORK & SHOOTING STYLE:
+        - If "vlog" style is requested: Use keywords: "Shot on iPhone", "handheld camera motion", "vertical video", "UGC style", "natural lighting", "realistic micro-jitters", "raw footage". Avoid "cinematic", "8k", "perfect lighting".
+        - If "cinematic" style is requested: Use keywords: "Cinematic lighting", "professional camera rig", "8k resolution", "stable motion", "perfect color grading".
 
         PHYSICAL LOGIC & ANTI-HALLUCINATION (STRICT):
         - No Telekinesis: Objects must NEVER move by themselves. They must be physically carried, lifted, or pushed by a character's hand using a realistic grip.
