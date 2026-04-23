@@ -288,13 +288,17 @@ export class KieService {
    */
   public static async pollStatus(taskId: string): Promise<string> {
     const maxRetries = 150; 
+    const isVeoTask = taskId.includes('veo_task');
     
     for (let i = 0; i < maxRetries; i++) {
-      // Adaptive polling: longer delay at start, shorter towards end
       const delay = i < 4 ? 15000 : 5000; 
       try {
+        const endpoint = isVeoTask 
+          ? `${config.kieAi.baseUrl}/api/v1/veo/record-info`
+          : `${config.kieAi.baseUrl}/jobs/recordInfo`;
+
         const response = await axios.get(
-          `${config.kieAi.baseUrl}/jobs/recordInfo`,
+          endpoint,
           {
             params: { taskId },
             headers: {
@@ -305,27 +309,45 @@ export class KieService {
 
         const root = response.data ?? {};
         const data = root?.data ?? root;
-        const task = data?.task ?? data?.record ?? data;
-        const status = extractStatus(task, data, root);
-        const resultVideoUrl = parseResultVideoUrl(task) || parseResultVideoUrl(data) || parseResultVideoUrl(root);
 
-        // Kie occasionally keeps "waiting" even when result URL is already available.
-        if (resultVideoUrl && !isFailureStatus(status)) {
-          return resultVideoUrl;
-        }
-
-        if (isSuccessStatus(status)) {
-          const resultVideoUrl = parseResultVideoUrl(task);
-          if (!resultVideoUrl) {
-            throw new Error('Generation completed but no result video URL was returned');
+        if (isVeoTask) {
+          // Veo 3.1 specific logic (successFlag: 0=Gen, 1=Success, 2=Failed, 3=Gen Failed)
+          const successFlag = data?.successFlag;
+          const veoResponse = data?.response;
+          
+          if (successFlag === 1) {
+            const urls = veoResponse?.resultUrls || veoResponse?.originUrls || veoResponse?.fullResultUrls;
+            const url = pickFirstUrlFromArray(urls);
+            if (!url) throw new Error('Veo task succeeded but no video URL found');
+            return url;
+          } else if (successFlag === 2 || successFlag === 3) {
+            const error = data?.errorMessage || root?.msg || 'Veo generation failed';
+            throw new Error(`Veo task error: ${error}`);
           }
-          return resultVideoUrl;
-        } else if (isFailureStatus(status)) {
-          const details = extractErrorMessage(task, data, root) || 'Unknown error';
-          throw new Error(`Generation failed: ${details}`);
+          
+          console.log(`Veo Task ${taskId} status: ${successFlag === 0 ? 'Generating' : 'Unknown'}. Waiting... (${i + 1}/${maxRetries})`);
+        } else {
+          // Standard Kie logic
+          const task = data?.task ?? data?.record ?? data;
+          const status = extractStatus(task, data, root);
+          const resultVideoUrl = parseResultVideoUrl(task) || parseResultVideoUrl(data) || parseResultVideoUrl(root);
+
+          if (resultVideoUrl && !isFailureStatus(status)) {
+            return resultVideoUrl;
+          }
+
+          if (isSuccessStatus(status)) {
+            const url = parseResultVideoUrl(task);
+            if (!url) throw new Error('Generation completed but no result video URL was returned');
+            return url;
+          } else if (isFailureStatus(status)) {
+            const details = extractErrorMessage(task, data, root) || 'Unknown error';
+            throw new Error(`Generation failed: ${details}`);
+          }
+          
+          console.log(`Task ${taskId} status: ${status || 'unknown'}. Waiting... (${i + 1}/${maxRetries})`);
         }
 
-        console.log(`Task ${taskId} status: ${status || 'unknown'}. Waiting... (${i + 1}/${maxRetries})`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       } catch (error: any) {
         if (typeof error?.message === 'string' && /failed|timed out|timeout/i.test(error.message)) throw error;
