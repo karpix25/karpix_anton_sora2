@@ -10,6 +10,7 @@ export class DefApiService {
           model: model, // 'sora-2' or 'sora-2-stable'
           prompt: prompt,
           image: imageUrl,
+          aspect_ratio: '9:16',
         },
         {
           headers: {

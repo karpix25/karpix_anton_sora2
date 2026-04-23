@@ -23,10 +23,12 @@ export class VideoGenerationService {
       `[VideoGenerationService] Starting generation: model=${input.model}, imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
     );
 
+    const promptWithFormat = `${input.prompt} (vertical 9:16 portrait video only)`;
+
     // 1. KIE.AI (Primary)
     try {
       console.log('[VideoGenerationService] Attempting Kie.ai...');
-      const taskId = await KieService.generateVideo(input.prompt, input.imageUrl, input.model);
+      const taskId = await KieService.generateVideo(promptWithFormat, input.imageUrl, input.model);
       const url = await KieService.pollStatus(taskId);
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {
@@ -39,8 +41,9 @@ export class VideoGenerationService {
         console.log('[VideoGenerationService] Attempting AIHUBMIX...');
         const url = await AihubmixService.generateVideo(
           { ...config.aihubmix, model: 'web-sora-2' },
-          input.prompt,
-          input.imageUrl
+          promptWithFormat,
+          input.imageUrl,
+          '9:16'
         );
         return { provider: 'aihubmix', providerTaskId: 'synced', resultVideoUrl: url };
       } catch (error) {
@@ -52,7 +55,7 @@ export class VideoGenerationService {
     if (config.laozhang.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting Laozhang (Async)...');
-        const taskId = await LaozhangService.generateVideo(input.prompt, input.imageUrl, 'sora-2');
+        const taskId = await LaozhangService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2');
         const url = await LaozhangService.pollStatus(taskId);
         return { provider: 'laozhang', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
@@ -64,7 +67,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI (Async)...');
-        const taskId = await DefApiService.generateVideo(input.prompt, input.imageUrl, 'sora-2');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2');
         const url = await DefApiService.pollStatus(taskId);
         return { provider: 'defapi', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
@@ -76,7 +79,7 @@ export class VideoGenerationService {
     if (config.defapi.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting DefAPI Stable (Async)...');
-        const taskId = await DefApiService.generateVideo(input.prompt, input.imageUrl, 'sora-2-stable');
+        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2-stable');
         const url = await DefApiService.pollStatus(taskId);
         return { provider: 'defapi-stable', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {

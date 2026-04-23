@@ -12,13 +12,15 @@ export class AihubmixService {
    * Extracts the first URL found in the response content.
    */
   public static async generateVideo(
-    config: AggregatorConfig,
+    config: AihubmixConfig,
     prompt: string,
-    imageUrl?: string
+    imageUrl?: string,
+    aspect_ratio: string = '9:16'
   ): Promise<string> {
-    const fullPrompt = imageUrl 
-      ? `[Reference Image: ${imageUrl}]\n\n${prompt}`
-      : prompt;
+    const fullPrompt = `${prompt} (Aspect Ratio: ${aspect_ratio}, portrait)`;
+    const messageContent = imageUrl 
+      ? `[Reference Image: ${imageUrl}]\n\n${fullPrompt}`
+      : fullPrompt;
 
     try {
       const response = await axios.post(
@@ -28,7 +30,7 @@ export class AihubmixService {
           messages: [
             {
               role: 'user',
-              content: fullPrompt,
+              content: messageContent,
             },
           ],
         },

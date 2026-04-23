@@ -10,6 +10,7 @@ export class LaozhangService {
           model: model, // e.g. 'sora-2'
           prompt: prompt,
           image_url: imageUrl,
+          aspect_ratio: '9:16',
         },
         {
           headers: {
