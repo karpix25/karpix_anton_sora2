@@ -19,7 +19,7 @@ export class DefApiService {
         }
       );
 
-      const taskId = response.data?.job_id || response.data?.id;
+      const taskId = response.data?.task_id || response.data?.job_id || response.data?.id || response.data?.data?.task_id || response.data?.data?.id;
       if (!taskId) {
         throw new Error(`Failed to get job ID from DefAPI: ${JSON.stringify(response.data)}`);
       }
@@ -44,9 +44,10 @@ export class DefApiService {
           }
         );
 
-        const data = response.data;
-        const status = (data.status || '').toLowerCase();
-        const url = data.video_url || data.url;
+        const root = response.data;
+        const data = root?.data ?? root;
+        const status = (data.status || root.status || '').toLowerCase();
+        const url = data.video_url || data.url || root.video_url || root.url;
 
         if (status === 'success' || status === 'completed' || url) {
           if (!url) throw new Error('DefAPI task completed but no URL found');

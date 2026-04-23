@@ -19,7 +19,7 @@ export class LaozhangService {
         }
       );
 
-      const taskId = response.data?.id || response.data?.data?.id;
+      const taskId = response.data?.task_id || response.data?.id || response.data?.data?.id || response.data?.data?.task_id;
       if (!taskId) {
         throw new Error(`Failed to get task ID from Laozhang: ${JSON.stringify(response.data)}`);
       }
