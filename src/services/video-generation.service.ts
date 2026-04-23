@@ -1,7 +1,5 @@
 import { KieService } from './kie.service.js';
-import { AihubmixService } from './aihubmix.service.js';
 import { LaozhangService } from './laozhang.service.js';
-import { DefApiService } from './defapi.service.js';
 import { config } from '../config.js';
 import { systemConfigStore } from '../storage/system-config-store.js';
 import type { GenerationProvider } from '../domain/generation-task.js';
@@ -68,23 +66,7 @@ export class VideoGenerationService {
       console.warn('Kie.ai failed, trying AIHUBMIX...', error instanceof Error ? error.message : error);
     }
 
-    // 2. AIHUBMIX (Fallback 1) - Sync/Long-poll
-    if (config.aihubmix.isConfigured) {
-      try {
-        console.log('[VideoGenerationService] Attempting AIHUBMIX...');
-        const url = await AihubmixService.generateVideo(
-          { ...config.aihubmix, model: 'web-sora-2' },
-          promptWithFormat,
-          input.imageUrl,
-          '9:16'
-        );
-        return { provider: 'aihubmix', providerTaskId: 'synced', resultVideoUrl: url };
-      } catch (error) {
-        console.warn('AIHUBMIX failed, trying Laozhang...', error instanceof Error ? error.message : error);
-      }
-    }
-
-    // 3. Laozhang (Fallback 2) - Native Polling
+    // 2. Laozhang (Fallback) - Native Polling
     if (config.laozhang.isConfigured) {
       try {
         console.log('[VideoGenerationService] Attempting Laozhang (Async)...');
@@ -93,35 +75,10 @@ export class VideoGenerationService {
         if (typeof url !== 'string') throw new Error('Invalid URL returned from Laozhang');
         return { provider: 'laozhang', providerTaskId: taskId, resultVideoUrl: url };
       } catch (error) {
-        console.warn('Laozhang failed, trying DefAPI...', error instanceof Error ? error.message : error);
+        console.error('All providers (Kie, Laozhang) failed:', error instanceof Error ? error.message : error);
       }
     }
 
-    // 4. DefAPI (Fallback 3) - Native Polling
-    if (config.defapi.isConfigured) {
-      try {
-        console.log('[VideoGenerationService] Attempting DefAPI (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2', '9:16');
-        const url = await DefApiService.pollStatus(taskId);
-        if (typeof url !== 'string') throw new Error('Invalid URL returned from DefAPI');
-        return { provider: 'defapi', providerTaskId: taskId, resultVideoUrl: url };
-      } catch (error) {
-        console.warn('DefAPI failed, trying DefAPI Stable...', error instanceof Error ? error.message : error);
-      }
-    }
-
-    // 5. DefAPI Stable (Fallback 4) - Native Polling
-    if (config.defapi.isConfigured) {
-      try {
-        console.log('[VideoGenerationService] Attempting DefAPI Stable (Async)...');
-        const taskId = await DefApiService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2-stable', '9:16');
-        const url = await DefApiService.pollStatus(taskId);
-        return { provider: 'defapi-stable', providerTaskId: taskId, resultVideoUrl: url };
-      } catch (error) {
-        console.error('All providers failed:', error instanceof Error ? error.message : error);
-      }
-    }
-
-    throw new Error('All video generation providers failed or are not configured.');
+    throw new Error('All primary video generation providers (Kie, Laozhang) failed or are not configured.');
   }
 }
