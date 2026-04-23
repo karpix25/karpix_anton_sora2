@@ -85,6 +85,8 @@ export class AdminNotifierService {
       `<b>Время:</b> ${timestamp} MSK\n\n` +
       `<b>Детали:</b>\n<code>${errorDetails}</code>\n\n` +
       `⚠️ <i>Генерация видео может быть остановлена до пополнения средств.</i>`;
+    await this.sendAlert(message);
+  }
 
   /**
    * Sends a generated video to the associated Telegram project topic.
