@@ -69,11 +69,16 @@ export class VideoGenerationService {
     // 2. Laozhang (Fallback) - Native Polling
     if (config.laozhang.isConfigured) {
       try {
-        console.log('[VideoGenerationService] Attempting Laozhang (Async)...');
-        const taskId = await LaozhangService.generateVideo(promptWithFormat, input.imageUrl, 'sora-2', '9:16');
-        const url = await LaozhangService.pollStatus(taskId);
+        console.log(`[VideoGenerationService] Attempting Laozhang (${effectiveModel})...`);
+        const result = await LaozhangService.generateVideo(
+          promptWithFormat, 
+          input.imageUrl, 
+          effectiveModel, 
+          '9:16'
+        );
+        const url = await LaozhangService.pollStatus(result);
         if (typeof url !== 'string') throw new Error('Invalid URL returned from Laozhang');
-        return { provider: 'laozhang', providerTaskId: taskId, resultVideoUrl: url };
+        return { provider: 'laozhang', providerTaskId: result, resultVideoUrl: url };
       } catch (error) {
         console.error('All providers (Kie, Laozhang) failed:', error instanceof Error ? error.message : error);
       }
