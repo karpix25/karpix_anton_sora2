@@ -175,11 +175,11 @@ export class ManualGenerationService {
       // Sanitize prompt for providers (trim and reasonable length limit)
       const sanitizedPrompt = promptText.trim().slice(0, 1000);
 
-      const generationReferenceImageUrl = await ProjectReferenceService.getGenerationReferenceImageUrl(
+      const generationReferenceImageUrls = await ProjectReferenceService.getAllGenerationReferenceImageUrls(
         project
       );
-      if (!generationReferenceImageUrl) {
-        throw new Error('Нет доступного фото товара. Загрузите референс в проект (нужно минимум одно фото).');
+      if (generationReferenceImageUrls.length === 0) {
+        throw new Error('Нет доступных фото товара. Загрузите референс в проект (нужно минимум одно фото).');
       }
 
       // Audio was already ensured in the parallel pre-processing block above
@@ -194,7 +194,7 @@ export class ManualGenerationService {
         console.log(`[ManualGenerationService] Task ${task.id}: starting generation with model=${project.selectedModel}, promptLength=${sanitizedPrompt.length}...`);
         const generationResult = await VideoGenerationService.generateWithFallback({
           prompt: sanitizedPrompt,
-          imageUrl: generationReferenceImageUrl,
+          imageUrls: generationReferenceImageUrls,
           model: project.selectedModel,
           referenceDurationSeconds: audio.durationSeconds,
         });
