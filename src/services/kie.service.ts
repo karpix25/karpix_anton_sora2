@@ -205,7 +205,7 @@ export class KieService {
           };
 
           if (isVeo) {
-            endpoint = `${config.kieAi.baseUrl}/api/v1/veo/generate`;
+            endpoint = `${config.kieAi.baseUrl}/veo/generate`;
             input.imageUrls = [imageUrl];
             input.model = targetModel;
             input.aspect_ratio = options.aspect_ratio || '9:16';
@@ -294,7 +294,7 @@ export class KieService {
       const delay = i < 4 ? 15000 : 5000; 
       try {
         const endpoint = isVeoTask 
-          ? `${config.kieAi.baseUrl}/api/v1/veo/record-info`
+          ? `${config.kieAi.baseUrl}/veo/record-info`
           : `${config.kieAi.baseUrl}/jobs/recordInfo`;
 
         const response = await axios.get(
