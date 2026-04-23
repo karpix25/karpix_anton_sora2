@@ -41,7 +41,7 @@ export class DefApiService {
         const response = await axios.get(
           `${config.defapi.baseUrl}/api/task/query`,
           {
-            params: { job_id: taskId, task_id: taskId }, // Try both param names
+            params: { job_id: taskId }, // Stick to documentation's job_id
             headers: { 'Authorization': `Bearer ${config.defapi.apiKey}` },
           }
         );
@@ -49,14 +49,19 @@ export class DefApiService {
         const root = response.data;
         const data = root?.data ?? root;
         
-        // ID verification: some providers return the "last successful" task if the requested one is not found or pending.
+        // ID verification
         const returnedId = data.task_id || data.job_id || data.id || root.task_id || root.id;
         if (returnedId && returnedId !== taskId) {
-          console.warn(`[DefAPI] Received data for WRONG task! Expected ${taskId}, got ${returnedId}. Ignoring...`);
+          console.warn(`[DefAPI] Polling ${taskId} but got ${returnedId}. This might be a stale provider response. Skipping this tick...`);
           continue;
         }
 
         const rawStatus = (data.status || data.state || '').toLowerCase();
+        
+        // If status is empty but we got a valid-looking root, check if it's an error in disguise
+        if (!rawStatus && (root.code !== 0 || root.message !== 'ok')) {
+           throw new Error(`DefAPI polling returned error code: ${root.code}, message: ${root.message}`);
+        }
         
         // Exhaustive URL search
         let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || data.video ||

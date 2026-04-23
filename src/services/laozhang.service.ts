@@ -2,87 +2,74 @@ import axios from 'axios';
 import { config } from '../config.js';
 
 export class LaozhangService {
+  /**
+   * Generates video using Laozhang's Synchronous API (OpenAI compatible).
+   * Model 'sora_video2' automatically enforces 9:16 portrait and 10s duration.
+   */
   public static async generateVideo(
     prompt: string, 
     imageUrl: string, 
-    model: string,
-    aspect_ratio: string = '9:16'
+    _unused_model: string,
+    _unused_ratio: string = '9:16'
   ): Promise<string> {
     try {
-      const response = await axios.post(
-        `${config.laozhang.baseUrl}/videos`,
+      // Formulate content with reference image and prompt
+      const content: any[] = [
         {
-          model: model,
-          prompt: prompt,
-          images: imageUrl ? [imageUrl] : [], // Array pattern
-          aspect_ratio: aspect_ratio,
-          duration: '10',
+          type: 'image_url',
+          image_url: { url: imageUrl }
+        },
+        {
+          type: 'text',
+          text: prompt
+        }
+      ];
+
+      const response = await axios.post(
+        `${config.laozhang.baseUrl}/chat/completions`,
+        {
+          model: 'sora_video2', // High-quality Sora 2 (9:16, 10s)
+          messages: [
+            {
+              role: 'user',
+              content: content,
+            },
+          ],
         },
         {
           headers: {
             'Authorization': `Bearer ${config.laozhang.apiKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: 300000, // 5 minutes
         }
       );
 
-      const taskId = response.data?.task_id || response.data?.id || response.data?.data?.id || response.data?.data?.task_id;
-      if (!taskId) {
-        throw new Error(`Failed to get task ID from Laozhang: ${JSON.stringify(response.data)}`);
+      const responseContent = response.data?.choices?.[0]?.message?.content || '';
+      if (!responseContent) {
+        throw new Error(`Empty response from Laozhang`);
       }
-      return taskId;
+
+      // Extract URL from content (markdown or plain text)
+      const urlRegex = /(https?:\/\/[^\s\)]+)/g;
+      const matches = responseContent.match(urlRegex);
+
+      if (!matches || matches.length === 0) {
+        throw new Error(`No video URL found in Laozhang response: ${responseContent.substring(0, 100)}...`);
+      }
+
+      // Return the first URL found
+      return matches[0];
     } catch (error: any) {
       const details = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      throw new Error(`Laozhang generation failed: ${details}`);
+      throw new Error(`Laozhang (Sync) failed: ${details}`);
     }
   }
 
-  public static async pollStatus(taskId: string): Promise<string> {
-    const maxRetries = 100;
-    for (let i = 0; i < maxRetries; i++) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // 10s intervals
-
-      try {
-        const response = await axios.get(
-          `${config.laozhang.baseUrl}/videos/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${config.laozhang.apiKey}` },
-          }
-        );
-
-        const root = response.data;
-        const data = root?.data ?? root;
-        
-        // Status check
-        const rawStatus = (data.status || data.state || root.status || root.state || '').toLowerCase();
-        
-        // Exhaustive URL search
-        let url = data.video_url || data.url || data.result || data.videoUrl || data.download_url || data.video ||
-                  root.video_url || root.url || root.result || root.videoUrl || root.download_url || root.video;
-
-        // Ensure we have a string, as some APIs return nested objects in these fields
-        if (url && typeof url !== 'string') {
-          url = (url as any).video || (url as any).url || (url as any).video_url || (url as any).playback || (url as any).download || null;
-        }
-
-        if (['completed', 'succeeded', 'success', 'finished'].includes(rawStatus) || (url && typeof url === 'string')) {
-          if (!url || typeof url !== 'string') {
-            console.warn(`[Laozhang] Task marked as done but no valid URL string found. Data:`, data);
-            throw new Error('Laozhang task completed but no valid URL found');
-          }
-          return url;
-        }
-
-        if (['failed', 'error', 'canceled', 'cancelled'].includes(rawStatus)) {
-          throw new Error(`Laozhang task failed: ${data.errorMessage || data.error || data.message || 'Unknown error'}`);
-        }
-
-        console.log(`[Laozhang] Task ${taskId} status: ${rawStatus || 'pending'}. Waiting...`);
-      } catch (error: any) {
-        if (error.message.includes('failed')) throw error;
-        console.warn(`[Laozhang] Polling error for ${taskId}:`, error.message);
-      }
-    }
-    throw new Error('Laozhang task timed out');
+  /**
+   * Stub for compatibility, Sync API doesn't need polling.
+   */
+  public static async pollStatus(url: string): Promise<string> {
+    return url;
   }
 }
