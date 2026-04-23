@@ -43,7 +43,7 @@ export class DefApiService {
         const response = await axios.get(
           `${config.defapi.baseUrl}/api/task/query`,
           {
-            params: { job_id: taskId },
+            params: { job_id: taskId, task_id: taskId }, // Try both param names
             headers: { 'Authorization': `Bearer ${config.defapi.apiKey}` },
           }
         );
@@ -51,7 +51,13 @@ export class DefApiService {
         const root = response.data;
         const data = root?.data ?? root;
         
-        // Status check - avoid accidental match with root.message ("ok" or "success")
+        // ID verification: some providers return the "last successful" task if the requested one is not found or pending.
+        const returnedId = data.task_id || data.job_id || data.id || root.task_id || root.id;
+        if (returnedId && returnedId !== taskId) {
+          console.warn(`[DefAPI] Received data for WRONG task! Expected ${taskId}, got ${returnedId}. Ignoring...`);
+          continue;
+        }
+
         const rawStatus = (data.status || data.state || '').toLowerCase();
         
         // Exhaustive URL search
