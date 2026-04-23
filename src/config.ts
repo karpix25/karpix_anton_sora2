@@ -143,9 +143,6 @@ export const config = {
     apiKey: process.env.KIE_AI_API_KEY || '',
     baseUrl: 'https://api.kie.ai/api/v1',
   },
-    apiKey: process.env.KIE_AI_API_KEY || '',
-    baseUrl: 'https://api.kie.ai/api/v1',
-  },
   laozhang: {
     apiKey: process.env.LAOZHANG_API_KEY || '',
     baseUrl: 'https://api.laozhang.ai/v1',
