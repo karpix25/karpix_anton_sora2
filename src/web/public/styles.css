@@ -793,3 +793,8 @@ input:checked + .slider:before {
 .slider.round:before {
   border-radius: 50%;
 }
+.global-config-card {
+  border: 1px solid rgba(182, 87, 42, 0.3);
+  background: linear-gradient(135deg, #fffaf2 0%, #fffefc 100%);
+  margin-bottom: 10px;
+}
