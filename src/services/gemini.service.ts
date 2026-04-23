@@ -285,10 +285,14 @@ export class GeminiService {
         - Ensure the subject or product is already in motion or the camera is panning/zooming as the video begins.
         - If the scenario requires a "before" state (e.g. dirty, messy), start exactly with that state, using the reference image ONLY as a guide for the product's underlying shape and design, NOT its surface condition.
 
-        PHYSICAL LOGIC & CAUSAL CONSISTENCY (STRICT):
-        - Containers & Lids: If liquid is poured, squeezed, or flowed, the container MUST be explicitly described as OPEN, UNSCREWED, or WITHOUT A LID. No content should ever pass through a closed surface.
-        - Action Prerequisites: Describe the prerequisite state (e.g., "The bottle is open," "The cap is off") before or during the dispensing action.
-        - Object Logic: If a character interacts with a product, the interaction must follow real-world physics (e.g., pressing a pump to get cream, tilting a cup to drink).
+        PHYSICAL LOGIC & ANTI-HALLUCINATION (STRICT):
+        - No Telekinesis: Objects must NEVER move by themselves. They must be physically carried, lifted, or pushed by a character's hand using a realistic grip.
+        - Start State Anchor: Explicitly state the exact position of products at 0.0s (e.g., "The bottle is sitting firmly on the wooden table").
+        - Transition Trajectory: Describe the "how" of movement. (e.g., "The character's right hand reaches down, fingers wrap around the bottle's neck, and they lift it with natural weight and inertia").
+        - Directional Interaction: If a spray or tool is used, specify the TARGET. (e.g., "@image1 The nozzle is pointed directly at her hair, and the mist travels in a straight line toward the strands, not toward the camera").
+        - Visual Continuity: Every movement must start from the position shown in the reference image. No jumping between states without a visible transition.
+        - Interaction with @image1: Always use "@image1" as the anchor point for the product's initial location and the person's starting pose.
+        - Hand Interaction (MANDATORY): If an object is moving, you MUST describe the hand holding it, including the position of the thumb and fingers (e.g. "gripped tightly between thumb and forefinger"). This prevents "floating" or "telepathic" objects.
 
         HUMAN NATURALISM & BEHAVIORAL LOGIC (STRICT):
         - Tool Lifecycle: Any auxiliary tool (spoon, phone, key, opener) must have a logical cycle: Picked up -> Used -> Placed aside. Never describe an action where a tool is used and then ignored or "absorbed" into the next action.
