@@ -945,12 +945,20 @@ export class VideoPostprocessService {
         ffmpegArgs.push(
           '-i',
           input.audioFilePath,
+          '-filter_complex',
+          '[0:v]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.5:t=fill[dimmed];[dimmed]format=yuv420p[v]',
           '-map',
-          '0:v:0',
+          '[v]',
           '-map',
           '1:a:0',
           '-c:v',
-          'copy',
+          'libx264',
+          '-threads',
+          ffmpegThreads,
+          '-preset',
+          ffmpegPreset,
+          '-crf',
+          ffmpegCrf,
           '-c:a',
           'aac',
           '-shortest',
@@ -1046,7 +1054,7 @@ export class VideoPostprocessService {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatScriptPath,
-                '-filter_complex', '[0:v][2:v]overlay=x=0:y=0',
+                '-filter_complex', '[0:v]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.5:t=fill[dimmed];[dimmed][2:v]overlay=x=0:y=0',
                 '-map', '0:v:0',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
@@ -1077,7 +1085,7 @@ export class VideoPostprocessService {
 
         const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
         const relativeAssPath = path.relative(process.cwd(), assFilePath);
-        const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+        const filter = `drawbox=x=0:y=0:w=iw:h=ih:color=black@0.5:t=fill,subtitles='${escapeFilterValue(relativeAssPath)}'`;
         console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
 
         await runFfmpeg([
