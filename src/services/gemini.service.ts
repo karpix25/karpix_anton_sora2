@@ -320,6 +320,12 @@ export class GeminiService {
         - If the analysis describes a ONE-SHOT or single continuous plan, the generated prompt MUST explicitly state "Single continuous shot without any cuts" or "Seamless one-take video".
         - Do NOT allow the model to invent cuts between time blocks if the reference is a single shot.
 
+        PROMPT FIDELITY & REALISM (CRITICAL):
+        - SKIN FIDELITY: For human subjects, always include descriptors for "subsurface scattering," "micro-skin texture," "visible pores," and "soft natural highlights." Avoid "smooth skin" or "perfect skin" which leads to plastic looks.
+        - CINEMATIC LIGHTING: Specify the light source (e.g., "warm golden hour light," "soft side-lit window light," "cinematic Rembrandt lighting"). Mention how light interacts with materials (e.g., "caustics through glass," "specular highlights on polished metal").
+        - OPTICAL DEPTH: Use specific lens language (e.g., "50mm f/1.8 lens," "shallow depth of field," "soft bokeh background") to guide the model's focus.
+        - VEO-SPECIFIC CLARITY: Veo 3.1 responds best to chronological descriptions of light and motion. Ensure the first sentence establishes the lighting environment.
+
         WHAT TO AVOID:
         - No technical film language unless absolutely necessary.
         - No terms like semantic core, optical geometry, kinetic dynamics, camera platform, grading rationale, shot rationale.
