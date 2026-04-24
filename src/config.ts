@@ -158,7 +158,6 @@ if (
   !config.telegram.isConfigured ||
   !config.openRouter.apiKey ||
   !config.kieAi.apiKey ||
-  !config.laozhang.apiKey ||
   !config.rapidApi.key ||
   !config.yandexDisk.isConfigured
 ) {
