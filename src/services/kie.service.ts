@@ -194,7 +194,7 @@ export class KieService {
           // Kie.ai model mapping.
           const modelMapping: Record<string, string> = {
             'sora-2': 'sora-2-image-to-video-stable',
-            'veo-3-1': 'veo3_fast', // Using veo3_fast as requested
+            'veo-3-1': 'veo3',
             'grok-imagine': 'grok-imagine/image-to-video',
           };
 
