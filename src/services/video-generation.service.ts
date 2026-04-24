@@ -38,8 +38,8 @@ export class VideoGenerationService {
       // Grok requires referencing the image in the prompt as @image1
       promptWithFormat = `@image1 ${input.prompt} ${finalDuration} seconds`;
     } else if (isVeo) {
-      // Veo 3.1 also benefits from explicit duration
-      promptWithFormat = `${input.prompt} ${finalDuration} seconds, 9:16 portrait style`;
+      // Veo 3.1 R2V format: instruct model to use subject consistency but generate its own scene
+      promptWithFormat = `The product/subject from the reference image is featured in this scene: ${input.prompt}. Duration: ${finalDuration} seconds. 9:16 portrait orientation. Maintain high visual consistency with the reference subject while ignoring its original background. Use natural lighting and a realistic environment.`;
     } else {
       // Sora/Other default format hints
       promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${input.prompt}`;
