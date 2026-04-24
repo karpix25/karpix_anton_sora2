@@ -210,8 +210,8 @@ export class KieService {
             input.model = targetModel;
             input.aspect_ratio = options.aspect_ratio || '9:16';
             input.resolution = options.resolution || '720p';
-            // Use TEXT_2_VIDEO for "Reference" mode where image is used for consistency but not forced as first frame
-            input.generationType = 'TEXT_2_VIDEO';
+            // Use REFERENCE_2_VIDEO for "Reference" mode where image is used for consistency but not forced as first frame
+            input.generationType = 'REFERENCE_2_VIDEO';
           } else {
             input.image_urls = [imageUrl];
             if (isGrok) {
