@@ -37,6 +37,10 @@ select {
   display: grid;
   grid-template-columns: 320px 1fr;
   min-height: 100vh;
+  max-width: 1560px;
+  margin: 0 auto;
+  background: white;
+  box-shadow: 0 0 100px rgba(0,0,0,0.05);
 }
 
 .sidebar {
