@@ -23,6 +23,7 @@ export interface TextStyle {
   fontWeight: string;
   outlineColor: string;
   outlineWidth: number;
+  outlineEnabled: boolean;
   backgroundColor: string;
   backgroundOpacity: number;
   borderStyle: number; // 1 = Style with outline/shadow, 3 = Opaque box

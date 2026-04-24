@@ -127,6 +127,7 @@ interface TextRenderStyle {
   fontWeight: string;
   outlineColor: string;
   outlineWidth: number;
+  outlineEnabled: boolean;
   backgroundColor: string;
   backgroundOpacity: number;
   borderStyle: number;
@@ -147,6 +148,7 @@ const defaultTextRenderStyle: TextRenderStyle = {
   fontWeight: subtitleBold ? '700' : '400',
   outlineColor: '#000000',
   outlineWidth: subtitleOutlineWidthPx,
+  outlineEnabled: true,
   backgroundColor: '#000000',
   backgroundOpacity: 0.82,
   borderStyle: 1,
@@ -374,6 +376,7 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
   const boxRadius = Math.round(clamp(toFiniteNumber(source.boxRadius) ?? defaultTextRenderStyle.boxRadius, 0, 120));
   const borderStyleRaw = toFiniteNumber(source.borderStyle);
   const borderStyle = borderStyleRaw === 3 ? 3 : 1;
+  const outlineEnabled = Boolean(source.outlineEnabled ?? defaultTextRenderStyle.outlineEnabled);
   const textAlignRaw = typeof source.textAlign === 'string' ? source.textAlign.trim().toLowerCase() : '';
   const textAlign: TextRenderStyle['textAlign'] =
     textAlignRaw === 'left' || textAlignRaw === 'right' || textAlignRaw === 'center'
@@ -387,6 +390,7 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
     fontWeight,
     outlineColor: normalizeHexColor(source.outlineColor, defaultTextRenderStyle.outlineColor),
     outlineWidth,
+    outlineEnabled,
     backgroundColor: normalizeHexColor(source.backgroundColor, defaultTextRenderStyle.backgroundColor),
     backgroundOpacity,
     borderStyle,
@@ -507,7 +511,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineWidth},0.5,${alignment},${defaultMargins.marginL},${defaultMargins.marginR},${defaultMargins.marginV},1
+Style: Default,${style.fontFamily},${style.fontSize},${primaryColor},&H000000FF,${outlineColor},${backColor},${isBold ? -1 : 0},0,0,0,100,100,0,0,${style.borderStyle},${style.outlineEnabled ? style.outlineWidth : 0},${style.outlineEnabled ? 0.5 : 0},${alignment},${defaultMargins.marginL},${defaultMargins.marginR},${defaultMargins.marginV},1
 `;
 
   const events = `
@@ -766,7 +770,7 @@ async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedO
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = style.fontColor;
     ctx.strokeStyle = style.outlineColor;
-    ctx.lineWidth = Math.max(0.5, style.outlineWidth * 1.2);
+    ctx.lineWidth = style.outlineEnabled ? Math.max(0.5, style.outlineWidth * 1.2) : 0;
 
     const lines = item.text.split('\n');
     const lineLayouts = lines.map((line) => buildLineLayout(line, (value) => ctx.measureText(value).width, style));
