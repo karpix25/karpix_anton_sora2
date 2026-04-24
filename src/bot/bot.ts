@@ -106,6 +106,14 @@ function getRepeatGenerationCallbackData(taskId: string): string {
   return `${repeatGenerationCallbackPrefix}${taskId}`;
 }
 
+function formatModelName(model: string): string {
+  const m = String(model).toLowerCase();
+  if (m === 'veo-3-1') return 'Veo 3.1';
+  if (m === 'sora-2') return 'Sora 2';
+  if (m === 'grok-imagine') return 'Grok';
+  return model.toUpperCase();
+}
+
 async function sendGenerationResultVideo(
   ctx: Context,
   input: {
@@ -119,7 +127,7 @@ async function sendGenerationResultVideo(
 ): Promise<void> {
   await ctx.replyWithVideo(input.videoUrl, {
     caption:
-      `✨ Сгенерировано через ${input.targetModel.toUpperCase()} (${input.generationProvider})\n\n` +
+      `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n\n` +
       `Референс: ${input.referenceUrl}`,
     ...input.replyParams,
     ...Markup.inlineKeyboard([
@@ -350,7 +358,7 @@ bot.command('create_project', async (ctx) => {
   const created = await projectStore.createProject({
     name: projectName,
     mode: 'manual',
-    selectedModel: 'sora-2',
+    selectedModel: 'veo-3-1',
     automationEnabled: false,
     dailyGenerationLimit: 1,
     isActive: true,

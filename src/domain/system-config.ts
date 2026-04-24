@@ -8,7 +8,7 @@ export interface SystemConfig {
 }
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-  defaultVideoModel: 'sora-2',
+  defaultVideoModel: 'veo-3-1',
   grokMode: 'normal',
   grokResolution: '720p',
   grokDuration: 10,
