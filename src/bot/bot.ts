@@ -127,8 +127,9 @@ async function sendGenerationResultVideo(
 ): Promise<void> {
   await ctx.replyWithVideo(input.videoUrl, {
     caption:
-      `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n\n` +
-      `Референс: ${input.referenceUrl}`,
+      `🎬 Видео готово! [Veo 3.1]\n\n` +
+      `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n` +
+      `🔗 Референс: ${input.referenceUrl}`,
     ...input.replyParams,
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🔁 Повторить', getRepeatGenerationCallbackData(input.taskId))],
