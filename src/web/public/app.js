@@ -26,7 +26,7 @@ const defaultProject = () => ({
     fontColor: '#FFFFFF',
     fontWeight: '700',
     outlineColor: '#000000',
-    outlineWidth: 1.5,
+    outlineWidth: 0,
     backgroundColor: '#000000',
     backgroundOpacity: 0.82,
     borderStyle: 1,
@@ -102,6 +102,7 @@ const elements = {
       fontColor: document.getElementById('textStyle-fontColor'),
       borderStyle: document.getElementById('textStyle-borderStyle'),
       outlineColor: document.getElementById('textStyle-outlineColor'),
+      outlineWidth: document.getElementById('textStyle-outlineWidth'),
       verticalMargin: document.getElementById('textStyle-verticalMargin'),
       frameWidthPercent: document.getElementById('textStyle-frameWidthPercent'),
       frameXPercent: document.getElementById('textStyle-frameXPercent'),
@@ -271,8 +272,8 @@ function snapshotFromForm() {
       fontColor: elements.fields.textStyle.fontColor.value,
       borderStyle: Number(elements.fields.textStyle.borderStyle.value),
       outlineColor: elements.fields.textStyle.outlineColor.value,
+      outlineWidth: Number(elements.fields.textStyle.outlineWidth.value || 0),
       verticalMargin: Number(elements.fields.textStyle.verticalMargin.value),
-      outlineWidth: state.currentProject.textStyle?.outlineWidth ?? 1.5,
       backgroundColor: elements.fields.textStyle.backgroundColor.value,
       backgroundOpacity: Number(elements.fields.textStyle.backgroundOpacity.value) / 100,
       frameWidthPercent: Number(elements.fields.textStyle.frameWidthPercent.value),
@@ -573,6 +574,7 @@ function applyProjectToForm(project) {
   elements.fields.textStyle.fontColor.value = style.fontColor;
   elements.fields.textStyle.borderStyle.value = String(style.borderStyle);
   elements.fields.textStyle.outlineColor.value = style.outlineColor;
+  elements.fields.textStyle.outlineWidth.value = String(style.outlineWidth ?? 0);
   elements.fields.textStyle.verticalMargin.value = style.verticalMargin;
   elements.fields.textStyle.frameWidthPercent.value = String(style.frameWidthPercent);
   elements.fields.textStyle.frameXPercent.value = String(style.frameXPercent);
@@ -754,6 +756,7 @@ function bindEvents() {
     elements.fields.textStyle.fontColor,
     elements.fields.textStyle.borderStyle,
     elements.fields.textStyle.outlineColor,
+    elements.fields.textStyle.outlineWidth,
     elements.fields.textStyle.verticalMargin,
     elements.fields.textStyle.frameWidthPercent,
     elements.fields.textStyle.frameXPercent,

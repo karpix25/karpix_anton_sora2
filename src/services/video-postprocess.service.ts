@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(__dirname, '../../data/generated-video-work');
 const defaultFontFamily = 'DejaVu Sans';
 const subtitleFontSizePx = 30; // Will be scaled in ASS
-const subtitleOutlineWidthPx = 1.5;
+const subtitleOutlineWidthPx = 0;
 const subtitleBold = true;
 const ffmpegTimeoutMs = (() => {
   const parsed = Number(process.env.FFMPEG_TIMEOUT_MS);
