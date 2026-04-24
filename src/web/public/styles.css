@@ -605,32 +605,67 @@ textarea {
   line-height: 1.5;
 }
 
+/* Responsive Design Mastery */
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 280px 1fr;
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
 
   .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .main-panel {
+    padding: 16px;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
   }
 
-  .reference-actions {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .modal-grid {
-    grid-template-columns: 1fr;
-  }
-
   .text-styling-grid {
     grid-template-columns: 1fr;
+  }
+
+  .preview-9-16-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .sidebar-header {
+    flex-direction: row;
+    justify-content: space-between;
   }
 }
 
