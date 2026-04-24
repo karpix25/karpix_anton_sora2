@@ -16,6 +16,7 @@ const defaultTextStyle: NonNullable<Project['textStyle']> = {
   fontWeight: '700',
   outlineColor: '#000000',
   outlineWidth: 1.5,
+  outlineEnabled: false,
   backgroundColor: '#000000',
   backgroundOpacity: 0.82,
   borderStyle: 1,
@@ -173,6 +174,7 @@ function normalizeTextStyle(
   const boxPaddingXRaw = toFiniteNumber(style.boxPaddingX);
   const boxPaddingYRaw = toFiniteNumber(style.boxPaddingY);
   const boxRadiusRaw = toFiniteNumber(style.boxRadius);
+  const outlineEnabled = typeof style.outlineEnabled === 'boolean' ? style.outlineEnabled : fallback.outlineEnabled;
   const fontWeightRaw = normalizeString(style.fontWeight);
   const normalizedFontWeight =
     /^(normal|bold|[1-9]00)$/.test(fontWeightRaw) ? fontWeightRaw : fallback.fontWeight;
@@ -195,6 +197,7 @@ function normalizeTextStyle(
     fontWeight: normalizedFontWeight,
     outlineColor: normalizeHexColor(style.outlineColor, fallback.outlineColor),
     outlineWidth: clamp(outlineWidthRaw ?? fallback.outlineWidth, 0, 12),
+    outlineEnabled,
     backgroundColor: normalizeHexColor(style.backgroundColor, fallback.backgroundColor),
     backgroundOpacity: clamp(backgroundOpacityRaw ?? fallback.backgroundOpacity, 0, 1),
     borderStyle,
