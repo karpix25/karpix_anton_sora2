@@ -352,7 +352,7 @@ export class KieService {
 
         await new Promise((resolve) => setTimeout(resolve, delay));
       } catch (error: any) {
-        if (typeof error?.message === 'string' && /failed|timed out|timeout/i.test(error.message)) throw error;
+        if (typeof error?.message === 'string' && /failed|error|timed out|timeout/i.test(error.message)) throw error;
         console.warn(`Polling error for ${taskId}:`, error.message);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
