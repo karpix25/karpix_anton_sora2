@@ -143,11 +143,6 @@ export const config = {
     apiKey: process.env.KIE_AI_API_KEY || '',
     baseUrl: 'https://api.kie.ai/api/v1',
   },
-  laozhang: {
-    apiKey: process.env.LAOZHANG_API_KEY || '',
-    baseUrl: 'https://api.laozhang.ai/v1',
-    isConfigured: isConfiguredSecret(process.env.LAOZHANG_API_KEY || ''),
-  },
   yandexDisk: {
     token: process.env.YANDEX_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.YANDEX_TOKEN || ''),

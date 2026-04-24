@@ -1,6 +1,4 @@
 import { KieService } from './kie.service.js';
-import { LaozhangService } from './laozhang.service.js';
-import { config } from '../config.js';
 import { systemConfigStore } from '../storage/system-config-store.js';
 import type { GenerationProvider } from '../domain/generation-task.js';
 import type { VideoModel } from '../domain/project.js';
@@ -47,7 +45,7 @@ export class VideoGenerationService {
       promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${input.prompt}`;
     }
 
-    // 1. KIE.AI (Primary)
+    // 1. KIE.AI (Primary & Only)
     try {
       console.log(`[VideoGenerationService] Attempting Kie.ai (${effectiveModel})...`);
       const taskId = await KieService.generateVideo(
@@ -63,27 +61,8 @@ export class VideoGenerationService {
       const url = await KieService.pollStatus(taskId, effectiveModel);
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {
-      console.warn('Kie.ai failed, trying AIHUBMIX...', error instanceof Error ? error.message : error);
+      console.error('Kie.ai generation failed:', error instanceof Error ? error.message : error);
+      throw new Error(`Video generation failed (Kie.ai): ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // 2. Laozhang (Fallback) - Native Polling
-    if (config.laozhang.isConfigured) {
-      try {
-        console.log(`[VideoGenerationService] Attempting Laozhang (${effectiveModel})...`);
-        const result = await LaozhangService.generateVideo(
-          promptWithFormat, 
-          input.imageUrl, 
-          effectiveModel, 
-          '9:16'
-        );
-        const url = await LaozhangService.pollStatus(result);
-        if (typeof url !== 'string') throw new Error('Invalid URL returned from Laozhang');
-        return { provider: 'laozhang', providerTaskId: result, resultVideoUrl: url };
-      } catch (error) {
-        console.error('All providers (Kie, Laozhang) failed:', error instanceof Error ? error.message : error);
-      }
-    }
-
-    throw new Error('All primary video generation providers (Kie, Laozhang) failed or are not configured.');
   }
 }
