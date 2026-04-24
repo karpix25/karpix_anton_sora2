@@ -15,26 +15,51 @@ export class LaozhangService {
     const isVeo = model.includes('veo');
     
     if (isVeo) {
-      // Use Laozhang's New Async Video API for Veo 3.1
+      // Use Laozhang's New Async Video API for Veo 3.1 with Multipart/Form-Data
+      let tempFilePath: string | null = null;
       try {
         const targetModel = 'veo-3.1-fl'; // Standard quality i2v
         
-        console.log(`[LaozhangService] Creating Async Veo Task: model=${targetModel}, prompt=${prompt.substring(0, 50)}...`);
+        console.log(`[LaozhangService] Preparing Async Veo Task: model=${targetModel}`);
+
+        // 1. Download the remote image to a temporary local file
+        const fs = await import('fs');
+        const path = await import('path');
+        const os = await import('os');
+        const { Readable } = await import('stream');
+        const { finished } = await import('stream/promises');
+
+        const tempDir = os.tmpdir();
+        tempFilePath = path.join(tempDir, `veo_ref_${Date.now()}.jpg`);
+        
+        const writer = fs.createWriteStream(tempFilePath);
+        const imgResponse = await axios.get(imageUrl, { responseType: 'stream' });
+        imgResponse.data.pipe(writer);
+        await finished(writer);
+
+        // 2. Build Form-Data
+        const FormData = (await import('form-data')).default;
+        const form = new FormData();
+        form.append('model', targetModel);
+        form.append('prompt', prompt);
+        form.append('input_reference', fs.createReadStream(tempFilePath));
+        
+        // Note: aspect_ratio is often encoded in model name or ignored in some versions, 
+        // but we'll include it if documentation suggests. 
+        // Based on research, model name covers it, but let's be safe.
+        form.append('aspect_ratio', aspect_ratio === '9:16' ? '9:16' : '16:9');
+
+        console.log(`[LaozhangService] Uploading image and creating task...`);
 
         const response = await axios.post(
           `${config.laozhang.baseUrl}/videos`,
-          {
-            model: targetModel,
-            prompt: prompt,
-            image_url: imageUrl,
-            aspect_ratio: aspect_ratio === '9:16' ? '9:16' : '16:9'
-          },
+          form,
           {
             headers: {
+              ...form.getHeaders(),
               'Authorization': `Bearer ${config.laozhang.apiKey}`,
-              'Content-Type': 'application/json',
             },
-            timeout: 30000,
+            timeout: 60000, // 1 minute for upload + creation
           }
         );
 
@@ -43,10 +68,20 @@ export class LaozhangService {
           throw new Error(`Failed to get taskId from Laozhang: ${JSON.stringify(response.data)}`);
         }
 
-        return taskId; // Return ID for polling
+        return taskId;
       } catch (error: any) {
         const details = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-        throw new Error(`Laozhang (Veo Async) creation failed: ${details}`);
+        throw new Error(`Laozhang (Veo Form-Data) creation failed: ${details}`);
+      } finally {
+        // 3. Clean up temp file
+        if (tempFilePath) {
+          try {
+            const fs = await import('fs');
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+          } catch (e) {
+            console.warn(`[LaozhangService] Failed to delete temp file: ${tempFilePath}`);
+          }
+        }
       }
     } else {
       // Legacy Synchronous "Chat" API for Sora 2
