@@ -48,7 +48,7 @@ export class CometService {
         form.append('seconds', String(options.duration || 8));
         
         if (imageUrl) {
-          form.append('image_url', imageUrl);
+          form.append('input_reference', imageUrl);
         }
 
         const headers = {
