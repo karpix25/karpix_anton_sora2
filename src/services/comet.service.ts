@@ -45,11 +45,11 @@ export class CometService {
         
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
-        const form = new FormData();
+        const size = options.aspect_ratio === '9:16' ? '720x1280' : '1280x720';
         form.append('model', model);
         form.append('prompt', prompt);
         form.append('seconds', String(options.duration || 8));
-        form.append('size', options.aspect_ratio === '9:16' ? '720x1280' : '1280x720');
+        form.append('size', size);
 
         if (imageUrl) {
           try {
@@ -79,6 +79,7 @@ export class CometService {
             });
           } catch (err: any) {
             console.error('[CometService] Failed to prepare reference image:', err.message);
+            throw new Error(`Failed to prepare reference image for Sora 2: ${err.message}`);
           }
         }
 
@@ -138,10 +139,10 @@ export class CometService {
         );
 
         const data = response.data;
-        const progress = data?.progress; // e.g. "100%"
-        const status = data?.status; // e.g. "FAILURE" or "SUCCESS" (guessing based on common patterns)
+        const progress = data?.progress; // could be "100%" (string) or 100 (number)
+        const status = data?.status; 
 
-        if (progress === '100%') {
+        if (progress === '100%' || progress === 100) {
           if (status === 'FAILURE') {
             throw new Error(`Comet video generation failed: ${data?.error || 'Unknown error'}`);
           }
