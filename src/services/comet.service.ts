@@ -42,24 +42,25 @@ export class CometService {
         
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
-        const form = new FormData();
-        form.append('model', model);
-        form.append('prompt', prompt);
-        form.append('seconds', String(options.duration || 8));
-        
-        if (imageUrl) {
-          form.append('input_reference', imageUrl);
-        }
-
-        const headers = {
-          ...form.getHeaders(),
-          'Authorization': `Bearer ${key}`,
+        const payload: any = {
+          model,
+          prompt,
+          seconds: options.duration || 8,
         };
+
+        if (imageUrl) {
+          payload.input_reference = { url: imageUrl };
+        }
 
         const response = await axios.post(
           `${config.cometApi.baseUrl}/videos`,
-          form,
-          { headers }
+          payload,
+          {
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
         const videoId = response.data?.id;
