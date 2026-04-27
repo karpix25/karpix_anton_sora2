@@ -49,7 +49,7 @@ export class CometService {
         };
 
         if (imageUrl) {
-          payload.input_reference = imageUrl;
+          payload.input_reference = { type: 'url', url: imageUrl };
         }
 
         const response = await axios.post(
