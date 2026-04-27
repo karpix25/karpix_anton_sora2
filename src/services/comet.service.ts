@@ -34,6 +34,7 @@ export class CometService {
     } = {}
   ): Promise<string> {
     return this.generationRateLimiter.schedule(async () => {
+      let tempImagePath: string | null = null;
       try {
         const key = config.cometApi.apiKey;
         const maskedKey = key.length > 8 
@@ -42,23 +43,37 @@ export class CometService {
         
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
-        const payload: any = {
-          model,
-          prompt,
-          seconds: String(options.duration || 8),
-        };
+        const form = new FormData();
+        form.append('model', model);
+        form.append('prompt', prompt);
+        form.append('seconds', String(options.duration || 8));
+        form.append('size', options.aspect_ratio === '9:16' ? '720x1280' : '1280x720');
 
         if (imageUrl) {
-          payload.input_reference = { type: 'url', url: imageUrl };
+          try {
+            const downloadsDir = path.resolve(__dirname, '../../data/comet-downloads');
+            await fs.ensureDir(downloadsDir);
+            tempImagePath = path.join(downloadsDir, `ref_${Date.now()}.jpg`);
+            
+            const imageRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            await fs.writeFile(tempImagePath, imageRes.data);
+            
+            form.append('input_reference', fs.createReadStream(tempImagePath), {
+              filename: 'reference.jpg',
+              contentType: 'image/jpeg',
+            });
+          } catch (err: any) {
+            console.error('[CometService] Failed to prepare reference image:', err.message);
+          }
         }
 
         const response = await axios.post(
           `${config.cometApi.baseUrl}/videos`,
-          payload,
+          form,
           {
             headers: {
+              ...form.getHeaders(),
               'Authorization': `Bearer ${key}`,
-              'Content-Type': 'application/json',
             },
           }
         );
@@ -79,6 +94,12 @@ export class CometService {
         }
 
         throw new Error(`Video generation start failed (Comet): ${details}`);
+      } finally {
+        if (tempImagePath) {
+          fs.remove(tempImagePath).catch(err => 
+            console.error('[CometService] Failed to cleanup temp reference image:', err.message)
+          );
+        }
       }
     });
   }
