@@ -3,6 +3,8 @@ import FormData from 'form-data';
 import fs from 'fs-extra';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { config } from '../config.js';
 import { AdminNotifierService } from './admin-notifier.service.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
@@ -57,6 +59,19 @@ export class CometService {
             
             const imageRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
             await fs.writeFile(tempImagePath, imageRes.data);
+            
+            // Resize image to match requested size using ffmpeg
+            const resizedPath = path.join(downloadsDir, `resized_${Date.now()}.jpg`);
+            const [width, height] = size.split('x');
+            const execAsync = promisify(exec);
+            
+            // Scale and pad to match exact dimensions
+            const cmd = `ffmpeg -i "${tempImagePath}" -vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2" "${resizedPath}"`;
+            await execAsync(cmd);
+
+            // Replace tempImagePath with resized version for upload
+            await fs.remove(tempImagePath);
+            tempImagePath = resizedPath;
             
             form.append('input_reference', fs.createReadStream(tempImagePath), {
               filename: 'reference.jpg',
