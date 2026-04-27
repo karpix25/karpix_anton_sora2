@@ -144,7 +144,7 @@ export const config = {
     baseUrl: 'https://api.kie.ai/api/v1',
   },
   cometApi: {
-    apiKey: (process.env.COMET_API_KEY || '').trim(),
+    apiKey: (process.env.COMET_API_KEY || process.env.COMETAPI_KEY || '').trim(),
     baseUrl: 'https://api.cometapi.com/v1',
   },
   yandexDisk: {
