@@ -46,6 +46,8 @@ export class CometService {
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
         const size = options.aspect_ratio === '9:16' ? '720x1280' : '1280x720';
+        console.log(`[CometService] Target size: ${size}`);
+        
         form.append('model', model);
         form.append('prompt', prompt);
         form.append('seconds', String(options.duration || 8));
@@ -53,6 +55,7 @@ export class CometService {
 
         if (imageUrl) {
           try {
+            console.log(`[CometService] Preparing reference image for size: ${size}`);
             const downloadsDir = path.resolve(__dirname, '../../data/comet-downloads');
             await fs.ensureDir(downloadsDir);
             tempImagePath = path.join(downloadsDir, `ref_${Date.now()}.jpg`);
