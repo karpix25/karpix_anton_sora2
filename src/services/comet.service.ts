@@ -45,8 +45,6 @@ export class CometService {
         const form = new FormData();
         form.append('model', model);
         form.append('prompt', prompt);
-        form.append('duration', String(options.duration || 8));
-        form.append('aspect_ratio', options.aspect_ratio || '9:16');
         
         if (imageUrl) {
           form.append('image_url', imageUrl);
