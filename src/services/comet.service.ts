@@ -45,7 +45,7 @@ export class CometService {
         const payload: any = {
           model,
           prompt,
-          seconds: options.duration || 8,
+          seconds: String(options.duration || 8),
         };
 
         if (imageUrl) {
