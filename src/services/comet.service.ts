@@ -35,32 +35,32 @@ export class CometService {
   ): Promise<string> {
     return this.generationRateLimiter.schedule(async () => {
       try {
+        const key = config.cometApi.apiKey;
+        const maskedKey = key.length > 8 
+          ? `${key.slice(0, 4)}...${key.slice(-4)}` 
+          : '*** (too short)';
+        
+        console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
+
         const form = new FormData();
         form.append('model', model);
         form.append('prompt', prompt);
-        // Based on user request, we want 8s vertical. 
-        // Adding these as extra fields in case the API supports them.
         form.append('duration', String(options.duration || 8));
         form.append('aspect_ratio', options.aspect_ratio || '9:16');
         
-        // Comet API documentation (per user's script) doesn't explicitly mention imageUrl field name, 
-        // but typically it's 'image' or 'image_url'. 
-        // Given Sora 2 is often image-to-video, we'll try 'image_url' or similar if known.
-        // If the user's example only showed prompt, maybe it's text-to-video only?
-        // But the project uses image-to-video. I'll include it as 'image_url'.
         if (imageUrl) {
           form.append('image_url', imageUrl);
         }
 
+        const headers = {
+          ...form.getHeaders(),
+          'Authorization': `Bearer ${key}`,
+        };
+
         const response = await axios.post(
           `${config.cometApi.baseUrl}/videos`,
           form,
-          {
-            headers: {
-              ...form.getHeaders(),
-              'Authorization': `Bearer ${config.cometApi.apiKey}`,
-            },
-          }
+          { headers }
         );
 
         const videoId = response.data?.id;
