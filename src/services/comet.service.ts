@@ -198,7 +198,20 @@ export class CometService {
         writer.on('error', reject);
       });
 
-      return outputPath;
+      // Upscale to 1080x1920 if needed
+      const upscaledPath = path.join(downloadsDir, `upscaled_${videoId}.mp4`);
+      console.log(`[CometService] Upscaling video ${videoId} to 1080x1920...`);
+      
+      const execAsync = promisify(exec);
+      try {
+        await execAsync(`ffmpeg -i "${outputPath}" -vf "scale=1080:1920" -c:v libx264 -crf 18 -preset fast "${upscaledPath}"`);
+        // Replace original with upscaled version
+        await fs.remove(outputPath);
+        return upscaledPath;
+      } catch (upscaleErr: any) {
+        console.error(`[CometService] Upscale failed, using original:`, upscaleErr.message);
+        return outputPath;
+      }
     } catch (error: any) {
       throw new Error(`Failed to download video from Comet: ${error.message}`);
     }
