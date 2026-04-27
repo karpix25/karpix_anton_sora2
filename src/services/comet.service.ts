@@ -45,7 +45,7 @@ export class CometService {
         
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
-        const size = options.aspect_ratio === '9:16' ? '720x1280' : '1280x720';
+        const size = options.aspect_ratio === '9:16' ? '1024x1792' : '1792x1024';
         console.log(`[CometService] Target size: ${size}`);
         
         const form = new FormData();
