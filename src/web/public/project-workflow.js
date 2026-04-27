@@ -79,6 +79,24 @@ export function createProjectWorkflow(context) {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  function getYandexDiskFileUrl(diskPath, fallbackUrl = '') {
+    const normalizedPath = String(diskPath || '')
+      .replace(/^disk:\/*/i, '')
+      .replace(/^\/+/, '');
+
+    if (!normalizedPath) {
+      return fallbackUrl || '';
+    }
+
+    const encodedPath = normalizedPath
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    return encodedPath ? `https://disk.yandex.ru/client/disk/${encodedPath}` : (fallbackUrl || '');
+  }
+
   function getLatestGenerationByLibraryItemId() {
     const tasks = Array.isArray(state.generationTasks) ? [...state.generationTasks] : [];
     tasks.sort((a, b) => {
@@ -109,7 +127,7 @@ export function createProjectWorkflow(context) {
     const doneAt = task.finishedAt || task.updatedAt || task.createdAt;
     const doneAtText = doneAt ? context.escapeHtml(new Date(doneAt).toLocaleString()) : '—';
     const errorText = task.errorMessage ? context.escapeHtml(shortenText(task.errorMessage, 140)) : '';
-    const finalResultUrl = task.yandexDownloadUrl || '';
+    const finalResultUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
 
     return `
       <div class="library-generation-summary">
@@ -118,7 +136,7 @@ export function createProjectWorkflow(context) {
         <p class="meta-line">Обновлено: ${doneAtText}</p>
         ${errorText ? `<p class="meta-line library-error-text">${errorText}</p>` : ''}
         ${finalResultUrl
-          ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Открыть финальный результат</a></p>`
+          ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Открыть файл на Яндекс Диске</a></p>`
           : '<p class="meta-line">Финальный файл еще не готов</p>'}
       </div>
     `;
@@ -318,7 +336,9 @@ export function createProjectWorkflow(context) {
     elements.generationTasks.className = 'library-list';
     elements.generationTasks.innerHTML = tasks
       .map(
-        (task) => `
+        (task) => {
+          const finalResultUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
+          return `
           <article class="library-item">
             <div class="library-item-header">
               <div>
@@ -328,12 +348,13 @@ export function createProjectWorkflow(context) {
               </div>
               <span class="library-status">${context.escapeHtml(task.status)}</span>
             </div>
-            ${task.yandexDownloadUrl ? `<p><a class="library-link" href="${task.yandexDownloadUrl}" target="_blank" rel="noreferrer">Финальный результат (Яндекс Диск)</a></p>` : '<p class="meta-line">Финальный результат еще не загружен</p>'}
+            ${finalResultUrl ? `<p><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Финальный результат (Яндекс Диск)</a></p>` : '<p class="meta-line">Финальный результат еще не загружен</p>'}
             ${task.yandexDiskPath ? `<p class="meta-line">${context.escapeHtml(task.yandexDiskPath)}</p>` : ''}
             ${task.errorMessage ? `<p class="meta-line">${context.escapeHtml(task.errorMessage)}</p>` : ''}
             ${task.promptText ? `<div class="library-analysis">${context.escapeHtml(shortenText(task.promptText))}</div>` : ''}
           </article>
-        `
+        `;
+        }
       )
       .join('');
   }

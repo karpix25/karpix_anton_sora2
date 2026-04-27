@@ -950,7 +950,7 @@ export class VideoPostprocessService {
           '-i',
           input.audioFilePath,
           '-filter_complex',
-          '[0:v]lutyuv=y=\'val*0.5\',format=yuv420p[v]',
+          '[0:v]lutyuv=y=\'val*0.6\',format=yuv420p[v]',
           '-map',
           '[v]',
           '-map',
@@ -1058,7 +1058,7 @@ export class VideoPostprocessService {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatScriptPath,
-                '-filter_complex', '[0:v]lutyuv=y=\'val*0.5\'[dimmed];[dimmed][2:v]overlay=x=0:y=0',
+                '-filter_complex', '[0:v]lutyuv=y=\'val*0.6\'[dimmed];[dimmed][2:v]overlay=x=0:y=0',
                 '-map', '0:v:0',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
@@ -1089,7 +1089,7 @@ export class VideoPostprocessService {
 
         const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
         const relativeAssPath = path.relative(process.cwd(), assFilePath);
-        const filter = `lutyuv=y='val*0.5',subtitles='${escapeFilterValue(relativeAssPath)}'`;
+        const filter = `lutyuv=y='val*0.6',subtitles='${escapeFilterValue(relativeAssPath)}'`;
         console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
 
         await runFfmpeg([
