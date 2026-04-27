@@ -45,6 +45,7 @@ export class CometService {
         const form = new FormData();
         form.append('model', model);
         form.append('prompt', prompt);
+        form.append('seconds', String(options.duration || 8));
         
         if (imageUrl) {
           form.append('image_url', imageUrl);
