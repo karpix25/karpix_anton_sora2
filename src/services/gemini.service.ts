@@ -343,6 +343,7 @@ export class GeminiService {
 
         STRUCTURE:
         - Use the format: "0.0s – 2.0s: [Action description]"
+        - The TOTAL duration of the prompt MUST be exactly 8 seconds.
         - Maximum 3 to 5 beats.
         - Each beat should be 1 or 2 concise sentences.
         - Keep the whole prompt short enough to feel like a high-speed production brief.

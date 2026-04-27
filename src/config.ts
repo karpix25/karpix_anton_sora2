@@ -143,6 +143,10 @@ export const config = {
     apiKey: process.env.KIE_AI_API_KEY || '',
     baseUrl: 'https://api.kie.ai/api/v1',
   },
+  cometApi: {
+    apiKey: process.env.COMETAPI_KEY || '',
+    baseUrl: 'https://api.cometapi.com/v1',
+  },
   yandexDisk: {
     token: process.env.YANDEX_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.YANDEX_TOKEN || ''),
@@ -158,6 +162,7 @@ if (
   !config.telegram.isConfigured ||
   !config.openRouter.apiKey ||
   !config.kieAi.apiKey ||
+  !config.cometApi.apiKey ||
   !config.rapidApi.key ||
   !config.yandexDisk.isConfigured
 ) {

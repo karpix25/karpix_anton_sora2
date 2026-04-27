@@ -41,7 +41,7 @@ export class ManualGenerationService {
       referenceLibraryItemId: libraryItem.id,
       triggerMode: input.triggerMode,
       targetModel: project.selectedModel,
-      provider: 'kie',
+      provider: 'comet',
       status: 'pending',
       promptText: typeof input.promptText === 'string' ? input.promptText.trim() : '',
     });

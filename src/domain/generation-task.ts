@@ -2,7 +2,7 @@ import type { VideoModel } from './project.js';
 
 export type GenerationTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GenerationTriggerMode = 'telegram_manual' | 'web_manual';
-export type GenerationProvider = 'kie' | 'aihubmix' | 'laozhang' | 'defapi' | 'defapi-stable';
+export type GenerationProvider = 'comet' | 'kie' | 'aihubmix' | 'laozhang' | 'defapi' | 'defapi-stable';
 
 export interface GenerationTask {
   id: string;
