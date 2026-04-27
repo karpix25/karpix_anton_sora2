@@ -91,6 +91,12 @@ export async function initDatabase(): Promise<void> {
   // Migrate all existing projects to use the new "Video is Master" default behavior
   await db.query(`UPDATE projects SET trim_video_to_audio = FALSE`);
 
+  // Switch all projects to sora-2 as requested
+  await db.query(`UPDATE projects SET selected_model = 'sora-2'`);
+
+  // Update system config to ensure 8s duration default
+  await db.query(`UPDATE system_config SET config = config || '{"defaultVideoModel": "sora-2", "grokDuration": 8}'::jsonb WHERE id = 'global'`);
+
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS reference_library (

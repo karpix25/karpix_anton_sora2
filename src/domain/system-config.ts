@@ -11,7 +11,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   defaultVideoModel: 'sora-2',
   grokMode: 'normal',
   grokResolution: '720p',
-  grokDuration: 10,
+  grokDuration: 8,
   useReferenceDuration: false,
   grokStyle: 'vlog',
 };

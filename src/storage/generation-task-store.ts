@@ -45,7 +45,7 @@ function normalizeStatus(value: unknown): GenerationTaskStatus {
 }
 
 function normalizeProvider(value: unknown): GenerationProvider {
-  const providers: GenerationProvider[] = ['kie', 'aihubmix', 'laozhang', 'defapi', 'defapi-stable'];
+  const providers: GenerationProvider[] = ['kie', 'aihubmix', 'laozhang', 'defapi', 'defapi-stable', 'comet'];
   if (typeof value === 'string' && (providers as string[]).includes(value)) {
     return value as GenerationProvider;
   }

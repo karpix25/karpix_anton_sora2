@@ -1,59 +1,99 @@
 import axios from 'axios';
 import FormData from 'form-data';
+import fs from 'fs-extra';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
+import { AdminNotifierService } from './admin-notifier.service.js';
+import { RateLimiter } from '../utils/rate-limiter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const downloadsDir = path.resolve(__dirname, '../../data/comet-downloads');
 
 export class CometService {
   /**
-   * Triggers video generation on CometAPI.
+   * Limit: 10 generation requests per 10 seconds.
+   */
+  private static generationRateLimiter = new RateLimiter(10, 10000);
+
+  /**
+   * Triggers video generation on Comet API.
    * @param prompt The prompt for generation.
-   * @param model The target model ('sora-2').
+   * @param imageUrl The reference image URL.
+   * @param model The target model (default: 'sora-2').
+   * @param options Additional options like duration and aspect_ratio.
    */
   public static async generateVideo(
     prompt: string,
-    model: string
+    imageUrl: string,
+    model: string = 'sora-2',
+    options: {
+      duration?: number;
+      aspect_ratio?: string;
+    } = {}
   ): Promise<string> {
-    try {
-      const formData = new FormData();
-      formData.append('model', model);
-      formData.append('prompt', prompt);
-
-      const response = await axios.post(
-        `${config.cometApi.baseUrl}/videos`,
-        formData,
-        {
-          headers: {
-            ...formData.getHeaders(),
-            'Authorization': `Bearer ${config.cometApi.apiKey}`,
-          },
+    return this.generationRateLimiter.schedule(async () => {
+      try {
+        const form = new FormData();
+        form.append('model', model);
+        form.append('prompt', prompt);
+        // Based on user request, we want 8s vertical. 
+        // Adding these as extra fields in case the API supports them.
+        form.append('duration', String(options.duration || 8));
+        form.append('aspect_ratio', options.aspect_ratio || '9:16');
+        
+        // Comet API documentation (per user's script) doesn't explicitly mention imageUrl field name, 
+        // but typically it's 'image' or 'image_url'. 
+        // Given Sora 2 is often image-to-video, we'll try 'image_url' or similar if known.
+        // If the user's example only showed prompt, maybe it's text-to-video only?
+        // But the project uses image-to-video. I'll include it as 'image_url'.
+        if (imageUrl) {
+          form.append('image_url', imageUrl);
         }
-      );
 
-      const taskId = response.data?.id;
-      if (!taskId) {
-        throw new Error(`Failed to get task ID from CometAPI: ${JSON.stringify(response.data)}`);
+        const response = await axios.post(
+          `${config.cometApi.baseUrl}/videos`,
+          form,
+          {
+            headers: {
+              ...form.getHeaders(),
+              'Authorization': `Bearer ${config.cometApi.apiKey}`,
+            },
+          }
+        );
+
+        const videoId = response.data?.id;
+        if (!videoId) {
+          throw new Error(`Failed to get video ID from Comet API: ${JSON.stringify(response.data)}`);
+        }
+        return videoId;
+      } catch (error: any) {
+        const errorData = error.response?.data;
+        const details = errorData ? JSON.stringify(errorData) : error.message;
+        
+        if (error.response?.status === 402 || details.toLowerCase().includes('balance')) {
+          AdminNotifierService.notifyBalanceError('Comet API', details).catch(err => 
+            console.error('[CometService] Failed to notify admins:', err.message)
+          );
+        }
+
+        throw new Error(`Video generation start failed (Comet): ${details}`);
       }
-
-      console.log(`[CometService] Task created: ${taskId}`);
-      return taskId;
-    } catch (error: any) {
-      const details = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      console.error(`[CometService] Generation start error:`, details);
-      throw new Error(`Video generation start failed (Comet): ${details}`);
-    }
+    });
   }
 
   /**
-   * Polls the status of a CometAPI task until it's finished or fails.
-   * @param taskId The ID of the task to poll.
+   * Polls the status of a Comet video until it's finished or fails.
+   * @param videoId The ID of the video to poll.
    */
-  public static async pollStatus(taskId: string): Promise<string> {
-    const maxRetries = 150; 
+  public static async pollStatus(videoId: string): Promise<string> {
+    const maxRetries = 120; // 10 minutes at 5s interval
     
     for (let i = 0; i < maxRetries; i++) {
-      const delay = 10000; // 10 seconds as per user script
       try {
         const response = await axios.get(
-          `${config.cometApi.baseUrl}/videos/${taskId}`,
+          `${config.cometApi.baseUrl}/videos/${videoId}`,
           {
             headers: {
               'Authorization': `Bearer ${config.cometApi.apiKey}`,
@@ -61,32 +101,65 @@ export class CometService {
           }
         );
 
-        const data = response.data ?? {};
-        const progress = data.progress; // e.g. "0%" or "100%"
-        const status = (data.status || '').toUpperCase();
-
-        console.log(`[CometService] Task ${taskId} - Progress: ${progress}, Status: ${status} (${i + 1}/${maxRetries})`);
+        const data = response.data;
+        const progress = data?.progress; // e.g. "100%"
+        const status = data?.status; // e.g. "FAILURE" or "SUCCESS" (guessing based on common patterns)
 
         if (progress === '100%') {
-          console.log(`[CometService] Video generation completed for task ${taskId}`);
-          // The content URL as per user script is /v1/videos/:id/content
-          return `${config.cometApi.baseUrl}/videos/${taskId}/content`;
+          if (status === 'FAILURE') {
+            throw new Error(`Comet video generation failed: ${data?.error || 'Unknown error'}`);
+          }
+          
+          // Download the video
+          return await this.downloadVideo(videoId);
         }
 
-        if (status === 'FAILURE' || status === 'FAILED') {
-          throw new Error(`CometAPI generation failed: ${JSON.stringify(data)}`);
+        if (status === 'FAILURE') {
+          throw new Error(`Comet video generation failed early: ${data?.error || 'Unknown error'}`);
         }
 
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        console.log(`Comet Video ${videoId} progress: ${progress || '0%'}. Waiting... (${i + 1}/${maxRetries})`);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       } catch (error: any) {
-        // If it's a known failure, rethrow
-        if (error.message.includes('failed') || error.message.includes('FAILURE')) throw error;
-        
-        console.warn(`[CometService] Polling error for ${taskId}:`, error.message);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (error.message.includes('Comet video generation failed')) throw error;
+        console.warn(`Polling error for Comet ${videoId}:`, error.message);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
 
-    throw new Error('CometAPI task timed out');
+    throw new Error('Comet video generation timed out');
+  }
+
+  /**
+   * Downloads the video from Comet API to a local file.
+   * @param videoId The ID of the video to download.
+   */
+  private static async downloadVideo(videoId: string): Promise<string> {
+    await fs.ensureDir(downloadsDir);
+    const outputPath = path.join(downloadsDir, `${videoId}.mp4`);
+
+    try {
+      const response = await axios.get(
+        `${config.cometApi.baseUrl}/videos/${videoId}/content`,
+        {
+          headers: {
+            'Authorization': `Bearer ${config.cometApi.apiKey}`,
+          },
+          responseType: 'stream',
+        }
+      );
+
+      const writer = fs.createWriteStream(outputPath);
+      response.data.pipe(writer);
+
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      return outputPath;
+    } catch (error: any) {
+      throw new Error(`Failed to download video from Comet: ${error.message}`);
+    }
   }
 }

@@ -152,9 +152,9 @@ async function loadGlobalConfig() {
       elements.globalConfig.grokResolution.value = config.grokResolution || '720p';
     }
     if (elements.globalConfig.grokDuration) {
-      elements.globalConfig.grokDuration.value = config.grokDuration || 10;
+      elements.globalConfig.grokDuration.value = config.grokDuration || 8;
       if (elements.globalConfig.grokDurationLabel) {
-        elements.globalConfig.grokDurationLabel.textContent = config.grokDuration || 10;
+        elements.globalConfig.grokDurationLabel.textContent = config.grokDuration || 8;
       }
     }
     if (elements.globalConfig.useReferenceDuration) {
@@ -171,7 +171,7 @@ async function saveGlobalConfig() {
     grokMode: elements.globalConfig.grokMode?.value || 'normal',
     grokStyle: elements.globalConfig.grokStyle?.value || 'vlog',
     grokResolution: elements.globalConfig.grokResolution?.value || '720p',
-    grokDuration: Number(elements.globalConfig.grokDuration?.value || 10),
+    grokDuration: Number(elements.globalConfig.grokDuration?.value || 8),
     useReferenceDuration: elements.globalConfig.useReferenceDuration?.checked || false,
   };
   try {
