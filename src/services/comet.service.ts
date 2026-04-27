@@ -48,6 +48,7 @@ export class CometService {
         const size = options.aspect_ratio === '9:16' ? '720x1280' : '1280x720';
         console.log(`[CometService] Target size: ${size}`);
         
+        const form = new FormData();
         form.append('model', model);
         form.append('prompt', prompt);
         form.append('seconds', String(options.duration || 8));
