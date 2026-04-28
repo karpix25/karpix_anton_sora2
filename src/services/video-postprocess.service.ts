@@ -374,8 +374,9 @@ function resolveTextStyle(style: unknown): TextRenderStyle {
   const boxPaddingX = Math.round(clamp(toFiniteNumber(source.boxPaddingX) ?? defaultTextRenderStyle.boxPaddingX, 0, 120));
   const boxPaddingY = Math.round(clamp(toFiniteNumber(source.boxPaddingY) ?? defaultTextRenderStyle.boxPaddingY, 0, 80));
   const boxRadius = Math.round(clamp(toFiniteNumber(source.boxRadius) ?? defaultTextRenderStyle.boxRadius, 0, 120));
-  const borderStyleRaw = toFiniteNumber(source.borderStyle);
-  const borderStyle = borderStyleRaw === 3 ? 3 : 1;
+  // Force non-box subtitle mode in ffmpeg postprocess:
+  // BorderStyle 3 renders opaque rectangle behind text.
+  const borderStyle = 1;
   const outlineEnabled = Boolean(source.outlineEnabled ?? defaultTextRenderStyle.outlineEnabled);
   const textAlignRaw = typeof source.textAlign === 'string' ? source.textAlign.trim().toLowerCase() : '';
   const textAlign: TextRenderStyle['textAlign'] =
