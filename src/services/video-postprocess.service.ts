@@ -486,6 +486,10 @@ function formatSecondsToAssTime(seconds: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
+function toFfmpegDuration(seconds: number): string {
+  return Math.max(0, seconds).toFixed(3);
+}
+
 function generateAssFileContent(overlays: PreparedOverlay[], style: TextRenderStyle): string {
   const defaultMargins = toAssFrameMargins(style);
   const alignment = toAssAlignment(style.textAlign);
@@ -868,6 +872,7 @@ export class VideoPostprocessService {
       const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
       const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
       const audioMode = shouldTrimVideoToAudio ? 'trim_video_to_audio' : 'loop_audio_to_video';
+      let videoDurationSeconds: number | null = null;
       console.log(
         `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0}, preset=${ffmpegPreset}, crf=${ffmpegCrf}, threads=${ffmpegThreads}, queue_limit=${postprocessConcurrency})`
       );
@@ -887,6 +892,7 @@ export class VideoPostprocessService {
         }
         
         const totalDuration = await getVideoDuration(input.generatedVideoUrl);
+        videoDurationSeconds = totalDuration;
         
         // Handle static overlays from reference (extend to full duration)
         effectiveTextOverlays = effectiveTextOverlays.map(overlay => {
@@ -967,6 +973,9 @@ export class VideoPostprocessService {
           '-c:a',
           'aac',
           '-shortest',
+          ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
+            ? ['-t', toFfmpegDuration(videoDurationSeconds)]
+            : []),
           '-movflags',
           '+faststart',
           outputPath,
@@ -1069,6 +1078,9 @@ export class VideoPostprocessService {
                 '-pix_fmt', 'yuv420p',
                 '-c:a', 'aac',
                 '-shortest',
+                ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
+                  ? ['-t', toFfmpegDuration(videoDurationSeconds)]
+                  : []),
                 '-movflags', '+faststart',
                 outputPath
               ];
@@ -1119,6 +1131,9 @@ export class VideoPostprocessService {
           '-c:a',
           'aac',
           '-shortest',
+          ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
+            ? ['-t', toFfmpegDuration(videoDurationSeconds)]
+            : []),
           '-movflags',
           '+faststart',
           outputPath,
