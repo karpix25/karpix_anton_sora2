@@ -89,6 +89,61 @@ export class CometService {
     return details.join(' | ');
   }
 
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private static normalizeStatus(status: unknown): string {
+    return String(status || '').trim().toLowerCase();
+  }
+
+  private static isCompletedStatus(status: unknown): boolean {
+    const normalized = this.normalizeStatus(status);
+    return normalized === 'completed' || normalized === 'success' || normalized === 'succeeded';
+  }
+
+  private static isFailureStatus(status: unknown): boolean {
+    const normalized = this.normalizeStatus(status);
+    return normalized === 'failure' || normalized === 'failed' || normalized === 'error' || normalized === 'cancelled';
+  }
+
+  private static extractVideoId(payload: any): string | null {
+    const candidateValues = [
+      payload?.video_id,
+      payload?.id,
+      payload?.data?.video_id,
+      payload?.data?.id,
+      payload?.result?.video_id,
+      payload?.result?.id,
+      payload?.output?.video_id,
+      payload?.output?.id,
+      payload?.video?.id,
+    ];
+
+    for (const candidate of candidateValues) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    return null;
+  }
+
+  private static parseProgress(progress: unknown): number | null {
+    if (typeof progress === 'number' && Number.isFinite(progress)) {
+      return progress;
+    }
+
+    if (typeof progress === 'string') {
+      const cleaned = progress.replace('%', '').trim();
+      const parsed = Number(cleaned);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Triggers video generation on Comet API.
    * @param prompt The prompt for generation.
@@ -200,12 +255,13 @@ export class CometService {
    * @param videoId The ID of the video to poll.
    */
   public static async pollStatus(videoId: string): Promise<string> {
-    const maxRetries = 120; // 10 minutes at 5s interval
+    const maxRetries = 120; // up to ~10+ minutes depending on backoff on transient 5xx
+    let resolvedVideoId = videoId;
     
     for (let i = 0; i < maxRetries; i++) {
       try {
         const response = await axios.get(
-          `${config.cometApi.baseUrl}/videos/${videoId}`,
+          `${config.cometApi.baseUrl}/videos/${resolvedVideoId}`,
           {
             headers: {
               'Authorization': `Bearer ${config.cometApi.apiKey}`,
@@ -214,28 +270,38 @@ export class CometService {
         );
 
         const data = response.data;
-        const progress = data?.progress; // could be "100%" (string) or 100 (number)
-        const status = data?.status; 
-
-        if (progress === '100%' || progress === 100) {
-          if (status === 'FAILURE') {
-            throw new Error(`Comet video generation failed: ${data?.error || 'Unknown error'}`);
-          }
-          
-          // Download the video
-          return await this.downloadVideo(videoId);
+        const extractedVideoId = this.extractVideoId(data);
+        if (extractedVideoId) {
+          resolvedVideoId = extractedVideoId;
         }
 
-        if (status === 'FAILURE') {
+        const progressValue = this.parseProgress(data?.progress);
+        const status = data?.status;
+
+        if (this.isFailureStatus(status)) {
           throw new Error(`Comet video generation failed early: ${data?.error || 'Unknown error'}`);
         }
 
-        console.log(`Comet Video ${videoId} progress: ${progress || '0%'}. Waiting... (${i + 1}/${maxRetries})`);
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        if (this.isCompletedStatus(status) || progressValue === 100) {
+          // Download the completed video content via canonical video ID.
+          return await this.downloadVideo(resolvedVideoId);
+        }
+
+        console.log(`Comet Video ${resolvedVideoId} status=${status || 'unknown'} progress=${progressValue ?? 'n/a'}%. Waiting... (${i + 1}/${maxRetries})`);
+        await this.sleep(5000);
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
-        console.warn(`[CometService] pollStatus retry for ${videoId} (${i + 1}/${maxRetries}): ${this.buildAxiosDebugContext(error)}`);
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        const statusCode = Number(error?.response?.status || 0);
+        const isTransientServerError = statusCode >= 500 && statusCode < 600;
+        const backoffMs = isTransientServerError
+          ? Math.min(30000, 5000 * Math.pow(1.35, i)) + Math.floor(Math.random() * 750)
+          : 5000;
+
+        console.warn(
+          `[CometService] pollStatus retry for ${resolvedVideoId} (${i + 1}/${maxRetries}): ${this.buildAxiosDebugContext(error)} | backoff=${backoffMs}ms`
+        );
+        await this.sleep(backoffMs);
       }
     }
 
@@ -257,17 +323,31 @@ export class CometService {
           headers: {
             'Authorization': `Bearer ${config.cometApi.apiKey}`,
           },
-          responseType: 'stream',
+          responseType: 'arraybuffer',
+          validateStatus: () => true,
         }
       );
 
-      const writer = fs.createWriteStream(outputPath);
-      response.data.pipe(writer);
+      const contentType = String(response.headers?.['content-type'] || '').toLowerCase();
+      const isJson = contentType.includes('application/json') || contentType.includes('text/json');
+      const textBody = Buffer.from(response.data).toString('utf-8');
 
-      await new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-      });
+      if (response.status >= 400 || isJson) {
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(textBody);
+        } catch {
+          parsed = textBody;
+        }
+
+        const message =
+          parsed?.message ||
+          parsed?.data?.error?.message ||
+          `Unexpected Comet content response (status=${response.status}, content-type=${contentType || 'unknown'})`;
+        throw new Error(message);
+      }
+
+      await fs.writeFile(outputPath, response.data);
 
       // Upscale to 1080x1920 if needed
       const upscaledPath = path.join(downloadsDir, `upscaled_${videoId}.mp4`);
