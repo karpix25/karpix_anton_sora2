@@ -12,12 +12,82 @@ import { RateLimiter } from '../utils/rate-limiter.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadsDir = path.resolve(__dirname, '../../data/comet-downloads');
+const cometDebugHeaders = [
+  'x-request-id',
+  'x-comet-request-id',
+  'cf-ray',
+  'cf-cache-status',
+  'server',
+  'content-type',
+  'date',
+];
 
 export class CometService {
   /**
    * Limit: 10 generation requests per 10 seconds.
    */
   private static generationRateLimiter = new RateLimiter(10, 10000);
+
+  private static safeSerialize(value: unknown, maxLength = 4000): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    try {
+      const raw = typeof value === 'string' ? value : JSON.stringify(value);
+      if (!raw) {
+        return '';
+      }
+      return raw.length > maxLength ? `${raw.slice(0, maxLength)}... [truncated]` : raw;
+    } catch {
+      return '[unserializable]';
+    }
+  }
+
+  private static pickDebugHeaders(headers: unknown): Record<string, string> {
+    if (!headers || typeof headers !== 'object') {
+      return {};
+    }
+
+    const source = headers as Record<string, unknown>;
+    const picked: Record<string, string> = {};
+    for (const key of cometDebugHeaders) {
+      const value = source[key];
+      if (value !== undefined && value !== null) {
+        picked[key] = String(value);
+      }
+    }
+    return picked;
+  }
+
+  private static buildAxiosDebugContext(error: any): string {
+    const method = String(error?.config?.method || '').toUpperCase() || 'UNKNOWN';
+    const requestUrl = error?.config?.url || 'unknown-url';
+    const baseURL = error?.config?.baseURL;
+    const fullUrl = baseURL && typeof requestUrl === 'string' && !requestUrl.startsWith('http')
+      ? `${String(baseURL).replace(/\/+$/, '')}/${requestUrl.replace(/^\/+/, '')}`
+      : requestUrl;
+    const status = error?.response?.status ?? 'n/a';
+    const statusText = error?.response?.statusText || '';
+    const code = error?.code || 'n/a';
+    const responseHeaders = this.pickDebugHeaders(error?.response?.headers);
+    const responseData = this.safeSerialize(error?.response?.data, 6000);
+    const message = error?.message || 'unknown error';
+    const details: string[] = [
+      `message=${message}`,
+      `code=${code}`,
+      `request=${method} ${fullUrl}`,
+      `status=${status}${statusText ? ` ${statusText}` : ''}`,
+    ];
+
+    if (Object.keys(responseHeaders).length) {
+      details.push(`headers=${JSON.stringify(responseHeaders)}`);
+    }
+    if (responseData) {
+      details.push(`response=${responseData}`);
+    }
+    return details.join(' | ');
+  }
 
   /**
    * Triggers video generation on Comet API.
@@ -106,6 +176,7 @@ export class CometService {
       } catch (error: any) {
         const errorData = error.response?.data;
         const details = errorData ? JSON.stringify(errorData) : error.message;
+        console.error(`[CometService] generateVideo failed: ${this.buildAxiosDebugContext(error)}`);
         
         if (error.response?.status === 402 || details.toLowerCase().includes('balance')) {
           AdminNotifierService.notifyBalanceError('Comet API', details).catch(err => 
@@ -163,7 +234,7 @@ export class CometService {
         await new Promise((resolve) => setTimeout(resolve, 5000));
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
-        console.warn(`Polling error for Comet ${videoId}:`, error.message);
+        console.warn(`[CometService] pollStatus retry for ${videoId} (${i + 1}/${maxRetries}): ${this.buildAxiosDebugContext(error)}`);
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
@@ -213,6 +284,7 @@ export class CometService {
         return outputPath;
       }
     } catch (error: any) {
+      console.error(`[CometService] downloadVideo failed for ${videoId}: ${this.buildAxiosDebugContext(error)}`);
       throw new Error(`Failed to download video from Comet: ${error.message}`);
     }
   }
