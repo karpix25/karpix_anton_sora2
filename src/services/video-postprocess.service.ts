@@ -51,6 +51,7 @@ const ffmpegThreads = (() => {
 })();
 const frameWidthPx = 720;
 const frameHeightPx = 1280;
+const trimStartFrames = 6;
 const emojiScale = 1.08;
 const emojiFetchTimeoutMs = 15000;
 const localTwemojiAssetsDir = path.resolve(process.cwd(), 'node_modules/emoji-datasource-twitter/img/twitter/64');
@@ -957,7 +958,7 @@ export class VideoPostprocessService {
           '-i',
           input.audioFilePath,
           '-filter_complex',
-          '[0:v]format=yuv420p[v]',
+          `[0:v]trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS,format=yuv420p[v]`,
           '-map',
           '[v]',
           '-map',
@@ -1068,8 +1069,8 @@ export class VideoPostprocessService {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatScriptPath,
-                '-filter_complex', '[0:v][2:v]overlay=x=0:y=0',
-                '-map', '0:v:0',
+                '-filter_complex', `[0:v][2:v]overlay=x=0:y=0,trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS[v]`,
+                '-map', '[v]',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
                 '-threads', ffmpegThreads,
@@ -1102,7 +1103,7 @@ export class VideoPostprocessService {
 
         const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
         const relativeAssPath = path.relative(process.cwd(), assFilePath);
-        const filter = `subtitles='${escapeFilterValue(relativeAssPath)}'`;
+        const filter = `subtitles='${escapeFilterValue(relativeAssPath)}',trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS`;
         console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
 
         await runFfmpeg([
