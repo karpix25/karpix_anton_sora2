@@ -84,6 +84,7 @@ export class AdminNotifierService {
       `<b>Провайдер:</b> ${providerName}\n` +
       `<b>Время:</b> ${timestamp} MSK\n\n` +
       `<b>Детали:</b>\n<code>${errorDetails}</code>\n\n` +
+      `❗ <b>Нужно пополнить баланс в Comet API.</b>\n\n` +
       `⚠️ <i>Генерация видео может быть остановлена до пополнения средств.</i>`;
     await this.sendAlert(message);
   }

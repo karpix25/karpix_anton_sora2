@@ -89,6 +89,41 @@ export class CometService {
     return details.join(' | ');
   }
 
+  private static isCometBalanceError(error: any): boolean {
+    const statusCode = Number(error?.response?.status || 0);
+    const errorData = error?.response?.data;
+    const code = String(
+      errorData?.code ||
+      errorData?.error?.code ||
+      ''
+    ).toLowerCase();
+    const message = String(
+      errorData?.message ||
+      errorData?.error?.message ||
+      error?.message ||
+      ''
+    ).toLowerCase();
+
+    if (statusCode === 402) {
+      return true;
+    }
+
+    if (statusCode === 403 && code.includes('insufficient_user_quota')) {
+      return true;
+    }
+
+    return (
+      code.includes('quota') ||
+      code.includes('insufficient') ||
+      message.includes('quota') ||
+      message.includes('balance') ||
+      message.includes('credits') ||
+      message.includes('not enough funds') ||
+      message.includes('pre-consume quota') ||
+      message.includes('remaining quota')
+    );
+  }
+
   private static sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -233,7 +268,7 @@ export class CometService {
         const details = errorData ? JSON.stringify(errorData) : error.message;
         console.error(`[CometService] generateVideo failed: ${this.buildAxiosDebugContext(error)}`);
         
-        if (error.response?.status === 402 || details.toLowerCase().includes('balance')) {
+        if (this.isCometBalanceError(error)) {
           AdminNotifierService.notifyBalanceError('Comet API', details).catch(err => 
             console.error('[CometService] Failed to notify admins:', err.message)
           );
