@@ -35,17 +35,23 @@ export class VideoGenerationService {
 
     const isGrok = effectiveModel.includes('grok');
     const isVeo = effectiveModel.includes('veo');
+    const referenceLockInstructions = [
+      'Use the exact same product identity from the reference image from the first frame to the last frame.',
+      'Keep product shape, proportions, materials, cap/edges, label placement, typography layout, logo placement, and colors consistent.',
+      'No product redesign, no morphing, no warping, no deformation, no brand/logo drift, no text drift, no replacing product with another item.',
+      'The product must remain clearly visible and in focus whenever it is in frame.',
+    ].join(' ');
     let promptWithFormat = input.prompt;
 
     if (isGrok) {
       // Grok requires referencing the image in the prompt as @image1
-      promptWithFormat = `@image1 ${input.prompt} ${finalDuration} seconds`;
+      promptWithFormat = `@image1 ${referenceLockInstructions} ${input.prompt} ${finalDuration} seconds`;
     } else if (isVeo) {
       // Veo 3.1 R2V format: instruct model to use subject consistency but generate its own scene
-      promptWithFormat = `The product/subject from the reference image is featured in this scene: ${input.prompt}. Duration: ${finalDuration} seconds. 9:16 portrait orientation. Maintain high visual consistency with the reference subject while ignoring its original background. Use natural lighting and a realistic environment.`;
+      promptWithFormat = `The product/subject from the reference image is featured in this scene: ${input.prompt}. ${referenceLockInstructions} Duration: ${finalDuration} seconds. 9:16 portrait orientation. Maintain high visual consistency with the reference subject while ignoring its original background. Use natural lighting and a realistic environment.`;
     } else {
       // Sora/Other default format hints
-      promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${input.prompt}`;
+      promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${referenceLockInstructions} ${input.prompt}`;
     }
 
     // 1. Comet API (Primary for Sora 2)
