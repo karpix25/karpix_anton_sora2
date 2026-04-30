@@ -47,6 +47,7 @@ const state = {
   currentProject: defaultProject(),
   libraryItems: [],
   generationTasks: [],
+  googleCyrillicFonts: [],
 };
 
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
@@ -252,6 +253,70 @@ function readFileAsBase64(file) {
   });
 }
 
+function ensureFontFamilyOption(fontFamily) {
+  const value = String(fontFamily || '').trim();
+  if (!value || !elements.fields.textStyle.fontFamily) {
+    return;
+  }
+
+  const existing = Array.from(elements.fields.textStyle.fontFamily.options).some(
+    (option) => option.value === value
+  );
+  if (existing) {
+    return;
+  }
+
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = `${value} (custom)`;
+  elements.fields.textStyle.fontFamily.appendChild(option);
+}
+
+function populateGoogleFontSelect(fonts) {
+  if (!elements.fields.textStyle.fontFamily) {
+    return;
+  }
+
+  const select = elements.fields.textStyle.fontFamily;
+  const previousValue = select.value || state.currentProject?.textStyle?.fontFamily || defaultProject().textStyle.fontFamily;
+  select.innerHTML = '';
+
+  for (const item of fonts) {
+    const family = String(item?.family || '').trim();
+    if (!family) {
+      continue;
+    }
+
+    const option = document.createElement('option');
+    option.value = family;
+    option.textContent = family;
+    select.appendChild(option);
+  }
+
+  ensureFontFamilyOption(previousValue);
+  select.value = previousValue;
+}
+
+async function loadGoogleCyrillicFonts() {
+  try {
+    const data = await api('/api/fonts/google-cyrillic');
+    const fonts = Array.isArray(data?.fonts) ? data.fonts : [];
+    state.googleCyrillicFonts = fonts;
+    populateGoogleFontSelect(fonts);
+  } catch (error) {
+    console.error('Failed to load Google Cyrillic fonts:', error);
+    setStatus('Не удалось загрузить список Google Fonts. Используется локальный список.');
+    state.googleCyrillicFonts = [];
+    populateGoogleFontSelect([
+      { family: 'Montserrat' },
+      { family: 'Roboto' },
+      { family: 'Inter' },
+      { family: 'Rubik' },
+      { family: 'PT Sans' },
+    ]);
+  }
+}
+
 function snapshotFromForm() {
   return {
     ...state.currentProject,
@@ -298,10 +363,11 @@ function loadGoogleFont(fontFamily) {
   const linkId = `google-font-${fontFamily.toLowerCase().replace(/\s+/g, '-')}`;
   if (document.getElementById(linkId)) return;
 
+  const familyParam = encodeURIComponent(fontFamily.trim()).replace(/%20/g, '+');
   const link = document.createElement('link');
   link.id = linkId;
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(/\s+/g, '+')}:wght@400;700;900&display=swap`;
+  link.href = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@400;700;900&subset=cyrillic,cyrillic-ext&display=swap`;
   document.head.appendChild(link);
 }
 
@@ -581,6 +647,7 @@ function applyProjectToForm(project) {
     ...defaultProject().textStyle,
     ...(state.currentProject.textStyle || {}),
   };
+  ensureFontFamilyOption(style.fontFamily);
   elements.fields.textStyle.fontFamily.value = style.fontFamily;
   elements.fields.textStyle.fontSize.value = style.fontSize;
   elements.fields.textStyle.fontWeight.value = style.fontWeight;
@@ -843,7 +910,7 @@ console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
   loadGlobalConfig();
-  loadProjects().then(() => {
+  loadGoogleCyrillicFonts().then(() => loadProjects()).then(() => {
     console.log('✅ Projects loaded');
   }).catch((error) => {
     console.error('❌ Failed to load projects:', error);

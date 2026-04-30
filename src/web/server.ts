@@ -185,6 +185,13 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     return true;
   }
 
+  if (pathname === '/api/fonts/google-cyrillic' && req.method === 'GET') {
+    const { GoogleFontsService } = await import('../services/google-fonts.service.js');
+    const fonts = await GoogleFontsService.listCyrillicFonts();
+    sendJson(res, 200, { fonts });
+    return true;
+  }
+
   if (pathname === '/api/system/config' && req.method === 'GET') {
     const { systemConfigStore } = await import('../storage/system-config-store.js');
     const config = await systemConfigStore.getConfig();

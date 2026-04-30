@@ -6,6 +6,7 @@ import axios from 'axios';
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import { parse as parseEmojiEntities, toCodePoints } from '@twemoji/parser';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
+import { GoogleFontsService } from './google-fonts.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,11 +58,35 @@ const emojiFetchTimeoutMs = 15000;
 const localTwemojiAssetsDir = path.resolve(process.cwd(), 'node_modules/emoji-datasource-twitter/img/twitter/64');
 type LoadedCanvasImage = Awaited<ReturnType<typeof loadImage>>;
 const emojiImageCache = new Map<string, Promise<LoadedCanvasImage>>();
-let textFontRegistered = false;
+const registeredCanvasFontFamilies = new Set<string>();
 
-function ensureCanvasFonts(fontFamily: string): void {
-  if (textFontRegistered) {
+function normalizeFontWeightForLookup(weight: string): number {
+  const raw = weight.trim().toLowerCase();
+  if (raw === 'normal') return 400;
+  if (raw === 'bold') return 700;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 700;
+  return Math.max(100, Math.min(900, Math.round(parsed / 100) * 100));
+}
+
+async function ensureCanvasFonts(style: TextRenderStyle): Promise<void> {
+  const fontFamily = style.fontFamily.trim();
+  if (registeredCanvasFontFamilies.has(fontFamily)) {
     return;
+  }
+
+  try {
+    const googleFontPath = await GoogleFontsService.ensureCyrillicFontFile(
+      fontFamily,
+      normalizeFontWeightForLookup(style.fontWeight)
+    );
+    if (googleFontPath) {
+      GlobalFonts.registerFromPath(googleFontPath, fontFamily);
+      registeredCanvasFontFamilies.add(fontFamily);
+      return;
+    }
+  } catch (error: any) {
+    console.warn(`[VideoPostprocessService] Failed to load Google font "${fontFamily}": ${error?.message || error}`);
   }
 
   const candidates = [
@@ -76,7 +101,7 @@ function ensureCanvasFonts(fontFamily: string): void {
     try {
       if (fs.existsSync(candidate)) {
         GlobalFonts.registerFromPath(candidate, fontFamily);
-        textFontRegistered = true;
+        registeredCanvasFontFamilies.add(fontFamily);
         return;
       }
     } catch {
@@ -487,10 +512,6 @@ function formatSecondsToAssTime(seconds: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-function toFfmpegDuration(seconds: number): string {
-  return Math.max(0, seconds).toFixed(3);
-}
-
 function generateAssFileContent(overlays: PreparedOverlay[], style: TextRenderStyle): string {
   const defaultMargins = toAssFrameMargins(style);
   const alignment = toAssAlignment(style.textAlign);
@@ -558,6 +579,29 @@ async function writeAssFile(taskId: string, overlays: PreparedOverlay[], style: 
   const filePath = path.join(overlayDir, 'subtitles.ass');
   await fs.writeFile(filePath, assContent, 'utf8');
   return filePath;
+}
+
+async function collectAssFontDirectories(overlays: PreparedOverlay[]): Promise<string[]> {
+  const directories = new Set<string>();
+
+  for (const item of overlays) {
+    try {
+      const fontPath = await GoogleFontsService.ensureCyrillicFontFile(
+        item.style.fontFamily,
+        normalizeFontWeightForLookup(item.style.fontWeight)
+      );
+      if (fontPath) {
+        directories.add(path.dirname(fontPath));
+      }
+    } catch (error: any) {
+      console.warn(
+        `[VideoPostprocessService] Failed to prepare ASS font "${item.style.fontFamily}":`,
+        error?.message || error
+      );
+    }
+  }
+
+  return Array.from(directories);
 }
 
 function buildOverlayFilterGraph(frames: OverlayFrame[]): { graph: string; finalLabel: string } {
@@ -763,7 +807,7 @@ async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedO
     if (!(endSeconds > startSeconds)) {
       continue;
     }
-    ensureCanvasFonts(style.fontFamily);
+    await ensureCanvasFonts(style);
 
     const lineHeightPx = Math.max(style.fontSize * style.lineHeight, style.fontSize + 2);
     const textFrame = buildTextFrameGeometry(style);
@@ -860,6 +904,7 @@ export class VideoPostprocessService {
     taskId: string;
     generatedVideoUrl: string;
     audioFilePath: string;
+    // Deprecated toggle: postprocess now always cuts to the shortest media stream.
     trimVideoToAudio?: boolean;
     textOverlays?: ReferenceTextOverlay[];
     textStyle?: unknown;
@@ -871,11 +916,8 @@ export class VideoPostprocessService {
     await fs.ensureDir(dataDir);
     return withPostprocessSlot(async () => {
       const outputPath = path.join(dataDir, `${input.taskId}.mp4`);
-      const shouldTrimVideoToAudio = Boolean(input.trimVideoToAudio);
-      const audioMode = shouldTrimVideoToAudio ? 'trim_video_to_audio' : 'loop_audio_to_video';
-      let videoDurationSeconds: number | null = null;
       console.log(
-        `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=${audioMode}, overlays=${input.textOverlays?.length || 0}, preset=${ffmpegPreset}, crf=${ffmpegCrf}, threads=${ffmpegThreads}, queue_limit=${postprocessConcurrency})`
+        `[VideoPostprocessService] Task ${input.taskId}: start postprocess (mode=shortest_media, overlays=${input.textOverlays?.length || 0}, preset=${ffmpegPreset}, crf=${ffmpegCrf}, threads=${ffmpegThreads}, queue_limit=${postprocessConcurrency})`
       );
 
       const endFrameTextTrimmed = typeof input.endFrameText === 'string' ? input.endFrameText.trim() : '';
@@ -893,7 +935,6 @@ export class VideoPostprocessService {
         }
         
         const totalDuration = await getVideoDuration(input.generatedVideoUrl);
-        videoDurationSeconds = totalDuration;
         
         // Handle static overlays from reference (extend to full duration)
         effectiveTextOverlays = effectiveTextOverlays.map(overlay => {
@@ -948,13 +989,6 @@ export class VideoPostprocessService {
           '-y',
           '-i',
           input.generatedVideoUrl,
-        ];
-
-        if (!shouldTrimVideoToAudio) {
-          ffmpegArgs.push('-stream_loop', '-1');
-        }
-
-        ffmpegArgs.push(
           '-i',
           input.audioFilePath,
           '-filter_complex',
@@ -974,13 +1008,10 @@ export class VideoPostprocessService {
           '-c:a',
           'aac',
           '-shortest',
-          ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
-            ? ['-t', toFfmpegDuration(videoDurationSeconds)]
-            : []),
           '-movflags',
           '+faststart',
           outputPath,
-        );
+        ];
 
         await runFfmpeg(ffmpegArgs, {
           label: `task ${input.taskId} ffmpeg (no-overlays)`,
@@ -1008,9 +1039,7 @@ export class VideoPostprocessService {
         const overlayStyle = overlay.id === 'end-frame-text' ? endFrameStyle : resolvedTextStyle;
         return prepareOverlayForRender(overlay, overlayStyle);
       });
-      const requiresCanvasRenderer = preparedOverlays.some(
-        (item) => item.style.borderStyle === 3 || hasEmojiGlyphs(item.text)
-      );
+      const requiresCanvasRenderer = true;
       const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
       try {
@@ -1064,7 +1093,6 @@ export class VideoPostprocessService {
               const ffmpegArgs = [
                 '-y',
                 '-i', input.generatedVideoUrl,
-                ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
                 '-i', input.audioFilePath,
                 '-f', 'concat',
                 '-safe', '0',
@@ -1079,9 +1107,6 @@ export class VideoPostprocessService {
                 '-pix_fmt', 'yuv420p',
                 '-c:a', 'aac',
                 '-shortest',
-                ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
-                  ? ['-t', toFfmpegDuration(videoDurationSeconds)]
-                  : []),
                 '-movflags', '+faststart',
                 outputPath
               ];
@@ -1102,15 +1127,20 @@ export class VideoPostprocessService {
         }
 
         const assFilePath = await writeAssFile(input.taskId, preparedOverlays, resolvedTextStyle);
+        const assFontsDirs = await collectAssFontDirectories(preparedOverlays);
         const relativeAssPath = path.relative(process.cwd(), assFilePath);
-        const filter = `subtitles='${escapeFilterValue(relativeAssPath)}',trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS`;
+        const subtitlesArgs = [`subtitles='${escapeFilterValue(relativeAssPath)}'`];
+        for (const dirPath of assFontsDirs) {
+          const relativeDir = path.relative(process.cwd(), dirPath);
+          subtitlesArgs.push(`fontsdir='${escapeFilterValue(relativeDir)}'`);
+        }
+        const filter = `${subtitlesArgs.join(':')},trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS`;
         console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
 
         await runFfmpeg([
           '-y',
           '-i',
           input.generatedVideoUrl,
-          ...(!shouldTrimVideoToAudio ? ['-stream_loop', '-1'] : []),
           '-i',
           input.audioFilePath,
           '-vf',
@@ -1132,9 +1162,6 @@ export class VideoPostprocessService {
           '-c:a',
           'aac',
           '-shortest',
-          ...(!shouldTrimVideoToAudio && videoDurationSeconds && videoDurationSeconds > 0
-            ? ['-t', toFfmpegDuration(videoDurationSeconds)]
-            : []),
           '-movflags',
           '+faststart',
           outputPath,
