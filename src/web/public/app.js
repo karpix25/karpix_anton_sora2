@@ -16,7 +16,6 @@ const defaultProject = () => ({
   dailyGenerationLimit: 1,
   selectedModel: 'sora-2',
   isActive: true,
-  trimVideoToAudio: false,
   primaryReferenceImageId: '',
   referenceImages: [],
   endFrameText: '',
@@ -96,7 +95,6 @@ const elements = {
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
     selectedModel: document.getElementById('selectedModel'),
     isActive: document.getElementById('isActive'),
-    trimVideoToAudio: document.getElementById('trimVideoToAudio'),
     textStyle: {
       fontFamily: document.getElementById('textStyle-fontFamily'),
       fontSize: document.getElementById('textStyle-fontSize'),
@@ -331,7 +329,6 @@ function snapshotFromForm() {
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
     selectedModel: elements.fields.selectedModel.value,
     isActive: elements.fields.isActive.checked,
-    trimVideoToAudio: elements.fields.trimVideoToAudio.checked,
     textStyle: {
       fontFamily: elements.fields.textStyle.fontFamily.value,
       fontSize: Number(elements.fields.textStyle.fontSize.value),
@@ -641,7 +638,6 @@ function applyProjectToForm(project) {
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
-  elements.fields.trimVideoToAudio.checked = Boolean(state.currentProject.trimVideoToAudio);
 
   const style = {
     ...defaultProject().textStyle,

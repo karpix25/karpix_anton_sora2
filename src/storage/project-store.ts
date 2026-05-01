@@ -46,7 +46,6 @@ interface ProjectRow {
   daily_generation_limit: number;
   selected_model: string;
   is_active: boolean;
-  trim_video_to_audio: boolean;
   primary_reference_image_id: string;
   reference_images: unknown;
   text_style: unknown;
@@ -241,7 +240,6 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     dailyGenerationLimit: normalizeNumber(input.dailyGenerationLimit, existing?.dailyGenerationLimit ?? 1),
     selectedModel: (selectedModel === 'veo-3-1' || selectedModel === 'grok-imagine') ? selectedModel : 'sora-2',
     isActive: normalizeBoolean(input.isActive, existing?.isActive ?? true),
-    trimVideoToAudio: normalizeBoolean(input.trimVideoToAudio, existing?.trimVideoToAudio ?? false),
     primaryReferenceImageId: resolvedPrimaryReferenceImageId,
     referenceImages,
     textStyle,
@@ -271,7 +269,6 @@ function mapRowToProject(row: ProjectRow): Project {
     dailyGenerationLimit: normalizeNumber(row.daily_generation_limit, 1),
     selectedModel: (row.selected_model === 'veo-3-1' || row.selected_model === 'grok-imagine') ? row.selected_model : 'sora-2',
     isActive: Boolean(row.is_active),
-    trimVideoToAudio: Boolean(row.trim_video_to_audio),
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
     referenceImages: parseJSON(row.reference_images, []),
     textStyle: normalizeTextStyle(row.text_style, defaultTextStyle),
@@ -311,14 +308,14 @@ async function upsertProject(project: Project): Promise<Project> {
       id, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
       product_name, product_description, extra_prompting_rules, target_audience, cta,
       mode, automation_enabled, daily_generation_limit, selected_model, is_active,
-      trim_video_to_audio, primary_reference_image_id, reference_images, text_style,
+      primary_reference_image_id, reference_images, text_style,
       end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
       created_at, updated_at
     )
     VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
-      $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
+      $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb,
+      $19, $20, $21, $22, $23::timestamptz, $24::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
@@ -335,7 +332,6 @@ async function upsertProject(project: Project): Promise<Project> {
       daily_generation_limit = EXCLUDED.daily_generation_limit,
       selected_model = EXCLUDED.selected_model,
       is_active = EXCLUDED.is_active,
-      trim_video_to_audio = EXCLUDED.trim_video_to_audio,
       primary_reference_image_id = EXCLUDED.primary_reference_image_id,
       reference_images = EXCLUDED.reference_images,
       text_style = EXCLUDED.text_style,
@@ -363,7 +359,6 @@ async function upsertProject(project: Project): Promise<Project> {
     project.dailyGenerationLimit,
     project.selectedModel,
     project.isActive,
-    project.trimVideoToAudio,
     project.primaryReferenceImageId,
     JSON.stringify(project.referenceImages),
     JSON.stringify(project.textStyle || {}),

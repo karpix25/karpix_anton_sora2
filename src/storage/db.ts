@@ -63,7 +63,6 @@ export async function initDatabase(): Promise<void> {
       daily_generation_limit INTEGER NOT NULL DEFAULT 1,
       selected_model TEXT NOT NULL DEFAULT 'sora-2',
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      trim_video_to_audio BOOLEAN NOT NULL DEFAULT FALSE,
       primary_reference_image_id TEXT NOT NULL DEFAULT '',
       reference_images JSONB NOT NULL DEFAULT '[]'::jsonb,
       text_style JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -76,9 +75,7 @@ export async function initDatabase(): Promise<void> {
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_style JSONB NOT NULL DEFAULT '{}'::jsonb;
   `);
 
-  await db.query(`
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS trim_video_to_audio BOOLEAN NOT NULL DEFAULT FALSE;
-  `);
+  await db.query(`ALTER TABLE projects DROP COLUMN IF EXISTS trim_video_to_audio`);
 
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT DEFAULT ''`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_vertical_margin INTEGER DEFAULT 320`);
@@ -87,9 +84,6 @@ export async function initDatabase(): Promise<void> {
   
   // Disable outline by default in all existing projects as requested
   await db.query(`UPDATE projects SET text_style = text_style || '{"outlineEnabled": false}'::jsonb`);
-
-  // Migrate all existing projects to use the new "Video is Master" default behavior
-  await db.query(`UPDATE projects SET trim_video_to_audio = FALSE`);
 
   // Switch all projects to sora-2 as requested
   await db.query(`UPDATE projects SET selected_model = 'sora-2'`);

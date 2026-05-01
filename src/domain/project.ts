@@ -53,7 +53,6 @@ export interface Project {
   dailyGenerationLimit: number;
   selectedModel: VideoModel;
   isActive: boolean;
-  trimVideoToAudio: boolean;
   primaryReferenceImageId: string;
   referenceImages: ReferenceImage[];
   textStyle?: TextStyle;
@@ -80,7 +79,6 @@ export interface ProjectInput {
   dailyGenerationLimit?: number;
   selectedModel?: VideoModel;
   isActive?: boolean;
-  trimVideoToAudio?: boolean;
   primaryReferenceImageId?: string;
   referenceImages?: ReferenceImage[];
   textStyle?: TextStyle;

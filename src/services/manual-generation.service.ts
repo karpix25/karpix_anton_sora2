@@ -214,7 +214,6 @@ export class ManualGenerationService {
         taskId: task.id,
         generatedVideoUrl: resultVideoUrl,
         audioFilePath: audio.audioFilePath,
-        trimVideoToAudio: project.trimVideoToAudio,
         textOverlays: textOverlays,
         textStyle: project.textStyle,
         endFrameText: project.endFrameText || '',

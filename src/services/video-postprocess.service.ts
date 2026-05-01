@@ -55,6 +55,7 @@ const frameHeightPx = 1280;
 const trimStartFrames = 6;
 const emojiScale = 1.08;
 const emojiFetchTimeoutMs = 15000;
+const minAutoFitFontSizePx = 12;
 const localTwemojiAssetsDir = path.resolve(process.cwd(), 'node_modules/emoji-datasource-twitter/img/twitter/64');
 type LoadedCanvasImage = Awaited<ReturnType<typeof loadImage>>;
 const emojiImageCache = new Map<string, Promise<LoadedCanvasImage>>();
@@ -303,6 +304,89 @@ async function getVideoDuration(videoPath: string): Promise<number> {
   });
 }
 
+async function getVideoFrameRate(videoPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const process = spawn('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=avg_frame_rate',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      videoPath
+    ]);
+
+    let output = '';
+    process.stdout.on('data', (data) => {
+      output += String(data);
+    });
+
+    let stderr = '';
+    process.stderr.on('data', (data) => {
+      stderr += String(data);
+    });
+
+    process.on('error', (err) => reject(new Error(`ffprobe process error: ${err.message}`)));
+    process.on('close', (code) => {
+      if (code !== 0) {
+        const errorMsg = stderr.trim() || `exit code ${code}`;
+        reject(new Error(`ffprobe failed: ${errorMsg}`));
+        return;
+      }
+
+      const value = output.trim();
+      if (!value) {
+        resolve(0);
+        return;
+      }
+
+      if (value.includes('/')) {
+        const [numRaw, denRaw] = value.split('/');
+        const num = Number(numRaw);
+        const den = Number(denRaw);
+        if (Number.isFinite(num) && Number.isFinite(den) && den > 0) {
+          resolve(num / den);
+          return;
+        }
+      }
+
+      const parsed = Number(value);
+      resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
+    });
+  });
+}
+
+async function getAudioDuration(audioPath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const process = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      audioPath
+    ]);
+
+    let output = '';
+    process.stdout.on('data', (data) => {
+      output += String(data);
+    });
+
+    let stderr = '';
+    process.stderr.on('data', (data) => {
+      stderr += String(data);
+    });
+
+    process.on('error', (err) => reject(new Error(`ffprobe process error: ${err.message}`)));
+    process.on('close', (code) => {
+      if (code === 0) {
+        const duration = parseFloat(output.trim());
+        resolve(Number.isFinite(duration) ? duration : 0);
+      } else {
+        const errorMsg = stderr.trim() || `exit code ${code}`;
+        console.error(`[VideoPostprocessService] ffprobe failed for ${audioPath}. Error: ${errorMsg}`);
+        reject(new Error(`ffprobe failed: ${errorMsg}`));
+      }
+    });
+  });
+}
+
 function escapeFilterValue(value: string): string {
   return value
     .replace(/\\/g, '\\\\')
@@ -503,6 +587,108 @@ function estimateSubtitleMaxCharsPerLine(style: TextRenderStyle): number {
   return Math.round(clamp(estimated, 8, 80));
 }
 
+function getOverlayTextAreaWidth(style: TextRenderStyle): number {
+  const textFrame = buildTextFrameGeometry(style);
+  return style.borderStyle === 3
+    ? Math.max(40, textFrame.width - style.boxPaddingX * 2)
+    : textFrame.width;
+}
+
+function measureOverlayLineWidth(
+  line: string,
+  measureText: (value: string) => number,
+  style: TextRenderStyle
+): number {
+  return buildLineLayout(line, measureText, style).width;
+}
+
+function wrapLineByMeasuredWidth(
+  line: string,
+  maxWidth: number,
+  measureText: (value: string) => number,
+  style: TextRenderStyle
+): string[] {
+  const normalizedLine = line.trim();
+  if (!normalizedLine) {
+    return [''];
+  }
+
+  const words = normalizedLine.split(/\s+/).filter(Boolean);
+  if (!words.length) {
+    return [''];
+  }
+
+  const lines: string[] = [];
+  let current = '';
+
+  const flushCurrent = () => {
+    if (current) {
+      lines.push(current);
+      current = '';
+    }
+  };
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    const candidateWidth = measureOverlayLineWidth(candidate, measureText, style);
+    if (candidateWidth <= maxWidth + 0.5) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) {
+      flushCurrent();
+    }
+
+    const wordWidth = measureOverlayLineWidth(word, measureText, style);
+    if (wordWidth <= maxWidth + 0.5) {
+      current = word;
+      continue;
+    }
+
+    // Hard split for very long tokens that cannot fit on one line.
+    const glyphs = Array.from(word);
+    let tokenChunk = '';
+    for (const glyph of glyphs) {
+      const chunkCandidate = `${tokenChunk}${glyph}`;
+      const chunkWidth = measureOverlayLineWidth(chunkCandidate, measureText, style);
+      if (chunkWidth <= maxWidth + 0.5) {
+        tokenChunk = chunkCandidate;
+        continue;
+      }
+
+      if (tokenChunk) {
+        lines.push(tokenChunk);
+      }
+      tokenChunk = glyph;
+
+      // Safety fallback when even one glyph is wider than the line.
+      if (measureOverlayLineWidth(tokenChunk, measureText, style) > maxWidth + 0.5) {
+        lines.push(tokenChunk);
+        tokenChunk = '';
+      }
+    }
+
+    if (tokenChunk) {
+      current = tokenChunk;
+    }
+  }
+
+  flushCurrent();
+  return lines.length ? lines : [''];
+}
+
+function wrapOverlayTextByMeasuredWidth(
+  text: string,
+  maxWidth: number,
+  measureText: (value: string) => number,
+  style: TextRenderStyle
+): string {
+  const sourceLines = text.replace(/\r/g, '').split('\n');
+  const wrapped = sourceLines.flatMap((line) => wrapLineByMeasuredWidth(line, maxWidth, measureText, style));
+  return wrapped.join('\n');
+}
+
 function formatSecondsToAssTime(seconds: number): string {
   const date = new Date(seconds * 1000);
   const h = Math.floor(seconds / 3600);
@@ -553,21 +739,65 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const margins = toAssFrameMargins(overlayStyle);
 
     const escapedText = escapeAssDialogueText(normalizeEmojiPresentation(text));
+    const fontSizeOverride = overlayStyle.fontSize !== style.fontSize
+      ? `{\\fs${overlayStyle.fontSize}}`
+      : '';
 
-    return `Dialogue: 0,${start},${end},Default,,${margins.marginL},${margins.marginR},${margins.marginV},,${escapedText}`;
+    return `Dialogue: 0,${start},${end},Default,,${margins.marginL},${margins.marginR},${margins.marginV},,${fontSizeOverride}${escapedText}`;
   });
 
   return header + events + lines.join('\n');
 }
 
-function prepareOverlayForRender(overlay: ReferenceTextOverlay, style: TextRenderStyle): PreparedOverlay {
-  const maxCharsPerLine = estimateSubtitleMaxCharsPerLine(style);
-  const text = wrapOverlayText(overlay.text, maxCharsPerLine);
+async function prepareOverlayForRender(overlay: ReferenceTextOverlay, style: TextRenderStyle): Promise<PreparedOverlay> {
+  await ensureCanvasFonts(style);
+  const metricsCanvas = createCanvas(1, 1);
+  const metricsCtx = metricsCanvas.getContext('2d');
+  const baseText = typeof overlay.text === 'string' ? overlay.text : '';
 
+  let fallbackText = baseText;
+  let fallbackStyle = style;
+
+  for (let fontSize = style.fontSize; fontSize >= minAutoFitFontSizePx; fontSize -= 1) {
+    const candidateStyle: TextRenderStyle = {
+      ...style,
+      fontSize,
+    };
+    const maxCharsPerLine = estimateSubtitleMaxCharsPerLine(candidateStyle);
+    const roughWrapped = wrapOverlayText(baseText, maxCharsPerLine);
+    metricsCtx.font = buildCanvasFont(candidateStyle);
+    const maxWidth = getOverlayTextAreaWidth(candidateStyle);
+    const fittedText = wrapOverlayTextByMeasuredWidth(
+      roughWrapped,
+      maxWidth,
+      (value) => metricsCtx.measureText(value).width,
+      candidateStyle
+    );
+    const fittedLines = fittedText.split('\n');
+    const fittedWidth = fittedLines.reduce(
+      (acc, line) => Math.max(acc, measureOverlayLineWidth(line, (value) => metricsCtx.measureText(value).width, candidateStyle)),
+      0
+    );
+
+    fallbackText = fittedText;
+    fallbackStyle = candidateStyle;
+
+    if (fittedWidth <= maxWidth + 0.5) {
+      return {
+        overlay,
+        text: fittedText,
+        style: candidateStyle,
+      };
+    }
+  }
+
+  console.warn(
+    `[VideoPostprocessService] Overlay "${baseText.slice(0, 24)}..." could not fit ideally; using minimum font size ${fallbackStyle.fontSize}px`
+  );
   return {
     overlay,
-    text,
-    style,
+    text: fallbackText,
+    style: fallbackStyle,
   };
 }
 
@@ -904,8 +1134,6 @@ export class VideoPostprocessService {
     taskId: string;
     generatedVideoUrl: string;
     audioFilePath: string;
-    // Deprecated toggle: postprocess now always cuts to the shortest media stream.
-    trimVideoToAudio?: boolean;
     textOverlays?: ReferenceTextOverlay[];
     textStyle?: unknown;
     endFrameText?: string;
@@ -922,6 +1150,36 @@ export class VideoPostprocessService {
 
       const endFrameTextTrimmed = typeof input.endFrameText === 'string' ? input.endFrameText.trim() : '';
       let effectiveTextOverlays = input.textOverlays ? [...input.textOverlays] : [];
+      const [probedVideoDuration, probedAudioDuration, probedVideoFrameRate] = await Promise.all([
+        getVideoDuration(input.generatedVideoUrl).catch((error: any) => {
+          console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to probe video duration: ${error?.message || error}`);
+          return 0;
+        }),
+        getAudioDuration(input.audioFilePath).catch((error: any) => {
+          console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to probe audio duration: ${error?.message || error}`);
+          return 0;
+        }),
+        getVideoFrameRate(input.generatedVideoUrl).catch((error: any) => {
+          console.warn(`[VideoPostprocessService] Task ${input.taskId}: failed to probe video frame rate: ${error?.message || error}`);
+          return 0;
+        }),
+      ]);
+      const trimStartSeconds = probedVideoFrameRate > 0 ? (trimStartFrames / probedVideoFrameRate) : 0;
+      const effectiveVideoDuration = probedVideoDuration > 0
+        ? Math.max(0, probedVideoDuration - trimStartSeconds)
+        : 0;
+      const shortestMediaDuration = effectiveVideoDuration > 0
+        ? (probedAudioDuration > 0 ? Math.min(effectiveVideoDuration, probedAudioDuration) : effectiveVideoDuration)
+        : 0;
+      const ffmpegDurationLimitArg = shortestMediaDuration > 0 ? shortestMediaDuration.toFixed(3) : null;
+
+      if (shortestMediaDuration > 0) {
+        console.log(
+          `[VideoPostprocessService] Task ${input.taskId}: duration guard enabled (video_raw=${probedVideoDuration.toFixed(3)}s, fps=${probedVideoFrameRate.toFixed(3)}, trim_start=${trimStartSeconds.toFixed(3)}s, video_effective=${effectiveVideoDuration.toFixed(3)}s, audio=${probedAudioDuration.toFixed(3)}s, cap=${shortestMediaDuration.toFixed(3)}s)`
+        );
+      } else {
+        console.warn(`[VideoPostprocessService] Task ${input.taskId}: duration guard disabled (probe failed), fallback to -shortest only.`);
+      }
 
       try {
         if (input.generatedVideoUrl.startsWith('http')) {
@@ -934,7 +1192,9 @@ export class VideoPostprocessService {
           }
         }
         
-        const totalDuration = await getVideoDuration(input.generatedVideoUrl);
+        const totalDuration = shortestMediaDuration > 0
+          ? shortestMediaDuration
+          : (effectiveVideoDuration > 0 ? effectiveVideoDuration : await getVideoDuration(input.generatedVideoUrl));
         
         // Handle static overlays from reference (extend to full duration)
         effectiveTextOverlays = effectiveTextOverlays.map(overlay => {
@@ -1007,6 +1267,7 @@ export class VideoPostprocessService {
           ffmpegCrf,
           '-c:a',
           'aac',
+          ...(ffmpegDurationLimitArg ? ['-t', ffmpegDurationLimitArg] : []),
           '-shortest',
           '-movflags',
           '+faststart',
@@ -1035,10 +1296,10 @@ export class VideoPostprocessService {
           clamp(toFiniteNumber(input.endFrameXPercent) ?? resolvedTextStyle.frameXPercent, 0, 100)
         ),
       };
-      const preparedOverlays = effectiveTextOverlays.map((overlay) => {
+      const preparedOverlays = await Promise.all(effectiveTextOverlays.map(async (overlay) => {
         const overlayStyle = overlay.id === 'end-frame-text' ? endFrameStyle : resolvedTextStyle;
         return prepareOverlayForRender(overlay, overlayStyle);
-      });
+      }));
       const requiresCanvasRenderer = preparedOverlays.some(
         (item) => item.style.borderStyle === 3 || hasEmojiGlyphs(item.text)
       );
@@ -1051,7 +1312,7 @@ export class VideoPostprocessService {
             const overlayFrames = await renderOverlayFramesWithCanvas(input.taskId, preparedOverlays);
             
             if (overlayFrames.length > 0) {
-              const videoDuration = await getVideoDuration(input.generatedVideoUrl).catch(() => 0);
+              const videoDuration = shortestMediaDuration > 0 ? shortestMediaDuration : (effectiveVideoDuration || 0);
               console.log(
                 `[VideoPostprocessService] Task ${input.taskId}: rendered ${overlayFrames.length} overlay frame(s), duration=${videoDuration.toFixed(2)}s. Building concat script...`
               );
@@ -1099,7 +1360,7 @@ export class VideoPostprocessService {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatScriptPath,
-                '-filter_complex', `[0:v][2:v]overlay=x=0:y=0,trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS[v]`,
+                '-filter_complex', `[0:v][2:v]overlay=x=0:y=0:shortest=1:eof_action=endall,trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS[v]`,
                 '-map', '[v]',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
@@ -1108,6 +1369,7 @@ export class VideoPostprocessService {
                 '-crf', ffmpegCrf,
                 '-pix_fmt', 'yuv420p',
                 '-c:a', 'aac',
+                ...(ffmpegDurationLimitArg ? ['-t', ffmpegDurationLimitArg] : []),
                 '-shortest',
                 '-movflags', '+faststart',
                 outputPath
@@ -1163,6 +1425,7 @@ export class VideoPostprocessService {
           'yuv420p',
           '-c:a',
           'aac',
+          ...(ffmpegDurationLimitArg ? ['-t', ffmpegDurationLimitArg] : []),
           '-shortest',
           '-movflags',
           '+faststart',
