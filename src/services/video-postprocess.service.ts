@@ -1039,7 +1039,9 @@ export class VideoPostprocessService {
         const overlayStyle = overlay.id === 'end-frame-text' ? endFrameStyle : resolvedTextStyle;
         return prepareOverlayForRender(overlay, overlayStyle);
       });
-      const requiresCanvasRenderer = true;
+      const requiresCanvasRenderer = preparedOverlays.some(
+        (item) => item.style.borderStyle === 3 || hasEmojiGlyphs(item.text)
+      );
       const overlayWorkDir = path.join(dataDir, `${input.taskId}-overlays`);
 
       try {
