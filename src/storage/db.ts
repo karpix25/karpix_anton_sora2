@@ -82,14 +82,14 @@ export async function initDatabase(): Promise<void> {
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_width_percent INTEGER DEFAULT 50`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_x_percent INTEGER DEFAULT 50`);
   
-  // Disable outline by default in all existing projects as requested
-  await db.query(`UPDATE projects SET text_style = text_style || '{"outlineEnabled": false}'::jsonb`);
+  // Disable outline by default in all existing projects as requested (One-time, commented out for stability)
+  // await db.query(`UPDATE projects SET text_style = text_style || '{"outlineEnabled": false}'::jsonb`);
 
-  // Switch all projects to sora-2 as requested
-  await db.query(`UPDATE projects SET selected_model = 'sora-2'`);
+  // Switch all projects to sora-2 as requested (One-time, commented out for stability)
+  // await db.query(`UPDATE projects SET selected_model = 'sora-2'`);
 
-  // Update system config to ensure 8s duration default
-  await db.query(`UPDATE system_config SET config = config || '{"defaultVideoModel": "sora-2", "grokDuration": 8}'::jsonb WHERE id = 'global'`);
+  // Update system config to ensure 8s duration default (One-time, commented out for stability)
+  // await db.query(`UPDATE system_config SET config = config || '{"defaultVideoModel": "sora-2", "grokDuration": 8}'::jsonb WHERE id = 'global'`);
 
 
   await db.query(`

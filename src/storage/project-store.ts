@@ -227,9 +227,9 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
   return {
     id: existing?.id ?? randomUUID(),
     name: normalizeString(input.name) || existing?.name || 'New Project',
-    telegramChatId: normalizeString(input.telegramChatId ?? existing?.telegramChatId),
-    telegramTopicId: normalizeString(input.telegramTopicId ?? existing?.telegramTopicId),
-    telegramTopicName: normalizeString(input.telegramTopicName ?? existing?.telegramTopicName),
+    telegramChatId: normalizeString(input.telegramChatId) || existing?.telegramChatId || '',
+    telegramTopicId: normalizeString(input.telegramTopicId) || existing?.telegramTopicId || '',
+    telegramTopicName: normalizeString(input.telegramTopicName) || existing?.telegramTopicName || '',
     productName: normalizeString(input.productName ?? existing?.productName),
     productDescription: normalizeString(input.productDescription ?? existing?.productDescription),
     extraPromptingRules: normalizeString(input.extraPromptingRules ?? existing?.extraPromptingRules),
