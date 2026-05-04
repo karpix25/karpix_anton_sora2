@@ -18,7 +18,7 @@ export class VideoGenerationService {
     referenceDurationSeconds?: number;
   }): Promise<VideoGenerationResult> {
     const sysConfig = await systemConfigStore.getConfig();
-    const effectiveModel = sysConfig.defaultVideoModel || input.model;
+    const effectiveModel = input.model || sysConfig.defaultVideoModel || 'seedance-2';
 
     console.log(
       `[VideoGenerationService] Starting generation: model=${effectiveModel} (original=${input.model}), imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
