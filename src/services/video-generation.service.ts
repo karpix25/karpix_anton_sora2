@@ -26,9 +26,9 @@ export class VideoGenerationService {
 
     // Calculate effective duration (5-30s range per user requirements)
     // For Sora 2 we force 8 seconds as requested.
-    let finalDuration = effectiveModel === 'sora-2' ? 8 : (sysConfig.grokDuration || 10);
+    let finalDuration = (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') ? 8 : (sysConfig.grokDuration || 10);
     
-    if (effectiveModel !== 'sora-2' && sysConfig.useReferenceDuration && input.referenceDurationSeconds) {
+    if (effectiveModel !== 'sora-2' && effectiveModel !== 'seedance-2' && sysConfig.useReferenceDuration && input.referenceDurationSeconds) {
       finalDuration = Math.max(5, Math.min(30, Math.ceil(input.referenceDurationSeconds)));
       console.log(`[VideoGenerationService] Syncing duration with reference: ${input.referenceDurationSeconds}s -> ${finalDuration}s`);
     }
@@ -54,14 +54,14 @@ export class VideoGenerationService {
       promptWithFormat = `portrait, 9:16, ${finalDuration} seconds, ${referenceLockInstructions} ${input.prompt}`;
     }
 
-    // 1. Comet API (Primary for Sora 2)
-    if (effectiveModel === 'sora-2') {
+    // 1. Comet API (Primary for Sora 2 & Seedance 2)
+    if (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') {
       try {
         console.log(`[VideoGenerationService] Attempting Comet API (${effectiveModel})...`);
         const taskId = await CometService.generateVideo(
           promptWithFormat,
           input.imageUrl,
-          'sora-2',
+          effectiveModel,
           {
             duration: 8,
             aspect_ratio: '9:16'
@@ -83,7 +83,7 @@ export class VideoGenerationService {
         effectiveModel,
         {
           mode: sysConfig.grokMode,
-          resolution: sysConfig.grokResolution,
+          resolution: sysConfig.grokResolution === '1080p' ? '720p' : sysConfig.grokResolution as '480p' | '720p',
           aspect_ratio: '9:16'
         }
       );

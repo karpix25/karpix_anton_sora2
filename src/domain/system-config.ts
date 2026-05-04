@@ -1,5 +1,5 @@
 export interface SystemConfig {
-  defaultVideoModel: 'sora-2' | 'veo-3-1' | 'grok-imagine';
+  defaultVideoModel: 'sora-2' | 'seedance-2' | 'veo-3-1' | 'grok-imagine';
   grokMode: 'fun' | 'normal' | 'spicy';
   grokResolution: '480p' | '720p' | '1080p';
   grokDuration: number;
@@ -8,7 +8,7 @@ export interface SystemConfig {
 }
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-  defaultVideoModel: 'sora-2',
+  defaultVideoModel: 'seedance-2',
   grokMode: 'normal',
   grokResolution: '720p',
   grokDuration: 8,

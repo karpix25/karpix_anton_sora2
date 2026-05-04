@@ -84,7 +84,7 @@ export class AdminNotifierService {
       `<b>Провайдер:</b> ${providerName}\n` +
       `<b>Время:</b> ${timestamp} MSK\n\n` +
       `<b>Детали:</b>\n<code>${errorDetails}</code>\n\n` +
-      `❗ <b>Нужно пополнить баланс в Comet API.</b>\n\n` +
+      `❗ <b>Нужно пополнить баланс в ${providerName}.</b>\n\n` +
       `⚠️ <i>Генерация видео может быть остановлена до пополнения средств.</i>`;
     await this.sendAlert(message);
   }
@@ -108,12 +108,17 @@ export class AdminNotifierService {
       `<b>ID задачи:</b> <code>${task.id}</code>\n\n` +
       `<i>Этот ролик был автоматически завершен после перезапуска сервера.</i>`;
 
+    const options: any = {
+      caption,
+      parse_mode: 'HTML',
+    };
+    
+    if (project.telegramTopicId && project.telegramTopicId !== 'main') {
+      options.message_thread_id = Number(project.telegramTopicId);
+    }
+
     try {
-      await bot.telegram.sendVideo(project.telegramChatId, videoUrl, {
-        caption,
-        parse_mode: 'HTML',
-        message_thread_id: project.telegramTopicId === 'main' ? undefined : Number(project.telegramTopicId),
-      });
+      await bot.telegram.sendVideo(project.telegramChatId, videoUrl, options);
       console.log(`[AdminNotifierService] Result video sent to project ${project.id} in Telegram.`);
     } catch (error: any) {
       console.error(`[AdminNotifierService] Failed to send video to Telegram for project ${project.id}:`, error.message);

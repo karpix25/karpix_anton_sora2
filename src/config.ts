@@ -143,6 +143,10 @@ export const config = {
     apiKey: process.env.KIE_AI_API_KEY || '',
     baseUrl: 'https://api.kie.ai/api/v1',
   },
+  defapi: {
+    apiKey: process.env.DEFAPI_API_KEY || '',
+    baseUrl: process.env.DEFAPI_BASE_URL || 'https://defapi.com',
+  },
   cometApi: {
     apiKey: (process.env.COMET_API_KEY || process.env.COMETAPI_KEY || '').trim(),
     baseUrl: 'https://api.cometapi.com/v1',
@@ -162,6 +166,7 @@ if (
   !config.telegram.isConfigured ||
   !config.openRouter.apiKey ||
   !config.kieAi.apiKey ||
+  !config.defapi.apiKey ||
   !config.cometApi.apiKey ||
   !config.rapidApi.key ||
   !config.yandexDisk.isConfigured

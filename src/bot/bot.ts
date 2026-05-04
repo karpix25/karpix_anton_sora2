@@ -110,6 +110,7 @@ function formatModelName(model: string): string {
   const m = String(model).toLowerCase();
   if (m === 'veo-3-1') return 'Veo 3.1';
   if (m === 'sora-2') return 'Sora 2';
+  if (m === 'seedance-2') return 'Seedance 2';
   if (m === 'grok-imagine') return 'Grok';
   return model.toUpperCase();
 }

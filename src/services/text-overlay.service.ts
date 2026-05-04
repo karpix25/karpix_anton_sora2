@@ -57,29 +57,27 @@ function extractJsonObject(raw: string): string {
 }
 
 function normalizeOverlays(value: unknown): ReferenceTextOverlay[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+  const overlays: ReferenceTextOverlay[] = [];
 
-  return value
-    .map((item, index) => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
       if (!item || typeof item !== 'object') {
-        return null;
+        continue;
       }
 
       const overlay = item as Record<string, unknown>;
       const text = typeof overlay.text === 'string' ? overlay.text.trim() : '';
       if (!text) {
-        return null;
+        continue;
       }
 
       const startSeconds = Number(overlay.startSeconds);
       const endSeconds = Number(overlay.endSeconds);
       if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) {
-        return null;
+        continue;
       }
 
-      return {
+      overlays.push({
         id: typeof overlay.id === 'string' && overlay.id.trim() ? overlay.id : randomUUID(),
         text,
         startSeconds,
@@ -93,9 +91,11 @@ function normalizeOverlays(value: unknown): ReferenceTextOverlay[] {
         boxColor: typeof overlay.boxColor === 'string' ? overlay.boxColor : '#000000',
         boxOpacity: clamp(toNumberOr(overlay.boxOpacity, 0), 0, 1),
         isStatic: Boolean(overlay.isStatic),
-      } satisfies ReferenceTextOverlay;
-    })
-    .filter((item): item is ReferenceTextOverlay => Boolean(item));
+      });
+    }
+  }
+
+  return overlays;
 }
 
 export class TextOverlayService {

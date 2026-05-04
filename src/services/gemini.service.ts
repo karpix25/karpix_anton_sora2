@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import { config } from '../config.js';
 import { AdminNotifierService } from './admin-notifier.service.js';
-import type { Project } from '../domain/project.js';
+import type { Project, VideoModel } from '../domain/project.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -238,7 +238,7 @@ export class GeminiService {
   public static async generateClonningPrompt(
     input: {
       videoAnalysis: string;
-      targetModel: 'sora-2' | 'veo-3-1';
+      targetModel: VideoModel;
       fallbackProductPhotoUrl?: string;
       project?: Project | null;
       projectReferenceImageUrls?: string[];

@@ -1,6 +1,7 @@
 export type ReferenceLibraryStatus =
   | 'received'
   | 'parsing'
+  | 'parsed'
   | 'analyzing'
   | 'analyzed'
   | 'failed';
