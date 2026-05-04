@@ -68,7 +68,7 @@ export async function createChatCompletionWithRetry(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      return await axios.post(
+      const response = await axios.post(
         `${config.openRouter.baseUrl}/chat/completions`,
         currentPayload,
         {
@@ -78,6 +78,23 @@ export async function createChatCompletionWithRetry(
           },
         }
       );
+
+      // Check for empty response content which often indicates a safety block or provider glitch
+      const content = response.data.choices?.[0]?.message?.content;
+      if (!content && attempt < maxAttempts - 1) {
+        console.warn(`${label}: Received empty response content. Attempt ${attempt + 1}/${maxAttempts}.`);
+        
+        // If we have a fallback model and it's not the last attempt, try switching to fallback
+        if (fallbackModel && currentPayload.model !== fallbackModel) {
+          console.warn(`${label}: Switching to fallback model ${fallbackModel} due to empty content`);
+          currentPayload.model = fallbackModel;
+        }
+        
+        await sleep(getRetryDelayMs(null, attempt));
+        continue;
+      }
+
+      return response;
     } catch (error: any) {
       const formattedError = formatOpenRouterError(error);
       const retryable = isRetryableOpenRouterError(error);
@@ -86,21 +103,14 @@ export async function createChatCompletionWithRetry(
 
       console.error(`${label} Error:`, error.response?.data || error.message);
 
-      // If it's a 429 and we have a fallback model, and we've tried few times (or it's the last attempt)
-      // we switch to the fallback model.
       if (status === 429 && fallbackModel && currentPayload.model !== fallbackModel) {
         console.warn(`${label}: Switching to fallback model ${fallbackModel} due to 429 error`);
         currentPayload.model = fallbackModel;
-        // Optional: reset attempt counter or just continue. 
-        // Let's just continue to keep it within maxAttempts for now, or we could reset it.
-        // Actually, switching model might deserve a full set of retries.
-        // But to avoid infinite loops or too many retries, let's just use the remaining attempts.
         continue; 
       }
 
       if (!retryable || isLastAttempt) {
         const lowercaseError = formattedError.toLowerCase();
-        // Detect balance errors (OpenRouter uses 402 or specific message)
         if (
           status === 402 || 
           lowercaseError.includes('insufficient') || 
@@ -322,13 +332,13 @@ export class GeminiService {
 
         VEO 3.1 OPTIMIZED NARRATIVE (GOOGLE GUIDE COMPLIANT):
         - Follow the SAECL Framework for every beat:
-          1. Subject: Who is in focus? (STRICT RULE: All characters MUST be of European/Caucasian descent).
+          1. Subject: Who is in focus? Ensure the subject maintains a consistent European/Caucasian appearance to match the brand identity.
           2. Action: What is the specific motion?
           3. Environment: Specific details of the surroundings.
           4. Camera: Lens type (e.g., 35mm), angle, and motion (panning, tracking).
           5. Lighting: Source and quality (e.g., volumetric, natural daylight).
         - Use narrative flow: Instead of keywords, write a cohesive descriptive sentence for each beat.
-        - Ethnicity Lockdown: Explicitly mention "European woman/man with Caucasian features" for any character to ensure consistent appearance.
+        - Character Continuity: Explicitly describe the subject as a "European woman/man with Caucasian features" in every beat to ensure a stable and consistent appearance throughout the video.
 
         FIDELITY & OPTICAL REALISM:
         - Skin: Use "visible skin pores," "subsurface scattering," "natural skin texture," and "fine facial details."
@@ -455,15 +465,18 @@ export class GeminiService {
             },
           ],
         },
-        'Gemini Prompt Generation'
+        'Gemini Prompt Generation',
+        config.openRouter.models.flash
       );
 
       const finalPrompt = response.data.choices[0]?.message?.content;
       if (!finalPrompt) {
-        throw new Error('Empty prompt result from Gemini Pro');
+        console.error('[GeminiService] Empty prompt result. Full response:', JSON.stringify(response.data, null, 2));
+        throw new Error('Empty prompt result from Gemini Pro (possibly safety filter or provider error)');
       }
       return finalPrompt;
     } catch (error: any) {
+      console.error('[GeminiService] Prompt generation failed:', error.message);
       throw new Error(`Prompt generation failed: ${error.message}`);
     }
   }
