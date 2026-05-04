@@ -128,7 +128,7 @@ async function sendGenerationResultVideo(
 ): Promise<void> {
   await ctx.replyWithVideo(input.videoUrl, {
     caption:
-      `🎬 Видео готово! [Veo 3.1]\n\n` +
+      `🎬 Видео готово!\n\n` +
       `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n` +
       `🔗 Референс: ${input.referenceUrl}`,
     ...input.replyParams,
