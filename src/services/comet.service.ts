@@ -292,7 +292,7 @@ export class CometService {
    * @param videoId The ID of the video to poll.
    */
   public static async pollStatus(videoId: string): Promise<string> {
-    const maxRetries = 120; // up to ~10+ minutes depending on backoff on transient 5xx
+    const maxRetries = 300; // up to ~50 minutes
     let resolvedVideoId = videoId;
     
     for (let i = 0; i < maxRetries; i++) {
@@ -325,7 +325,7 @@ export class CometService {
         }
 
         console.log(`Comet Video ${resolvedVideoId} status=${status || 'unknown'} progress=${progressValue ?? 'n/a'}%. Waiting... (${i + 1}/${maxRetries})`);
-        await this.sleep(5000);
+        await this.sleep(10000);
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
 
