@@ -89,7 +89,7 @@ export async function initDatabase(): Promise<void> {
   // await db.query(`UPDATE projects SET selected_model = 'sora-2'`);
 
   // Update system config to ensure 8s duration default (One-time, commented out for stability)
-  // await db.query(`UPDATE system_config SET config = config || '{"defaultVideoModel": "sora-2", "grokDuration": 8}'::jsonb WHERE id = 'global'`);
+  // await db.query(`UPDATE sora_system_config SET config = config || '{"defaultVideoModel": "sora-2", "grokDuration": 8}'::jsonb WHERE id = 'global'`);
 
 
   await db.query(`
@@ -164,17 +164,17 @@ export async function initDatabase(): Promise<void> {
       ON generation_tasks(project_id, created_at DESC);
   `);
 
-  // Check if system_config table exists and has proper 'id' column.
+  // Check if sora_system_config table exists and has proper 'id' column.
   // If not, it might be a stale version from failed previous attempts.
   try {
-    await db.query(`SELECT id FROM system_config LIMIT 1`);
+    await db.query(`SELECT id FROM sora_system_config LIMIT 1`);
   } catch (err) {
-    console.warn('[DB] system_config seems missing "id" column. Dropping and recreating...');
-    await db.query(`DROP TABLE IF EXISTS system_config`);
+    console.warn('[DB] sora_system_config seems missing "id" column. Dropping and recreating...');
+    await db.query(`DROP TABLE IF EXISTS sora_system_config`);
   }
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS system_config (
+    CREATE TABLE IF NOT EXISTS sora_system_config (
       id TEXT PRIMARY KEY,
       config JSONB NOT NULL DEFAULT '{}'::jsonb,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -183,7 +183,7 @@ export async function initDatabase(): Promise<void> {
 
   // Ensure global config exists
   await db.query(`
-    INSERT INTO system_config (id, config)
+    INSERT INTO sora_system_config (id, config)
     VALUES ('global', '{"forceGrokImagine": false, "grokMode": "normal", "grokResolution": "720p"}'::jsonb)
     ON CONFLICT (id) DO NOTHING;
   `);
