@@ -126,6 +126,7 @@ export class YandexDiskService {
 
   public static async uploadGeneratedVideo(input: {
     projectName: string;
+    projectCode?: string;
     taskId: string;
     sourceVideoUrl: string;
   }): Promise<YandexUploadResult> {
@@ -136,7 +137,7 @@ export class YandexDiskService {
     const folderPath = this.getGeneratedVideosProjectFolderPath(input.projectName);
     const diskPath = this.getGeneratedVideoDiskPath(
       input.projectName,
-      this.buildGeneratedVideoFileName(input.taskId, input.sourceVideoUrl)
+      this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.sourceVideoUrl)
     );
 
     await this.ensureFolder('disk:/ВИДЕО');
@@ -173,6 +174,7 @@ export class YandexDiskService {
 
   public static async uploadGeneratedVideoFile(input: {
     projectName: string;
+    projectCode?: string;
     taskId: string;
     filePath: string;
     fileName?: string;
@@ -188,7 +190,7 @@ export class YandexDiskService {
     const folderPath = this.getGeneratedVideosProjectFolderPath(input.projectName);
     const diskPath = this.getGeneratedVideoDiskPath(
       input.projectName,
-      input.fileName || this.buildGeneratedVideoFileName(input.taskId, input.filePath)
+      input.fileName || this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.filePath)
     );
 
     await this.ensureFolder('disk:/ВИДЕО');
@@ -299,11 +301,23 @@ export class YandexDiskService {
     return normalized || 'Project';
   }
 
-  private static buildGeneratedVideoFileName(taskId: string, sourceVideoUrl: string): string {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const taskSuffix = taskId.slice(0, 8);
+  private static buildGeneratedVideoFileName(projectCode: string, taskId: string, sourceVideoUrl: string): string {
+    const now = new Date();
+    const yyyymmdd = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
+    const hhmmss = `${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}`;
+    const projectCodePart = this.normalizeProjectCode(projectCode);
+    const taskSuffix = taskId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toLowerCase() || 'task';
     const extension = this.getFileExtensionFromUrl(sourceVideoUrl);
-    return `${timestamp}_${taskSuffix}${extension}`;
+    return `p${projectCodePart}_${yyyymmdd}_${hhmmss}_${taskSuffix}${extension}`;
+  }
+
+  private static normalizeProjectCode(value: string): string {
+    const normalized = String(value || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 12);
+
+    return normalized || 'PRJ';
   }
 
   private static getFileExtensionFromUrl(sourceVideoUrl: string): string {

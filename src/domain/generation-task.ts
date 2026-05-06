@@ -1,4 +1,5 @@
 import type { VideoModel } from './project.js';
+import type { ReferenceTextOverlay } from './reference-library.js';
 
 export type GenerationTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GenerationTriggerMode = 'telegram_manual' | 'web_manual';
@@ -15,8 +16,15 @@ export interface GenerationTask {
   providerTaskId: string;
   promptText: string;
   resultVideoUrl: string;
+  videoFileName: string;
+  videoDescription: string;
+  overlayTexts: ReferenceTextOverlay[];
   yandexDiskPath: string;
   yandexDownloadUrl: string;
+  s3Bucket: string;
+  s3ObjectKey: string;
+  s3ObjectUrl: string;
+  s3StoredAt: string;
   storedAt: string;
   errorMessage: string;
   startedAt: string;
@@ -35,8 +43,15 @@ export interface GenerationTaskInput {
   providerTaskId?: string;
   promptText?: string;
   resultVideoUrl?: string;
+  videoFileName?: string;
+  videoDescription?: string;
+  overlayTexts?: ReferenceTextOverlay[];
   yandexDiskPath?: string;
   yandexDownloadUrl?: string;
+  s3Bucket?: string;
+  s3ObjectKey?: string;
+  s3ObjectUrl?: string;
+  s3StoredAt?: string;
   storedAt?: string;
   errorMessage?: string;
   startedAt?: string;
@@ -49,8 +64,15 @@ export interface GenerationTaskUpdate {
   providerTaskId?: string;
   promptText?: string;
   resultVideoUrl?: string;
+  videoFileName?: string;
+  videoDescription?: string;
+  overlayTexts?: ReferenceTextOverlay[];
   yandexDiskPath?: string;
   yandexDownloadUrl?: string;
+  s3Bucket?: string;
+  s3ObjectKey?: string;
+  s3ObjectUrl?: string;
+  s3StoredAt?: string;
   storedAt?: string;
   errorMessage?: string;
   startedAt?: string;

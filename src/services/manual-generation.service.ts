@@ -5,6 +5,7 @@ import { TextOverlayService } from './text-overlay.service.js';
 import { VideoPostprocessService } from './video-postprocess.service.js';
 import { VideoGenerationService } from './video-generation.service.js';
 import { YandexDiskService } from './yandex-disk.service.js';
+import { S3StorageService } from './s3-storage.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
@@ -16,6 +17,27 @@ import fs from 'fs-extra';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function buildVideoDescription(input: { project: Project; promptText: string; sourceUrl: string }): string {
+  const base = input.promptText.trim();
+  if (base) {
+    return base;
+  }
+
+  const projectPart = input.project.productDescription?.trim() || input.project.productName?.trim() || input.project.name;
+  const sourcePart = input.sourceUrl.trim();
+  return [projectPart, sourcePart].filter(Boolean).join(' | ').slice(0, 4000);
+}
+
+function extractFileNameFromPath(value: string): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] || '';
 }
 
 export class ManualGenerationService {
@@ -209,6 +231,47 @@ export class ManualGenerationService {
         });
       }
 
+      const videoDescription = buildVideoDescription({
+        project,
+        promptText,
+        sourceUrl: libraryItem.sourceUrl,
+      });
+
+      let s3Upload = {
+        bucket: task.s3Bucket || '',
+        objectKey: task.s3ObjectKey || '',
+        objectUrl: task.s3ObjectUrl || '',
+        fileName: task.videoFileName || '',
+        storedAt: task.s3StoredAt || '',
+      };
+      if (S3StorageService.isConfigured()) {
+        if (s3Upload.objectKey) {
+          console.log(`[ManualGenerationService] Task ${task.id}: original video already stored in S3, skipping upload.`);
+        } else {
+          console.log(`[ManualGenerationService] Task ${task.id}: uploading original generated video to S3...`);
+          s3Upload = await S3StorageService.uploadGeneratedVideo({
+            projectId: project.id,
+            projectCode: project.projectCode,
+            taskId: task.id,
+            sourceVideoUrl: resultVideoUrl,
+          });
+        }
+      } else {
+        console.warn('[ManualGenerationService] S3 is not configured, skipping original video upload.');
+      }
+
+      if (s3Upload.objectKey || videoDescription || textOverlays.length) {
+        await generationTaskStore.updateTask(task.id, {
+          videoFileName: s3Upload.fileName,
+          videoDescription,
+          overlayTexts: textOverlays,
+          s3Bucket: s3Upload.bucket,
+          s3ObjectKey: s3Upload.objectKey,
+          s3ObjectUrl: s3Upload.objectUrl,
+          s3StoredAt: s3Upload.storedAt,
+        });
+      }
+
       console.log(`[ManualGenerationService] Task ${task.id}: starting postprocess with ffmpeg...`);
       mergedVideoPath = await VideoPostprocessService.applyAudioTrack({
         taskId: task.id,
@@ -225,6 +288,7 @@ export class ManualGenerationService {
 
       const storedVideo = await YandexDiskService.uploadGeneratedVideoFile({
         projectName: project.name,
+        projectCode: project.projectCode,
         taskId: task.id,
         filePath: mergedVideoPath,
       });
@@ -233,8 +297,15 @@ export class ManualGenerationService {
         status: 'completed',
         promptText,
         resultVideoUrl,
+        videoFileName: s3Upload.fileName || extractFileNameFromPath(storedVideo.diskPath),
+        videoDescription,
+        overlayTexts: textOverlays,
         yandexDiskPath: storedVideo.diskPath,
         yandexDownloadUrl: storedVideo.downloadUrl,
+        s3Bucket: s3Upload.bucket,
+        s3ObjectKey: s3Upload.objectKey,
+        s3ObjectUrl: s3Upload.objectUrl,
+        s3StoredAt: s3Upload.storedAt,
         storedAt: storedVideo.syncedAt,
         finishedAt: nowIso(),
       });

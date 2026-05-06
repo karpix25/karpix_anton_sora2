@@ -115,6 +115,16 @@ function formatModelName(model: string): string {
   return model.toUpperCase();
 }
 
+function getTrackingTokenFromDiskPath(diskPath: string): string {
+  const normalized = normalizeString(diskPath);
+  if (!normalized) {
+    return '';
+  }
+
+  const fileName = normalized.split('/').filter(Boolean).pop() || '';
+  return fileName.replace(/\.[A-Za-z0-9]+$/, '');
+}
+
 async function sendGenerationResultVideo(
   ctx: Context,
   input: {
@@ -123,14 +133,17 @@ async function sendGenerationResultVideo(
     targetModel: string;
     generationProvider: string;
     referenceUrl: string;
+    trackingToken?: string;
     replyParams?: { reply_parameters?: { message_id: number } };
   }
 ): Promise<void> {
+  const trackingLine = input.trackingToken ? `\n🏷 Тег: #${input.trackingToken}` : '';
   await ctx.replyWithVideo(input.videoUrl, {
     caption:
       `🎬 Видео готово!\n\n` +
       `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n` +
-      `🔗 Референс: ${input.referenceUrl}`,
+      `🔗 Референс: ${input.referenceUrl}` +
+      trackingLine,
     ...input.replyParams,
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🔁 Повторить', getRepeatGenerationCallbackData(input.taskId))],
@@ -483,6 +496,7 @@ bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
       targetModel: repeatedTask.targetModel,
       generationProvider,
       referenceUrl: sourceLibraryItem?.sourceUrl || '(не указан)',
+      trackingToken: getTrackingTokenFromDiskPath(repeatedTask.yandexDiskPath),
       replyParams,
     });
   } catch (error: any) {
@@ -611,6 +625,7 @@ bot.on(message('text'), async (ctx) => {
           targetModel,
           generationProvider,
           referenceUrl: reelUrl,
+          trackingToken: getTrackingTokenFromDiskPath(generationTask.yandexDiskPath),
           replyParams,
         });
       } catch (error: any) {

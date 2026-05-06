@@ -127,17 +127,22 @@ export function createProjectWorkflow(context) {
     const doneAt = task.finishedAt || task.updatedAt || task.createdAt;
     const doneAtText = doneAt ? context.escapeHtml(new Date(doneAt).toLocaleString()) : '—';
     const errorText = task.errorMessage ? context.escapeHtml(shortenText(task.errorMessage, 140)) : '';
-    const finalResultUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
+    const yandexFinalUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
+    const s3Url = String(task.s3ObjectUrl || '').trim();
 
     return `
       <div class="library-generation-summary">
         <span class="library-status library-status--${status}">${status}</span>
         <p class="meta-line">Провайдер: ${provider}</p>
         <p class="meta-line">Обновлено: ${doneAtText}</p>
+        ${task.videoFileName ? `<p class="meta-line">Файл: ${context.escapeHtml(task.videoFileName)}</p>` : ''}
         ${errorText ? `<p class="meta-line library-error-text">${errorText}</p>` : ''}
-        ${finalResultUrl
-          ? `<p class="meta-line"><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Открыть файл на Яндекс Диске</a></p>`
-          : '<p class="meta-line">Финальный файл еще не готов</p>'}
+        ${yandexFinalUrl
+          ? `<p class="meta-line"><strong>Финал (Яндекс):</strong> <a class="library-link" href="${context.escapeHtml(yandexFinalUrl)}" target="_blank" rel="noreferrer">Открыть</a></p>`
+          : '<p class="meta-line"><strong>Финал (Яндекс):</strong> еще не готов</p>'}
+        ${s3Url
+          ? `<p class="meta-line"><strong>Оригинал (S3):</strong> <a class="library-link" href="${context.escapeHtml(s3Url)}" target="_blank" rel="noreferrer">Открыть</a></p>`
+          : '<p class="meta-line"><strong>Оригинал (S3):</strong> не сохранен</p>'}
       </div>
     `;
   }
@@ -255,7 +260,8 @@ export function createProjectWorkflow(context) {
       ? `
           Статус: ${context.escapeHtml(latestTask.status || 'unknown')}<br />
           Провайдер: ${context.escapeHtml((latestTask.provider || 'kie').toUpperCase())}<br />
-          Обновлено: ${context.escapeHtml(new Date(latestTask.finishedAt || latestTask.updatedAt || latestTask.createdAt).toLocaleString())}
+          Обновлено: ${context.escapeHtml(new Date(latestTask.finishedAt || latestTask.updatedAt || latestTask.createdAt).toLocaleString())}<br />
+          Файл: ${context.escapeHtml(latestTask.videoFileName || '—')}
           ${latestTask.errorMessage ? `<br />Ошибка: ${context.escapeHtml(latestTask.errorMessage)}` : ''}
         `
       : 'Для этого референса генераций пока не было';
@@ -272,6 +278,12 @@ export function createProjectWorkflow(context) {
       ['Файл аудио', item.audioFilePath ? context.escapeHtml(item.audioFilePath) : 'Нет'],
       ['Ошибка', item.errorMessage ? context.escapeHtml(item.errorMessage) : 'Нет'],
       ['Последняя генерация', latestTaskSummary],
+      ['Описание ролика', context.escapeHtml(latestTask?.videoDescription || 'Нет')],
+      ['Текст оверлеев', context.escapeHtml((latestTask?.overlayTexts || []).map((item) => item?.text || '').filter(Boolean).join(' | ') || 'Нет')],
+      ['S3 bucket', context.escapeHtml(latestTask?.s3Bucket || 'Нет')],
+      ['S3 key', context.escapeHtml(latestTask?.s3ObjectKey || 'Нет')],
+      ['Оригинал (S3)', latestTask?.s3ObjectUrl ? `<a class="library-link" href="${context.escapeHtml(latestTask.s3ObjectUrl)}" target="_blank" rel="noreferrer">${context.escapeHtml(latestTask.s3ObjectUrl)}</a>` : 'Нет'],
+      ['Финал (Яндекс)', latestTask?.yandexDiskPath ? `<a class="library-link" href="${context.escapeHtml(getYandexDiskFileUrl(latestTask.yandexDiskPath, latestTask.yandexDownloadUrl || ''))}" target="_blank" rel="noreferrer">${context.escapeHtml(getYandexDiskFileUrl(latestTask.yandexDiskPath, latestTask.yandexDownloadUrl || ''))}</a>` : 'Нет'],
     ];
 
     elements.libraryItemModalContent.innerHTML = `
@@ -337,7 +349,8 @@ export function createProjectWorkflow(context) {
     elements.generationTasks.innerHTML = tasks
       .map(
         (task) => {
-          const finalResultUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
+          const yandexFinalUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
+          const s3Url = String(task.s3ObjectUrl || '').trim();
           return `
           <article class="library-item">
             <div class="library-item-header">
@@ -348,8 +361,13 @@ export function createProjectWorkflow(context) {
               </div>
               <span class="library-status">${context.escapeHtml(task.status)}</span>
             </div>
-            ${finalResultUrl ? `<p><a class="library-link" href="${context.escapeHtml(finalResultUrl)}" target="_blank" rel="noreferrer">Финальный результат (Яндекс Диск)</a></p>` : '<p class="meta-line">Финальный результат еще не загружен</p>'}
+            ${yandexFinalUrl ? `<p><strong>Финал (Яндекс):</strong> <a class="library-link" href="${context.escapeHtml(yandexFinalUrl)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Финал (Яндекс):</strong> еще не загружен</p>'}
+            ${s3Url ? `<p><strong>Оригинал (S3):</strong> <a class="library-link" href="${context.escapeHtml(s3Url)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Оригинал (S3):</strong> еще не загружен</p>'}
+            ${task.videoFileName ? `<p class="meta-line">Имя файла: ${context.escapeHtml(task.videoFileName)}</p>` : ''}
+            ${task.videoDescription ? `<p class="meta-line">Описание: ${context.escapeHtml(shortenText(task.videoDescription, 180))}</p>` : ''}
+            ${Array.isArray(task.overlayTexts) && task.overlayTexts.length ? `<p class="meta-line">Текст на видео: ${context.escapeHtml(shortenText(task.overlayTexts.map((item) => item?.text || '').filter(Boolean).join(' | '), 180))}</p>` : ''}
             ${task.yandexDiskPath ? `<p class="meta-line">${context.escapeHtml(task.yandexDiskPath)}</p>` : ''}
+            ${task.s3ObjectKey ? `<p class="meta-line">${context.escapeHtml(task.s3ObjectKey)}</p>` : ''}
             ${task.errorMessage ? `<p class="meta-line">${context.escapeHtml(task.errorMessage)}</p>` : ''}
             ${task.promptText ? `<div class="library-analysis">${context.escapeHtml(shortenText(task.promptText))}</div>` : ''}
           </article>

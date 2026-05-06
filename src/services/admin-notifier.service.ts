@@ -2,6 +2,16 @@ import { bot } from '../bot/bot.js';
 import { config } from '../config.js';
 
 export class AdminNotifierService {
+  private static getTrackingTokenFromDiskPath(diskPath: string): string {
+    const normalized = String(diskPath || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const fileName = normalized.split('/').filter(Boolean).pop() || '';
+    return fileName.replace(/\.[A-Za-z0-9]+$/, '');
+  }
+
   /**
    * Sends an alert to all configured administrators.
    */
@@ -100,11 +110,13 @@ export class AdminNotifierService {
 
     const videoUrl = task.yandexDownloadUrl || task.resultVideoUrl;
     if (!videoUrl) return;
+    const trackingToken = this.getTrackingTokenFromDiskPath(task.yandexDiskPath);
 
     const caption = 
       `✨ <b>Видео готово!</b> (Восстановлено)\n\n` +
       `<b>Модель:</b> ${task.targetModel.toUpperCase()}\n` +
       `<b>Провайдер:</b> ${(task.provider || 'unknown').toUpperCase()}\n` +
+      `${trackingToken ? `<b>Тег:</b> #${trackingToken}\n` : ''}` +
       `<b>ID задачи:</b> <code>${task.id}</code>\n\n` +
       `<i>Этот ролик был автоматически завершен после перезапуска сервера.</i>`;
 

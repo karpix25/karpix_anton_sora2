@@ -39,6 +39,7 @@ export interface TextStyle {
 
 export interface Project {
   id: string;
+  projectCode: string;
   name: string;
   telegramChatId: string;
   telegramTopicId: string;
@@ -65,6 +66,7 @@ export interface Project {
 }
 
 export interface ProjectInput {
+  projectCode?: string;
   name?: string;
   telegramChatId?: string;
   telegramTopicId?: string;

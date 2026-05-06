@@ -49,6 +49,7 @@ export async function initDatabase(): Promise<void> {
   await db.query(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
+      project_code TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL,
       telegram_chat_id TEXT NOT NULL DEFAULT '',
       telegram_topic_id TEXT NOT NULL DEFAULT '',
@@ -73,6 +74,12 @@ export async function initDatabase(): Promise<void> {
 
   await db.query(`
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_style JSONB NOT NULL DEFAULT '{}'::jsonb;
+  `);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_code TEXT NOT NULL DEFAULT ''`);
+  await db.query(`
+    UPDATE projects
+    SET project_code = UPPER(SUBSTRING(MD5(id) FROM 1 FOR 8))
+    WHERE COALESCE(project_code, '') = '';
   `);
 
   await db.query(`ALTER TABLE projects DROP COLUMN IF EXISTS trim_video_to_audio`);
@@ -124,8 +131,15 @@ export async function initDatabase(): Promise<void> {
       provider_task_id TEXT NOT NULL DEFAULT '',
       prompt_text TEXT NOT NULL DEFAULT '',
       result_video_url TEXT NOT NULL DEFAULT '',
+      video_file_name TEXT NOT NULL DEFAULT '',
+      video_description TEXT NOT NULL DEFAULT '',
+      overlay_texts JSONB NOT NULL DEFAULT '[]'::jsonb,
       yandex_disk_path TEXT NOT NULL DEFAULT '',
       yandex_download_url TEXT NOT NULL DEFAULT '',
+      s3_bucket TEXT NOT NULL DEFAULT '',
+      s3_object_key TEXT NOT NULL DEFAULT '',
+      s3_object_url TEXT NOT NULL DEFAULT '',
+      s3_stored_at TEXT NOT NULL DEFAULT '',
       stored_at TEXT NOT NULL DEFAULT '',
       error_message TEXT NOT NULL DEFAULT '',
       started_at TEXT NOT NULL DEFAULT '',
@@ -138,6 +152,11 @@ export async function initDatabase(): Promise<void> {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_projects_updated_at
       ON projects(updated_at DESC);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_projects_project_code
+      ON projects(project_code);
   `);
 
   await db.query(`
@@ -160,8 +179,35 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS video_file_name TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS video_description TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS overlay_texts JSONB NOT NULL DEFAULT '[]'::jsonb;
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS s3_bucket TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS s3_object_key TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS s3_object_url TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS s3_stored_at TEXT NOT NULL DEFAULT '';
+  `);
+
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_created
       ON generation_tasks(project_id, created_at DESC);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_s3_object_key
+      ON generation_tasks(s3_object_key);
   `);
 
   // Check if sora_system_config table exists and has proper 'id' column.

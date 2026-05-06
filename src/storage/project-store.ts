@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'fs-extra';
@@ -32,6 +32,7 @@ const defaultTextStyle: NonNullable<Project['textStyle']> = {
 
 interface ProjectRow {
   id: string;
+  project_code: string;
   name: string;
   telegram_chat_id: string;
   telegram_topic_id: string;
@@ -63,6 +64,26 @@ function nowIso(): string {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function generateProjectCode(projectId: string): string {
+  const hash = createHash('sha1')
+    .update(projectId)
+    .digest('base64url')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+
+  const fallback = projectId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return (hash.slice(0, 8) || fallback.slice(0, 8) || 'PROJECT01').slice(0, 8);
+}
+
+function normalizeProjectCode(value: unknown, projectId: string): string {
+  const normalized = normalizeString(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (normalized.length >= 4) {
+    return normalized.slice(0, 12);
+  }
+
+  return generateProjectCode(projectId);
 }
 
 function normalizeBoolean(value: unknown, defaultValue = false): boolean {
@@ -213,6 +234,7 @@ function normalizeTextStyle(
 
 function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project {
   const timestamp = nowIso();
+  const projectId = existing?.id ?? randomUUID();
   const mode = input.mode ?? existing?.mode ?? 'manual';
   const selectedModel = input.selectedModel ?? existing?.selectedModel ?? 'sora-2';
   const referenceImages = normalizeReferenceImages(input.referenceImages ?? existing?.referenceImages);
@@ -225,7 +247,8 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
   const textStyle = normalizeTextStyle(input.textStyle, existingTextStyle);
 
   return {
-    id: existing?.id ?? randomUUID(),
+    id: projectId,
+    projectCode: normalizeProjectCode(input.projectCode ?? existing?.projectCode, projectId),
     name: normalizeString(input.name) || existing?.name || 'New Project',
     telegramChatId: normalizeString(input.telegramChatId) || existing?.telegramChatId || '',
     telegramTopicId: normalizeString(input.telegramTopicId) || existing?.telegramTopicId || '',
@@ -253,8 +276,10 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
 }
 
 function mapRowToProject(row: ProjectRow): Project {
+  const projectId = normalizeString(row.id);
   return {
-    id: normalizeString(row.id),
+    id: projectId,
+    projectCode: normalizeProjectCode(row.project_code, projectId),
     name: normalizeString(row.name) || 'New Project',
     telegramChatId: normalizeString(row.telegram_chat_id),
     telegramTopicId: normalizeString(row.telegram_topic_id),
@@ -305,7 +330,7 @@ function safeFileExtension(mimeType: string, fallbackName: string): string {
 async function upsertProject(project: Project): Promise<Project> {
   const queryText = `
     INSERT INTO projects (
-      id, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
+      id, project_code, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
       product_name, product_description, extra_prompting_rules, target_audience, cta,
       mode, automation_enabled, daily_generation_limit, selected_model, is_active,
       primary_reference_image_id, reference_images, text_style,
@@ -313,11 +338,12 @@ async function upsertProject(project: Project): Promise<Project> {
       created_at, updated_at
     )
     VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb,
-      $19, $20, $21, $22, $23::timestamptz, $24::timestamptz
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+      $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
+      $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
+      project_code = EXCLUDED.project_code,
       name = EXCLUDED.name,
       telegram_chat_id = EXCLUDED.telegram_chat_id,
       telegram_topic_id = EXCLUDED.telegram_topic_id,
@@ -345,6 +371,7 @@ async function upsertProject(project: Project): Promise<Project> {
 
   const values = [
     project.id,
+    project.projectCode,
     project.name,
     project.telegramChatId,
     project.telegramTopicId,

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { GenerationProvider, GenerationTask, GenerationTaskInput, GenerationTaskStatus, GenerationTaskUpdate } from '../domain/generation-task.js';
+import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 import { query } from './db.js';
 
 interface GenerationTaskRow {
@@ -13,8 +14,15 @@ interface GenerationTaskRow {
   provider_task_id: string;
   prompt_text: string;
   result_video_url: string;
+  video_file_name: string;
+  video_description: string;
+  overlay_texts: unknown;
   yandex_disk_path: string;
   yandex_download_url: string;
+  s3_bucket: string;
+  s3_object_key: string;
+  s3_object_url: string;
+  s3_stored_at: string;
   stored_at: string;
   error_message: string;
   started_at: string;
@@ -29,6 +37,19 @@ function nowIso(): string {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseOverlayTexts(value: unknown): ReferenceTextOverlay[] {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as ReferenceTextOverlay[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return Array.isArray(value) ? (value as ReferenceTextOverlay[]) : [];
 }
 
 function toIsoString(value: unknown, fallback = nowIso()): string {
@@ -66,8 +87,17 @@ function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): Ge
     providerTaskId: normalizeString(input.providerTaskId ?? existing?.providerTaskId),
     promptText: normalizeString(input.promptText ?? existing?.promptText),
     resultVideoUrl: normalizeString(input.resultVideoUrl ?? existing?.resultVideoUrl),
+    videoFileName: normalizeString(input.videoFileName ?? existing?.videoFileName),
+    videoDescription: normalizeString(input.videoDescription ?? existing?.videoDescription),
+    overlayTexts: Array.isArray(input.overlayTexts ?? existing?.overlayTexts)
+      ? ((input.overlayTexts ?? existing?.overlayTexts) as ReferenceTextOverlay[])
+      : [],
     yandexDiskPath: normalizeString(input.yandexDiskPath ?? existing?.yandexDiskPath),
     yandexDownloadUrl: normalizeString(input.yandexDownloadUrl ?? existing?.yandexDownloadUrl),
+    s3Bucket: normalizeString(input.s3Bucket ?? existing?.s3Bucket),
+    s3ObjectKey: normalizeString(input.s3ObjectKey ?? existing?.s3ObjectKey),
+    s3ObjectUrl: normalizeString(input.s3ObjectUrl ?? existing?.s3ObjectUrl),
+    s3StoredAt: normalizeString(input.s3StoredAt ?? existing?.s3StoredAt),
     storedAt: normalizeString(input.storedAt ?? existing?.storedAt),
     errorMessage: normalizeString(input.errorMessage ?? existing?.errorMessage),
     startedAt: normalizeString(input.startedAt ?? existing?.startedAt),
@@ -89,8 +119,15 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
     providerTaskId: normalizeString(row.provider_task_id),
     promptText: normalizeString(row.prompt_text),
     resultVideoUrl: normalizeString(row.result_video_url),
+    videoFileName: normalizeString(row.video_file_name),
+    videoDescription: normalizeString(row.video_description),
+    overlayTexts: parseOverlayTexts(row.overlay_texts),
     yandexDiskPath: normalizeString(row.yandex_disk_path),
     yandexDownloadUrl: normalizeString(row.yandex_download_url),
+    s3Bucket: normalizeString(row.s3_bucket),
+    s3ObjectKey: normalizeString(row.s3_object_key),
+    s3ObjectUrl: normalizeString(row.s3_object_url),
+    s3StoredAt: normalizeString(row.s3_stored_at),
     storedAt: normalizeString(row.stored_at),
     errorMessage: normalizeString(row.error_message),
     startedAt: normalizeString(row.started_at),
@@ -166,8 +203,15 @@ export const generationTaskStore = {
           provider_task_id,
           prompt_text,
           result_video_url,
+          video_file_name,
+          video_description,
+          overlay_texts,
           yandex_disk_path,
           yandex_download_url,
+          s3_bucket,
+          s3_object_key,
+          s3_object_url,
+          s3_stored_at,
           stored_at,
           error_message,
           started_at,
@@ -176,7 +220,7 @@ export const generationTaskStore = {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::timestamptz, $18::timestamptz
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
         )
         RETURNING *
       `,
@@ -191,8 +235,15 @@ export const generationTaskStore = {
         task.providerTaskId,
         task.promptText,
         task.resultVideoUrl,
+        task.videoFileName,
+        task.videoDescription,
+        JSON.stringify(task.overlayTexts),
         task.yandexDiskPath,
         task.yandexDownloadUrl,
+        task.s3Bucket,
+        task.s3ObjectKey,
+        task.s3ObjectUrl,
+        task.s3StoredAt,
         task.storedAt,
         task.errorMessage,
         task.startedAt,
@@ -241,8 +292,15 @@ export const generationTaskStore = {
         status: update.status ?? existing.status,
         promptText: update.promptText ?? existing.promptText,
         resultVideoUrl: update.resultVideoUrl ?? existing.resultVideoUrl,
+        videoFileName: update.videoFileName ?? existing.videoFileName,
+        videoDescription: update.videoDescription ?? existing.videoDescription,
+        overlayTexts: update.overlayTexts ?? existing.overlayTexts,
         yandexDiskPath: update.yandexDiskPath ?? existing.yandexDiskPath,
         yandexDownloadUrl: update.yandexDownloadUrl ?? existing.yandexDownloadUrl,
+        s3Bucket: update.s3Bucket ?? existing.s3Bucket,
+        s3ObjectKey: update.s3ObjectKey ?? existing.s3ObjectKey,
+        s3ObjectUrl: update.s3ObjectUrl ?? existing.s3ObjectUrl,
+        s3StoredAt: update.s3StoredAt ?? existing.s3StoredAt,
         storedAt: update.storedAt ?? existing.storedAt,
         errorMessage: update.errorMessage ?? existing.errorMessage,
         startedAt: update.startedAt ?? existing.startedAt,
@@ -260,13 +318,20 @@ export const generationTaskStore = {
           status = $4,
           prompt_text = $5,
           result_video_url = $6,
-          yandex_disk_path = $7,
-          yandex_download_url = $8,
-          stored_at = $9,
-          error_message = $10,
-          started_at = $11,
-          finished_at = $12,
-          updated_at = $13::timestamptz
+          video_file_name = $7,
+          video_description = $8,
+          overlay_texts = $9::jsonb,
+          yandex_disk_path = $10,
+          yandex_download_url = $11,
+          s3_bucket = $12,
+          s3_object_key = $13,
+          s3_object_url = $14,
+          s3_stored_at = $15,
+          stored_at = $16,
+          error_message = $17,
+          started_at = $18,
+          finished_at = $19,
+          updated_at = $20::timestamptz
         WHERE id = $1
         RETURNING *
       `,
@@ -277,8 +342,15 @@ export const generationTaskStore = {
         nextTask.status,
         nextTask.promptText,
         nextTask.resultVideoUrl,
+        nextTask.videoFileName,
+        nextTask.videoDescription,
+        JSON.stringify(nextTask.overlayTexts),
         nextTask.yandexDiskPath,
         nextTask.yandexDownloadUrl,
+        nextTask.s3Bucket,
+        nextTask.s3ObjectKey,
+        nextTask.s3ObjectUrl,
+        nextTask.s3StoredAt,
         nextTask.storedAt,
         nextTask.errorMessage,
         nextTask.startedAt,

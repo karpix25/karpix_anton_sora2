@@ -105,6 +105,15 @@ function parseCommaSeparated(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function normalizeS3Endpoint(value: string | undefined): string {
+  const normalized = (value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.replace(/\/+$/, '');
+}
+
 export const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -154,6 +163,20 @@ export const config = {
   yandexDisk: {
     token: process.env.YANDEX_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.YANDEX_TOKEN || ''),
+  },
+  s3: {
+    endpoint: normalizeS3Endpoint(process.env.S3_ENDPOINT),
+    region: (process.env.S3_REGION || 'us-east-1').trim() || 'us-east-1',
+    bucket: (process.env.S3_BUCKET || '').trim(),
+    accessKeyId: (process.env.S3_ACCESS_KEY_ID || '').trim(),
+    secretAccessKey: (process.env.S3_SECRET_ACCESS_KEY || '').trim(),
+    publicBaseUrl: normalizeS3Endpoint(process.env.S3_PUBLIC_BASE_URL),
+    forcePathStyle: parseBoolean(process.env.S3_FORCE_PATH_STYLE, true),
+    isConfigured:
+      Boolean((process.env.S3_ENDPOINT || '').trim()) &&
+      Boolean((process.env.S3_BUCKET || '').trim()) &&
+      isConfiguredSecret(process.env.S3_ACCESS_KEY_ID || '') &&
+      isConfiguredSecret(process.env.S3_SECRET_ACCESS_KEY || ''),
   },
   rapidApi: {
     key: process.env.RAPIDAPI_KEY || '',
