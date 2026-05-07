@@ -103,17 +103,18 @@
               <span>Проект активен</span>
             </label>
 
-            <label class="full-width">
-              <span>% Перегенерации (Viral Remix) vs Новых</span>
+            <label class="full-width" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(76,54,39,0.1);">
+              <span style="font-weight: bold; color: var(--accent-dark);">🔥 Виральный ремикс (Viral Remix)</span>
+              <span>% Перегенерации хитов vs Новых видео</span>
               <div style="display: flex; align-items: center; gap: 12px;">
                 <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
-                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold;">0%</span>
+                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold; color: var(--accent);">0%</span>
               </div>
             </label>
 
-            <label>
-              <span>Мин. просмотров для ремикса</span>
-              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="1000" />
+            <label class="full-width">
+              <span>Мин. просмотров для автоматического ремикса</span>
+              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="Например: 5000" />
             </label>
           </div>
         </section>
@@ -367,6 +368,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=1.3.6-viral-remix-controls-v2"></script>
+    <script type="module" src="/app.js?v=1.3.7-viral-final-fix"></script>
   </body>
 </html>

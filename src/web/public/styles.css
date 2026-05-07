@@ -159,6 +159,32 @@ label {
   min-width: 0;
 }
 
+.full-width {
+  grid-column: span 2;
+}
+
+.checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(76, 54, 39, 0.1);
+  padding: 12px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.checkbox-label:hover {
+  border-color: var(--accent);
+  background: #fffefb;
+}
+
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 label span {
   font-size: 14px;
 }
