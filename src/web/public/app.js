@@ -16,6 +16,7 @@ const defaultProject = () => ({
   dailyGenerationLimit: 1,
   viralReusePercentage: 0,
   minViewsToReuse: 1000,
+  yandexDiskFolder: '',
   selectedModel: 'sora-2',
   isActive: true,
   primaryReferenceImageId: '',
@@ -49,12 +50,13 @@ const state = {
   libraryItems: [],
   generationTasks: [],
   googleCyrillicFonts: [],
+  yandexFolders: [],
 };
 
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.2.0-cta-layout-fixed';
+const DEBUG_VERSION = '1.3.7-viral-final-fix';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
 
 // Diagnostic check for the user
@@ -74,6 +76,7 @@ const elements = {
   saveProjectButton: document.getElementById('save-project-button'),
   deleteProjectButton: document.getElementById('delete-project-button'),
   refreshLibraryButton: document.getElementById('refresh-library-button'),
+  refreshYandexFoldersButton: document.getElementById('refresh-yandex-folders-button'),
   projectId: document.getElementById('project-id'),
   telegramBindingStatus: document.getElementById('telegram-binding-status'),
   bindingCommand: document.getElementById('binding-command'),
@@ -95,6 +98,7 @@ const elements = {
     mode: document.getElementById('mode'),
     automationEnabled: document.getElementById('automationEnabled'),
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
+    yandexDiskFolder: document.getElementById('yandexDiskFolder'),
     selectedModel: document.getElementById('selectedModel'),
     isActive: document.getElementById('isActive'),
     viralReusePercentage: document.getElementById('viralReusePercentage'),
@@ -220,6 +224,41 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function renderYandexFolderOptions(selectedValue = state.currentProject.yandexDiskFolder || '') {
+  const select = elements.fields.yandexDiskFolder;
+  if (!select) {
+    return;
+  }
+
+  const normalizedSelectedValue = String(selectedValue || '').trim();
+  const folders = Array.isArray(state.yandexFolders) ? state.yandexFolders : [];
+  const knownValues = new Set(folders.map((folder) => folder.relativePath));
+
+  select.innerHTML = [
+    '<option value="">По умолчанию</option>',
+    normalizedSelectedValue && !knownValues.has(normalizedSelectedValue)
+      ? `<option value="${escapeHtml(normalizedSelectedValue)}">${escapeHtml(normalizedSelectedValue)} (текущая)</option>`
+      : '',
+    ...folders.map((folder) => (
+      `<option value="${escapeHtml(folder.relativePath)}">${escapeHtml(folder.relativePath)}</option>`
+    )),
+  ].join('');
+  select.value = normalizedSelectedValue;
+}
+
+async function loadYandexFolders() {
+  try {
+    const data = await api('/api/yandex/generated-folders');
+    state.yandexFolders = Array.isArray(data?.folders) ? data.folders : [];
+    renderYandexFolderOptions();
+  } catch (error) {
+    console.error('Failed to load Yandex folders:', error);
+    state.yandexFolders = [];
+    renderYandexFolderOptions();
+    setStatus(`Не удалось загрузить папки Яндекс.Диска: ${error.message}`);
+  }
+}
+
 function getProjectIdFromUrl() {
   try {
     const url = new URL(window.location.href);
@@ -332,6 +371,7 @@ function snapshotFromForm() {
     mode: elements.fields.mode.value,
     automationEnabled: elements.fields.automationEnabled.checked,
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
+    yandexDiskFolder: elements.fields.yandexDiskFolder.value.trim(),
     selectedModel: elements.fields.selectedModel.value,
     isActive: elements.fields.isActive.checked,
     viralReusePercentage: Number(elements.fields.viralReusePercentage.value || 0),
@@ -643,6 +683,7 @@ function applyProjectToForm(project) {
   elements.fields.mode.value = state.currentProject.mode || 'manual';
   elements.fields.automationEnabled.checked = Boolean(state.currentProject.automationEnabled);
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
+  renderYandexFolderOptions(state.currentProject.yandexDiskFolder || '');
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
   elements.fields.viralReusePercentage.value = String(state.currentProject.viralReusePercentage ?? 0);
@@ -828,6 +869,17 @@ function bindEvents() {
     }
   });
 
+  elements.refreshYandexFoldersButton.addEventListener('click', async () => {
+    try {
+      setStatus('Загрузка папок Яндекс.Диска...');
+      await loadYandexFolders();
+      setStatus('Папки Яндекс.Диска обновлены');
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  });
+
   elements.closeLibraryItemModalButton.addEventListener('click', () => {
     workflow.closeLibraryItemModal();
   });
@@ -920,7 +972,10 @@ console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
   loadGlobalConfig();
-  loadGoogleCyrillicFonts().then(() => loadProjects()).then(() => {
+  Promise.all([
+    loadGoogleCyrillicFonts(),
+    loadYandexFolders(),
+  ]).then(() => loadProjects()).then(() => {
     console.log('✅ Projects loaded');
   }).catch((error) => {
     console.error('❌ Failed to load projects:', error);

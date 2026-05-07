@@ -201,12 +201,12 @@ function getProjectPrimaryReferenceImageRouteParams(pathname: string): { project
 
 function getProjectLibraryGenerationRouteParams(pathname: string): { projectId?: string; itemId?: string } {
   const match = pathname.match(/^\/api\/projects\/([^/]+)\/library\/([^/]+)\/generate$/);
-  return { projectId: match?.[1], itemId: match?.[2] };
+  return match?.[1] && match?.[2] ? { projectId: match[1], itemId: match[2] } : {};
 }
 
 function getTaskRemixRouteParams(pathname: string): { taskId?: string } {
   const match = pathname.match(/^\/api\/tasks\/([^/]+)\/remix$/);
-  return { taskId: match?.[1] };
+  return match?.[1] ? { taskId: match[1] } : {};
 }
 
 function getProjectLibraryItemRouteParams(pathname: string): { projectId?: string; itemId?: string } {
@@ -250,6 +250,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const payload = await readJsonBody<any>(req);
     const config = await systemConfigStore.updateConfig(payload);
     sendJson(res, 200, config);
+    return true;
+  }
+
+  if (pathname === '/api/yandex/generated-folders' && req.method === 'GET') {
+    const folders = await YandexDiskService.listGeneratedVideoFolders();
+    sendJson(res, 200, { folders });
     return true;
   }
 
@@ -599,7 +605,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         }
       }
 
-      const generatedVideosFolder = YandexDiskService.getGeneratedVideosProjectFolderPath(project.name);
+      const generatedVideosFolder = YandexDiskService.getGeneratedVideosProjectFolderPath(
+        project.name,
+        project.yandexDiskFolder
+      );
       await YandexDiskService.deleteResource(generatedVideosFolder);
       await YandexDiskService.deleteResource(path.posix.dirname(generatedVideosFolder));
     }

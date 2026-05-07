@@ -87,10 +87,11 @@ export async function initDatabase(): Promise<void> {
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT DEFAULT ''`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_vertical_margin INTEGER DEFAULT 320`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_width_percent INTEGER DEFAULT 50`);
-  await db.query(\`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_x_percent INTEGER DEFAULT 50\`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_x_percent INTEGER DEFAULT 50`);
   
-  await db.query(\`ALTER TABLE projects ADD COLUMN IF NOT EXISTS viral_reuse_percentage INTEGER DEFAULT 0\`);
-  await db.query(\`ALTER TABLE projects ADD COLUMN IF NOT EXISTS min_views_to_reuse INTEGER DEFAULT 1000\`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS viral_reuse_percentage INTEGER DEFAULT 0`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS min_views_to_reuse INTEGER DEFAULT 1000`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS yandex_disk_folder TEXT NOT NULL DEFAULT ''`);
   
   // Disable outline by default in all existing projects as requested (One-time, commented out for stability)
   // await db.query(`UPDATE projects SET text_style = text_style || '{"outlineEnabled": false}'::jsonb`);

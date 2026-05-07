@@ -293,6 +293,7 @@ export class ManualGenerationService {
       const storedVideo = await YandexDiskService.uploadGeneratedVideoFile({
         projectName: project.name,
         projectCode: project.projectCode,
+        projectFolder: project.yandexDiskFolder,
         taskId: task.id,
         filePath: mergedVideoPath,
       });
@@ -347,7 +348,7 @@ export class ManualGenerationService {
     const project = await projectStore.getProject(task.projectId);
     if (!project) throw new Error('Project not found');
 
-    return this.executeRemix(task, project);
+    return this.executeRemix(task, project, 'web_manual_remix');
   }
 
   /**
@@ -371,16 +372,22 @@ export class ManualGenerationService {
 
     // 3. Pick a random viral video from the successes
     const viral = viralVideos[Math.floor(Math.random() * viralVideos.length)];
+    if (!viral) throw new Error('No viral video selected for remix');
+
     const originalTask = tasks.find(t => t.publicationUrl === viral.url);
     if (!originalTask) throw new Error('Could not match viral URL back to task');
 
-    return this.executeRemix(originalTask, project);
+    return this.executeRemix(originalTask, project, 'auto_remix');
   }
 
   /**
    * Internal logic to execute a remix from an original task.
    */
-  private static async executeRemix(originalTask: GenerationTask, project: Project): Promise<GenerationTask> {
+  private static async executeRemix(
+    originalTask: GenerationTask,
+    project: Project,
+    triggerMode: GenerationTriggerMode
+  ): Promise<GenerationTask> {
     const libraryItemId = originalTask.referenceLibraryItemId;
     const libraryItem = await referenceLibraryStore.getItem(libraryItemId);
     if (!libraryItem) throw new Error('Original library item not found for viral task');
@@ -393,7 +400,10 @@ export class ManualGenerationService {
     let remixAudioItem = audioItems[Math.floor(Math.random() * audioItems.length)] || libraryItem;
     if (audioItems.length > 1) {
       const others = audioItems.filter(i => i.id !== libraryItemId);
-      remixAudioItem = others[Math.floor(Math.random() * others.length)];
+      const nextAudioItem = others[Math.floor(Math.random() * others.length)];
+      if (nextAudioItem) {
+        remixAudioItem = nextAudioItem;
+      }
     }
 
     console.log(`[ManualGenerationService] Remixing task ${originalTask.id}. Using audio from ${remixAudioItem.id}.`);
@@ -409,7 +419,7 @@ export class ManualGenerationService {
     const task = await generationTaskStore.createTask({
       projectId: project.id,
       referenceLibraryItemId: remixAudioItem.id, 
-      triggerMode: 'web_manual_remix',
+      triggerMode,
       targetModel: project.selectedModel,
       provider: originalTask.provider, 
       status: 'pending',

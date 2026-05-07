@@ -63,6 +63,7 @@ export interface Project {
   endFrameXPercent: number;
   viralReusePercentage: number;
   minViewsToReuse: number;
+  yandexDiskFolder: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,4 +93,5 @@ export interface ProjectInput {
   endFrameXPercent?: number;
   viralReusePercentage?: number;
   minViewsToReuse?: number;
+  yandexDiskFolder?: string;
 }

@@ -31,6 +31,12 @@ export interface YandexUploadResult {
   syncedAt: string;
 }
 
+export interface YandexFolderOption {
+  path: string;
+  name: string;
+  relativePath: string;
+}
+
 export class YandexDiskService {
   private static readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk';
   private static readonly rootFolder = 'disk:/references sora 2';
@@ -49,14 +55,37 @@ export class YandexDiskService {
     return `${this.getProjectFolderPath(projectName, projectId)}/${safeName}`;
   }
 
-  public static getGeneratedVideosProjectFolderPath(projectName: string): string {
+  public static getGeneratedVideosProjectFolderPath(projectName: string, projectFolder?: string): string {
+    return this.getGeneratedVideosFolderPath(projectName, projectFolder);
+  }
+
+  public static getGeneratedVideosFolderPath(projectName: string, projectFolder?: string): string {
+    const customFolder = this.sanitizeDiskRelativePath(projectFolder || '');
+    if (customFolder) {
+      return `${this.generatedVideosRootFolder}/${customFolder}`;
+    }
+
     const safeProjectName = this.sanitizeDiskPathSegment(projectName);
     return `${this.generatedVideosRootFolder}/${safeProjectName}/${safeProjectName}`;
   }
 
-  public static getGeneratedVideoDiskPath(projectName: string, fileName: string): string {
+  public static getGeneratedVideoDiskPath(projectName: string, fileName: string, projectFolder?: string): string {
     const safeName = path.basename(fileName).replace(/[^\p{L}\p{N}._ -]+/gu, '-');
-    return `${this.getGeneratedVideosProjectFolderPath(projectName)}/${safeName}`;
+    return `${this.getGeneratedVideosFolderPath(projectName, projectFolder)}/${safeName}`;
+  }
+
+  public static async listGeneratedVideoFolders(maxDepth = 4): Promise<YandexFolderOption[]> {
+    if (!this.isConfigured()) {
+      throw new Error('Yandex Disk token is not configured');
+    }
+
+    await this.ensureFolder('disk:/ВИДЕО');
+    await this.ensureFolder(this.generatedVideosRootFolder);
+
+    const folders: YandexFolderOption[] = [];
+    await this.collectFolders(this.generatedVideosRootFolder, '', 0, Math.max(1, Math.min(maxDepth, 8)), folders);
+
+    return folders.sort((a, b) => a.relativePath.localeCompare(b.relativePath, 'ru'));
   }
 
   public static async uploadReferenceImage(input: {
@@ -126,6 +155,7 @@ export class YandexDiskService {
 
   public static async uploadGeneratedVideo(input: {
     projectName: string;
+    projectFolder?: string;
     projectCode?: string;
     taskId: string;
     sourceVideoUrl: string;
@@ -134,16 +164,14 @@ export class YandexDiskService {
       throw new Error('Yandex Disk token is not configured');
     }
 
-    const folderPath = this.getGeneratedVideosProjectFolderPath(input.projectName);
+    const folderPath = this.getGeneratedVideosFolderPath(input.projectName, input.projectFolder);
     const diskPath = this.getGeneratedVideoDiskPath(
       input.projectName,
-      this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.sourceVideoUrl)
+      this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.sourceVideoUrl),
+      input.projectFolder
     );
 
-    await this.ensureFolder('disk:/ВИДЕО');
-    await this.ensureFolder(this.generatedVideosRootFolder);
-    await this.ensureFolder(path.posix.dirname(folderPath));
-    await this.ensureFolder(folderPath);
+    await this.ensureGeneratedVideosFolder(folderPath);
 
     const uploadUrl = await this.getUploadUrl(diskPath);
     const videoResponse = await axios.get(input.sourceVideoUrl, {
@@ -174,6 +202,7 @@ export class YandexDiskService {
 
   public static async uploadGeneratedVideoFile(input: {
     projectName: string;
+    projectFolder?: string;
     projectCode?: string;
     taskId: string;
     filePath: string;
@@ -187,16 +216,14 @@ export class YandexDiskService {
       throw new Error(`Generated video file does not exist: ${input.filePath}`);
     }
 
-    const folderPath = this.getGeneratedVideosProjectFolderPath(input.projectName);
+    const folderPath = this.getGeneratedVideosFolderPath(input.projectName, input.projectFolder);
     const diskPath = this.getGeneratedVideoDiskPath(
       input.projectName,
-      input.fileName || this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.filePath)
+      input.fileName || this.buildGeneratedVideoFileName(input.projectCode ?? '', input.taskId, input.filePath),
+      input.projectFolder
     );
 
-    await this.ensureFolder('disk:/ВИДЕО');
-    await this.ensureFolder(this.generatedVideosRootFolder);
-    await this.ensureFolder(path.posix.dirname(folderPath));
-    await this.ensureFolder(folderPath);
+    await this.ensureGeneratedVideosFolder(folderPath);
 
     try {
       const uploadUrl = await this.getUploadUrl(diskPath);
@@ -253,6 +280,62 @@ export class YandexDiskService {
       if (status !== 409) {
         throw error;
       }
+    }
+  }
+
+  private static async ensureGeneratedVideosFolder(folderPath: string): Promise<void> {
+    await this.ensureFolder('disk:/ВИДЕО');
+    await this.ensureFolder(this.generatedVideosRootFolder);
+
+    const relativePath = folderPath
+      .slice(this.generatedVideosRootFolder.length)
+      .replace(/^\/+/, '');
+    let currentPath = this.generatedVideosRootFolder;
+
+    for (const segment of relativePath.split('/').filter(Boolean)) {
+      currentPath = `${currentPath}/${segment}`;
+      await this.ensureFolder(currentPath);
+    }
+  }
+
+  private static async collectFolders(
+    folderPath: string,
+    relativePath: string,
+    depth: number,
+    maxDepth: number,
+    folders: YandexFolderOption[]
+  ): Promise<void> {
+    if (depth >= maxDepth) {
+      return;
+    }
+
+    const response = await axios.get(`${this.baseUrl}/resources`, {
+      headers: getHeaders(),
+      ...requestOptions,
+      params: {
+        path: folderPath,
+        limit: 200,
+        fields: '_embedded.items.name,_embedded.items.path,_embedded.items.type',
+      },
+    });
+
+    const items = Array.isArray(response.data?._embedded?.items)
+      ? response.data._embedded.items
+      : [];
+
+    for (const item of items) {
+      if (item?.type !== 'dir' || typeof item.name !== 'string' || typeof item.path !== 'string') {
+        continue;
+      }
+
+      const nextRelativePath = [relativePath, item.name].filter(Boolean).join('/');
+      folders.push({
+        path: item.path,
+        name: item.name,
+        relativePath: nextRelativePath,
+      });
+
+      await this.collectFolders(item.path, nextRelativePath, depth + 1, maxDepth, folders);
     }
   }
 
@@ -328,5 +411,13 @@ export class YandexDiskService {
     } catch {
       return '.mp4';
     }
+  }
+
+  private static sanitizeDiskRelativePath(value: string): string {
+    return value
+      .split('/')
+      .map((segment) => this.sanitizeDiskPathSegment(segment))
+      .filter(Boolean)
+      .join('/');
   }
 }

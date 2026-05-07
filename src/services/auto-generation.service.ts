@@ -2,6 +2,8 @@ import { projectStore } from '../storage/project-store.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { ManualGenerationService } from './manual-generation.service.js';
+import type { GenerationTask } from '../domain/generation-task.js';
+import type { ReferenceLibraryItem } from '../domain/reference-library.js';
 
 export class AutoGenerationService {
   private static interval: NodeJS.Timeout | null = null;
@@ -50,46 +52,109 @@ export class AutoGenerationService {
     const project = await projectStore.getProject(projectId);
     if (!project || !project.automationEnabled || !project.isActive) return;
 
-    // 1. Check today's limit
-    const today = new Date().toISOString().split('T')[0];
-    const tasksToday = await generationTaskStore.countTasksForDate(projectId, today);
+    const today = new Date().toISOString().slice(0, 10);
+    let tasksToday = await generationTaskStore.countTasksForDate(projectId, today);
 
     if (tasksToday >= project.dailyGenerationLimit) {
       return;
     }
 
-    console.log(`[AutoGenerationService] Project ${project.name}: limit not reached (${tasksToday}/${project.dailyGenerationLimit}). Triggering generation...`);
+    console.log(
+      `[AutoGenerationService] Project ${project.name}: limit not reached (${tasksToday}/${project.dailyGenerationLimit}). Processing auto queue...`
+    );
 
-    // 2. Decide: New or Remix?
     const shouldRemix = Math.random() * 100 < project.viralReusePercentage;
 
     if (shouldRemix) {
       console.log(`[AutoGenerationService] Project ${project.name}: Decided to trigger VIRAL REMIX.`);
-      const task = await ManualGenerationService.runViralRemix(projectId);
-      if (task) return; // Success
-      
-      console.log(`[AutoGenerationService] Project ${project.name}: Viral Remix was skipped (no viral content). Falling back to new generation.`);
+      try {
+        await ManualGenerationService.runViralRemix(projectId);
+        return;
+      } catch (err: any) {
+        console.log(
+          `[AutoGenerationService] Project ${project.name}: Viral Remix was skipped (${err.message}). Falling back to queue generation.`
+        );
+      }
     }
 
-    // 3. Fallback/Default: New Generation from Library
+    await this.processPendingLibraryItems(projectId, today, tasksToday);
+  }
+
+  private static async processPendingLibraryItems(projectId: string, today: string, initialTasksToday: number) {
+    const project = await projectStore.getProject(projectId);
+    if (!project || !project.automationEnabled || !project.isActive) return;
+
     const libraryItems = await referenceLibraryStore.listProjectItems(projectId);
-    // Pick items that haven't been used yet today, or just pick one that is 'analyzed' or 'pending'
-    // For simplicity, pick the oldest analyzed item that wasn't used recently
-    const availableItems = libraryItems.filter(item => item.status !== 'failed');
-    
-    if (!availableItems.length) {
-      console.log(`[AutoGenerationService] Project ${project.name}: No library items available for generation.`);
+    const projectTasks = await generationTaskStore.listProjectTasks(projectId);
+    const latestTaskByReference = this.getLatestTaskByReference(projectTasks);
+    const pendingItems = this.getPendingLibraryItems(libraryItems, latestTaskByReference);
+
+    if (!pendingItems.length) {
+      console.log(`[AutoGenerationService] Project ${project.name}: No pending parsed/analyzed library items for auto generation.`);
       return;
     }
 
-    // Sort by created_at ascending (oldest first) or just pick one
-    const targetItem = availableItems[0];
-    
-    console.log(`[AutoGenerationService] Project ${project.name}: Triggering NEW generation from library item ${targetItem.id}.`);
-    await ManualGenerationService.runFromLibraryItem({
-      projectId: project.id,
-      referenceLibraryItemId: targetItem.id,
-      triggerMode: 'auto',
-    });
+    let tasksToday = initialTasksToday;
+    for (const item of pendingItems) {
+      tasksToday = await generationTaskStore.countTasksForDate(projectId, today);
+      if (tasksToday >= project.dailyGenerationLimit) {
+        console.log(
+          `[AutoGenerationService] Project ${project.name}: daily limit reached (${tasksToday}/${project.dailyGenerationLimit}). Queue paused.`
+        );
+        return;
+      }
+
+      const latestTask = latestTaskByReference.get(item.id);
+      const promptText = latestTask?.status === 'failed' ? latestTask.promptText : '';
+
+      try {
+        console.log(
+          `[AutoGenerationService] Project ${project.name}: auto-generating library item ${item.id} (${tasksToday}/${project.dailyGenerationLimit}).`
+        );
+        await ManualGenerationService.runFromLibraryItem({
+          projectId: project.id,
+          referenceLibraryItemId: item.id,
+          triggerMode: 'auto',
+          ...(promptText ? { promptText } : {}),
+        });
+      } catch (err: any) {
+        console.error(
+          `[AutoGenerationService] Project ${project.name}: failed to auto-generate library item ${item.id}:`,
+          err.message
+        );
+      }
+    }
+  }
+
+  private static getLatestTaskByReference(tasks: GenerationTask[]): Map<string, GenerationTask> {
+    const latestTaskByReference = new Map<string, GenerationTask>();
+
+    for (const task of tasks) {
+      if (!latestTaskByReference.has(task.referenceLibraryItemId)) {
+        latestTaskByReference.set(task.referenceLibraryItemId, task);
+      }
+    }
+
+    return latestTaskByReference;
+  }
+
+  private static getPendingLibraryItems(
+    libraryItems: ReferenceLibraryItem[],
+    latestTaskByReference: Map<string, GenerationTask>
+  ): ReferenceLibraryItem[] {
+    return libraryItems
+      .filter((item) => {
+        if (item.status !== 'parsed' && item.status !== 'analyzed') {
+          return false;
+        }
+
+        if (!item.directVideoUrl && !item.analysis) {
+          return false;
+        }
+
+        const latestTask = latestTaskByReference.get(item.id);
+        return !latestTask || latestTask.status === 'failed';
+      })
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   }
 }

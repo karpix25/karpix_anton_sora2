@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { GenerationProvider, GenerationTask, GenerationTaskInput, GenerationTaskStatus, GenerationTaskUpdate } from '../domain/generation-task.js';
+import type { GenerationProvider, GenerationTask, GenerationTaskInput, GenerationTaskStatus, GenerationTaskUpdate, GenerationTriggerMode } from '../domain/generation-task.js';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 import { query } from './db.js';
 
@@ -74,6 +74,14 @@ function normalizeProvider(value: unknown): GenerationProvider {
   return 'kie';
 }
 
+function normalizeTriggerMode(value: unknown): GenerationTriggerMode {
+  const modes: GenerationTriggerMode[] = ['telegram_manual', 'web_manual', 'web_manual_remix', 'auto', 'auto_remix'];
+  if (typeof value === 'string' && (modes as string[]).includes(value)) {
+    return value as GenerationTriggerMode;
+  }
+  return 'web_manual';
+}
+
 function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): GenerationTask {
   const timestamp = nowIso();
 
@@ -81,7 +89,7 @@ function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): Ge
     id: existing?.id ?? randomUUID(),
     projectId: normalizeString(input.projectId ?? existing?.projectId),
     referenceLibraryItemId: normalizeString(input.referenceLibraryItemId ?? existing?.referenceLibraryItemId),
-    triggerMode: input.triggerMode ?? existing?.triggerMode ?? 'web_manual',
+    triggerMode: normalizeTriggerMode(input.triggerMode ?? existing?.triggerMode),
     status: normalizeStatus(input.status ?? existing?.status),
     targetModel: input.targetModel ?? existing?.targetModel ?? 'sora-2',
     provider: normalizeProvider(input.provider ?? existing?.provider),
@@ -114,7 +122,7 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
     id: normalizeString(row.id),
     projectId: normalizeString(row.project_id),
     referenceLibraryItemId: normalizeString(row.reference_library_item_id),
-    triggerMode: row.trigger_mode === 'telegram_manual' ? 'telegram_manual' : 'web_manual',
+    triggerMode: normalizeTriggerMode(row.trigger_mode),
     status: normalizeStatus(row.status),
     targetModel: row.target_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
     provider: normalizeProvider(row.provider),
@@ -286,7 +294,7 @@ export const generationTaskStore = {
   
   async findTasksWithPublication(projectId: string): Promise<GenerationTask[]> {
     try {
-      const result = await db.query<GenerationTaskRow>(
+      const result = await query<GenerationTaskRow>(
         `SELECT * FROM generation_tasks 
          WHERE project_id = $1 
          AND publication_url IS NOT NULL 
@@ -398,14 +406,14 @@ export const generationTaskStore = {
 
   async countTasksForDate(projectId: string, dateIso: string): Promise<number> {
     try {
-      const result = await db.query<{ count: string }>(
+      const result = await query<{ count: string }>(
         `SELECT COUNT(*) FROM generation_tasks 
          WHERE project_id = $1 
          AND created_at::text LIKE $2
          AND status != 'failed'`,
         [projectId, `${dateIso}%`]
       );
-      return parseInt(result.rows[0].count, 10);
+      return parseInt(result.rows[0]?.count || '0', 10);
     } catch (error: any) {
       console.error('[GenerationTaskStore] Failed to count tasks for date:', error.message);
       throw error;

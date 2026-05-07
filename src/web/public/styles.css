@@ -163,6 +163,13 @@ label {
   grid-column: span 2;
 }
 
+.inline-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .checkbox-label {
   flex-direction: row;
   align-items: center;
@@ -665,6 +672,7 @@ textarea {
   .main-panel {
     padding: 20px;
   }
+
 }
 
 @media (max-width: 900px) {
@@ -709,6 +717,10 @@ textarea {
   }
 
   .modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-control {
     grid-template-columns: 1fr;
   }
 }

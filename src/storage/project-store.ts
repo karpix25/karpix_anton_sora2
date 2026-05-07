@@ -56,6 +56,7 @@ interface ProjectRow {
   end_frame_x_percent: number;
   viral_reuse_percentage: number;
   min_views_to_reuse: number;
+  yandex_disk_folder: string;
   created_at: string;
   updated_at: Date | string;
 }
@@ -86,6 +87,18 @@ function normalizeProjectCode(value: unknown, projectId: string): string {
   }
 
   return generateProjectCode(projectId);
+}
+
+function normalizeYandexDiskFolder(value: unknown): string {
+  return normalizeString(value)
+    .replace(/^disk:\/*/i, '')
+    .replace(/^\/+/, '')
+    .replace(/^ВИДЕО\/SORA2\/?/i, '')
+    .split('/')
+    .map((part) => part.trim().replace(/[\\:*?"<>|]+/g, '-').replace(/\s{2,}/g, ' '))
+    .filter((part) => part && part !== '.' && part !== '..')
+    .join('/')
+    .slice(0, 240);
 }
 
 function normalizeBoolean(value: unknown, defaultValue = false): boolean {
@@ -274,6 +287,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     endFrameXPercent: normalizeNumber(input.endFrameXPercent ?? existing?.endFrameXPercent, 50),
     viralReusePercentage: normalizeNumber(input.viralReusePercentage ?? existing?.viralReusePercentage, 0),
     minViewsToReuse: normalizeNumber(input.minViewsToReuse ?? existing?.minViewsToReuse, 1000),
+    yandexDiskFolder: normalizeYandexDiskFolder(input.yandexDiskFolder ?? existing?.yandexDiskFolder),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -307,6 +321,7 @@ function mapRowToProject(row: ProjectRow): Project {
     endFrameXPercent: row.end_frame_x_percent,
     viralReusePercentage: row.viral_reuse_percentage,
     minViewsToReuse: row.min_views_to_reuse,
+    yandexDiskFolder: normalizeYandexDiskFolder(row.yandex_disk_folder),
     createdAt: row.created_at,
     updatedAt: toIsoString(row.updated_at),
   };
@@ -341,13 +356,13 @@ async function upsertProject(project: Project): Promise<Project> {
       mode, automation_enabled, daily_generation_limit, selected_model, is_active,
       primary_reference_image_id, reference_images, text_style,
       end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
-      viral_reuse_percentage, min_views_to_reuse,
+      viral_reuse_percentage, min_views_to_reuse, yandex_disk_folder,
       created_at, updated_at
     )
     VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
       $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
-      $20, $21, $22, $23, $24, $25, $26::timestamptz, $27::timestamptz
+      $20, $21, $22, $23, $24, $25, $26, $27::timestamptz, $28::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
       project_code = EXCLUDED.project_code,
@@ -374,6 +389,7 @@ async function upsertProject(project: Project): Promise<Project> {
       end_frame_x_percent = EXCLUDED.end_frame_x_percent,
       viral_reuse_percentage = EXCLUDED.viral_reuse_percentage,
       min_views_to_reuse = EXCLUDED.min_views_to_reuse,
+      yandex_disk_folder = EXCLUDED.yandex_disk_folder,
       updated_at = EXCLUDED.updated_at
     RETURNING *
   `;
@@ -404,6 +420,7 @@ async function upsertProject(project: Project): Promise<Project> {
     project.endFrameXPercent ?? 50,
     project.viralReusePercentage ?? 0,
     project.minViewsToReuse ?? 1000,
+    project.yandexDiskFolder || '',
     project.createdAt,
     project.updatedAt,
   ];

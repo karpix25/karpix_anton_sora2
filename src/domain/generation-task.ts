@@ -2,7 +2,12 @@ import type { VideoModel } from './project.js';
 import type { ReferenceTextOverlay } from './reference-library.js';
 
 export type GenerationTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type GenerationTriggerMode = 'telegram_manual' | 'web_manual';
+export type GenerationTriggerMode =
+  | 'telegram_manual'
+  | 'web_manual'
+  | 'web_manual_remix'
+  | 'auto'
+  | 'auto_remix';
 export type GenerationProvider = 'kie' | 'aihubmix' | 'laozhang' | 'defapi' | 'defapi-stable' | 'comet';
 
 export interface GenerationTask {
