@@ -54,6 +54,8 @@ interface ProjectRow {
   end_frame_vertical_margin: number;
   end_frame_width_percent: number;
   end_frame_x_percent: number;
+  viral_reuse_percentage: number;
+  min_views_to_reuse: number;
   created_at: string;
   updated_at: Date | string;
 }
@@ -270,6 +272,8 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     endFrameVerticalMargin: normalizeNumber(input.endFrameVerticalMargin ?? existing?.endFrameVerticalMargin, 320),
     endFrameWidthPercent: normalizeNumber(input.endFrameWidthPercent ?? existing?.endFrameWidthPercent, 50),
     endFrameXPercent: normalizeNumber(input.endFrameXPercent ?? existing?.endFrameXPercent, 50),
+    viralReusePercentage: normalizeNumber(input.viralReusePercentage ?? existing?.viralReusePercentage, 0),
+    minViewsToReuse: normalizeNumber(input.minViewsToReuse ?? existing?.minViewsToReuse, 1000),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -301,6 +305,8 @@ function mapRowToProject(row: ProjectRow): Project {
     endFrameVerticalMargin: row.end_frame_vertical_margin,
     endFrameWidthPercent: row.end_frame_width_percent,
     endFrameXPercent: row.end_frame_x_percent,
+    viralReusePercentage: row.viral_reuse_percentage,
+    minViewsToReuse: row.min_views_to_reuse,
     createdAt: row.created_at,
     updatedAt: toIsoString(row.updated_at),
   };
@@ -335,12 +341,13 @@ async function upsertProject(project: Project): Promise<Project> {
       mode, automation_enabled, daily_generation_limit, selected_model, is_active,
       primary_reference_image_id, reference_images, text_style,
       end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
+      viral_reuse_percentage, min_views_to_reuse,
       created_at, updated_at
     )
     VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
       $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
-      $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
+      $20, $21, $22, $23, $24, $25, $26::timestamptz, $27::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
       project_code = EXCLUDED.project_code,
@@ -365,6 +372,8 @@ async function upsertProject(project: Project): Promise<Project> {
       end_frame_vertical_margin = EXCLUDED.end_frame_vertical_margin,
       end_frame_width_percent = EXCLUDED.end_frame_width_percent,
       end_frame_x_percent = EXCLUDED.end_frame_x_percent,
+      viral_reuse_percentage = EXCLUDED.viral_reuse_percentage,
+      min_views_to_reuse = EXCLUDED.min_views_to_reuse,
       updated_at = EXCLUDED.updated_at
     RETURNING *
   `;
@@ -393,6 +402,8 @@ async function upsertProject(project: Project): Promise<Project> {
     project.endFrameVerticalMargin ?? 320,
     project.endFrameWidthPercent ?? 50,
     project.endFrameXPercent ?? 50,
+    project.viralReusePercentage ?? 0,
+    project.minViewsToReuse ?? 1000,
     project.createdAt,
     project.updatedAt,
   ];

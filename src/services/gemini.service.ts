@@ -480,4 +480,132 @@ export class GeminiService {
       throw new Error(`Prompt generation failed: ${error.message}`);
     }
   }
+
+  /**
+   * Generates new catchy text overlays for a viral video remix.
+   * Based on the original analysis and product context.
+   */
+  public static async generateRemixTexts(
+    input: {
+      videoAnalysis: string;
+      originalTexts: any[];
+      project: Project;
+    }
+  ): Promise<any[]> {
+    const { videoAnalysis, originalTexts, project } = input;
+
+    const systemInstructions = `
+      You are a viral content strategist for TikTok/Reels. 
+      Your task is to generate NEW "trigger" captions (text overlays) for a successful video to make it viral again.
+
+      CONTEXT:
+      Video Content: ${videoAnalysis}
+      Original Captions: ${JSON.stringify(originalTexts.map(t => t.text))}
+      Product: ${project.productName}
+      Target Audience: ${project.targetAudience}
+      CTA: ${project.cta}
+
+      RULES:
+      1. Create 2-4 text overlays that appear at different times.
+      2. Use a "Fresh Hook" — a different angle than the original captions. 
+      3. Make them short, punchy, and provocative (trigger curiosity or emotion).
+      4. Use emojis.
+      5. Output ONLY a JSON array of objects with fields: "text", "startSeconds", "endSeconds".
+      6. The total duration should not exceed 10 seconds.
+      7. Example: [{"text": "You won't believe this... 😱", "startSeconds": 0, "endSeconds": 3}]
+    `;
+
+    try {
+      const response = await createChatCompletionWithRetry(
+        {
+          model: config.openRouter.models.pro,
+          provider: buildProviderRouting(),
+          messages: [
+            { role: 'system', content: systemInstructions },
+            { role: 'user', content: 'Generate new viral text overlays for this video.' },
+          ],
+          response_format: { type: 'json_object' }
+        },
+        'Gemini Remix Text Generation',
+        config.openRouter.models.flash
+      );
+
+      const content = response.data.choices[0]?.message?.content || '{}';
+      const parsed = JSON.parse(content);
+      // Handle different JSON structures from different models
+      const overlays = Array.isArray(parsed) ? parsed : (parsed.overlays || parsed.items || []);
+      return overlays;
+    } catch (error: any) {
+      console.error('[GeminiService] Remix text generation failed:', error.message);
+      return []; // Fallback to empty if AI fails
+    }
+  }
+
+  /**
+   * Generates a creative remix of an existing prompt.
+   * Encourages variations in camera angles, lighting, or specific micro-actions.
+   */
+  public static async generateRemixPrompt(
+    input: {
+      originalPrompt: string;
+      videoAnalysis: string;
+      project: Project;
+      projectReferenceImageUrls?: string[];
+    }
+  ): Promise<string> {
+    const { originalPrompt, videoAnalysis, project, projectReferenceImageUrls = [] } = input;
+
+    const systemInstructions = `
+      You are an expert video director. You are given a successful video prompt and its original analysis.
+      Your task is to create a "REMIX" — a creative variation of the same scene that keeps the CORE PRODUCT and HOOK but changes the visual execution to keep the content fresh.
+
+      DIRECTIONS FOR REMIXING:
+      1. Keep the product (@image1) and the main subject context identical.
+      2. Vary the Camera: If the original was a medium shot, try a close-up or a tracking shot. Change the lens (e.g., from 35mm to 50mm).
+      3. Vary the Lighting: Change the time of day or light source (e.g., from natural daylight to sunset glow or volumetric indoor lighting).
+      4. Vary the Micro-Actions: If the character was smiling, make them look surprised or deeply focused. Change small hand movements or background details.
+      5. Keep the total duration and structure similar to the original.
+      6. ABSOLUTELY NO TEXT in the video.
+
+      ORIGINAL PROMPT FOR REFERENCE:
+      ${originalPrompt}
+
+      ORIGINAL VIDEO ANALYSIS:
+      ${videoAnalysis}
+
+      PROJECT CONTEXT:
+      Product: ${project.productName}
+      CTA: ${project.cta}
+      Audience: ${project.targetAudience}
+
+      OUTPUT:
+      Return only the new timestamped prompt.
+    `;
+
+    try {
+      const response = await createChatCompletionWithRetry(
+        {
+          model: config.openRouter.models.pro,
+          provider: buildProviderRouting(),
+          messages: [
+            { role: 'system', content: systemInstructions },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: 'Generate a creative REMIX of the provided video prompt. Keep it visual and action-based.' },
+                ...projectReferenceImageUrls.map(url => ({ type: 'image_url' as const, image_url: { url } }))
+              ] 
+            },
+          ],
+        },
+        'Gemini Remix Generation',
+        config.openRouter.models.flash
+      );
+
+      return response.data.choices[0]?.message?.content || '';
+    } catch (error: any) {
+      console.error('[GeminiService] Remix generation failed:', error.message);
+      throw new Error(`Remix generation failed: ${error.message}`);
+    }
+  }
 }

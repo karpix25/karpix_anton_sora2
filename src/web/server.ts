@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { TelegramMediaService } from '../services/telegram-media.service.js';
 import { YandexDiskService } from '../services/yandex-disk.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
+import { ParserService } from '../services/parser.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
 import { bot } from '../bot/bot.js';
 
@@ -336,13 +337,26 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   if (generationsRoute.projectId && req.method === 'GET') {
     const tasks = await generationTaskStore.listProjectTasks(generationsRoute.projectId);
 
+    // Fetch view counts for tasks with publication URLs
+    const publicationUrls = tasks
+      .map(t => t.publicationUrl)
+      .filter((url): url is string => !!url);
+    
+    const viewsMap = await ParserService.getViewCountsMap(publicationUrls);
+
+    // Attach views to tasks
+    const tasksWithViews = tasks.map(task => ({
+      ...task,
+      views: task.publicationUrl ? (viewsMap[task.publicationUrl] || 0) : 0
+    }));
+
     if (!YandexDiskService.isConfigured()) {
-      sendJson(res, 200, { tasks });
+      sendJson(res, 200, { tasks: tasksWithViews });
       return true;
     }
 
     const hydratedTasks = [];
-    for (const task of tasks) {
+    for (const task of tasksWithViews) {
       if (task.status !== 'completed' || !task.yandexDiskPath) {
         hydratedTasks.push(task);
         continue;

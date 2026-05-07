@@ -183,6 +183,9 @@ export const config = {
     host: process.env.RAPIDAPI_HOST || 'instagram-social-api.p.rapidapi.com',
     base: process.env.IG_API_BASE || 'https://instagram-social-api.p.rapidapi.com/v1/info',
   },
+  parser: {
+    dbUrl: process.env.PARSER_DATABASE_URL || '',
+  },
 };
 
 if (

@@ -11,6 +11,7 @@ import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { InstagramService } from './instagram.service.js';
 import type { GenerationTask, GenerationTriggerMode } from '../domain/generation-task.js';
+import { ParserService } from './parser.service.js';
 import type { Project } from '../domain/project.js';
 import type { ReferenceLibraryItem } from '../domain/reference-library.js';
 import fs from 'fs-extra';
@@ -115,7 +116,10 @@ export class ManualGenerationService {
       let libraryItem = initialLibraryItem;
       let resultVideoUrl = '';
       let analysis = libraryItem.analysis;
-      let textOverlays = libraryItem.textOverlays || [];
+      // Prioritize task-level overlay texts (e.g. from a viral remix) over library item defaults
+      let textOverlays = (task.overlayTexts && task.overlayTexts.length > 0) 
+        ? task.overlayTexts 
+        : (libraryItem.textOverlays || []);
       
       // Force processing if missing components
       if (!analysis || !textOverlays.length) {
@@ -328,5 +332,72 @@ export class ManualGenerationService {
         await fs.remove(mergedVideoPath);
       }
     }
+  }
+
+  public static async runViralRemix(projectId: string) {
+    const project = await projectStore.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+
+    // 1. Find all tasks with publication_url
+    const tasksWithPub = await generationTaskStore.findTasksWithPublication(projectId);
+    if (!tasksWithPub.length) {
+      console.log(`[ManualGenerationService] Project ${projectId}: No tasks with publication URLs found for remixing.`);
+      return null;
+    }
+
+    // 2. Query Parser DB for view counts
+    const urls = tasksWithPub.map(t => t.publicationUrl!);
+    const viralVideos = await ParserService.getViralVideos(urls, project.minViewsToReuse || 1000);
+    
+    if (!viralVideos.length) {
+      console.log(`[ManualGenerationService] Project ${projectId}: No viral videos found above threshold ${project.minViewsToReuse}.`);
+      return null;
+    }
+
+    // 3. Pick one viral video (randomly from the top ones)
+    const viral = viralVideos[Math.floor(Math.random() * viralVideos.length)];
+    const originalTask = tasksWithPub.find(t => t.publicationUrl === viral.url)!;
+    
+    const libraryItem = await referenceLibraryStore.getItem(originalTask.referenceLibraryItemId);
+    if (!libraryItem) throw new Error('Original library item not found for viral task');
+
+    // 4. Pick a NEW random audio from the project library
+    const allLibraryItems = await referenceLibraryStore.listProjectItems(projectId);
+    const audioItems = allLibraryItems.filter(item => item.audioFilePath || item.directVideoUrl);
+    
+    // Try to pick one DIFFERENT from the original if possible
+    let remixAudioItem = audioItems.length > 1 
+      ? audioItems.filter(item => item.id !== libraryItem.id)[Math.floor(Math.random() * (audioItems.length - 1))]
+      : audioItems[0];
+    
+    if (!remixAudioItem) {
+      console.log(`[ManualGenerationService] Project ${projectId}: No audio items found in library for remix.`);
+      return null;
+    }
+
+    console.log(`[ManualGenerationService] Project ${projectId}: Remixing viral video ${viral.url} (${viral.views} views). Using audio from ${remixAudioItem.id}.`);
+
+    // 5. Generate NEW trigger texts via Gemini (instead of new video prompt)
+    const newTexts = await GeminiService.generateRemixTexts({
+      videoAnalysis: libraryItem.analysis,
+      originalTexts: originalTask.overlayTexts || [],
+      project,
+    });
+
+    // 6. Create new task reusing the clean generated video URL
+    const task = await generationTaskStore.createTask({
+      projectId: project.id,
+      referenceLibraryItemId: remixAudioItem.id, // Using the new audio item for sound
+      triggerMode: 'auto_remix',
+      targetModel: project.selectedModel,
+      provider: originalTask.provider, // Reuse provider info
+      status: 'pending',
+      promptText: originalTask.promptText, // Keep original prompt for reference
+      resultVideoUrl: originalTask.resultVideoUrl, // CRITICAL: This skips generation in processTask
+      overlayTexts: newTexts, // Use the new viral texts
+    });
+
+    // We process it normally, it will skip generation and go straight to postprocess with new audio + new texts
+    return this.processTask(task, project, remixAudioItem);
   }
 }

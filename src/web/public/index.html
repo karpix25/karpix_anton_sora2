@@ -335,6 +335,19 @@
               <span>Проект активен</span>
             </label>
 
+            <label class="full-width">
+              <span>% Перегенерации (Viral Remix) vs Новых</span>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
+                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold;">0%</span>
+              </div>
+            </label>
+
+            <label>
+              <span>Мин. просмотров для ремикса</span>
+              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="1000" />
+            </label>
+
           </div>
         </section>
       </main>

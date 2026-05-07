@@ -14,6 +14,7 @@ import { config } from './config.js';
 import { startWebServer } from './web/server.js';
 import { closeDatabase, initDatabase } from './storage/db.js';
 import { GenerationRecoveryService } from './services/generation-recovery.service.js';
+import { AutoGenerationService } from './services/auto-generation.service.js';
 
 console.log('🚀 Starting Sora 2 & Veo 3.1 Video Automation Tool...');
 
@@ -64,6 +65,7 @@ async function bootstrap(): Promise<void> {
 
   await startWebServer();
   GenerationRecoveryService.start();
+  AutoGenerationService.start();
 
   if (config.telegram.isConfigured) {
     if (config.telegram.webhook.enabled) {

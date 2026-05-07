@@ -14,6 +14,8 @@ const defaultProject = () => ({
   mode: 'manual',
   automationEnabled: false,
   dailyGenerationLimit: 1,
+  viralReusePercentage: 0,
+  minViewsToReuse: 1000,
   selectedModel: 'sora-2',
   isActive: true,
   primaryReferenceImageId: '',
@@ -95,6 +97,9 @@ const elements = {
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
     selectedModel: document.getElementById('selectedModel'),
     isActive: document.getElementById('isActive'),
+    viralReusePercentage: document.getElementById('viralReusePercentage'),
+    viralReusePercentageLabel: document.getElementById('viralReusePercentageLabel'),
+    minViewsToReuse: document.getElementById('minViewsToReuse'),
     textStyle: {
       fontFamily: document.getElementById('textStyle-fontFamily'),
       fontSize: document.getElementById('textStyle-fontSize'),
@@ -329,6 +334,8 @@ function snapshotFromForm() {
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
     selectedModel: elements.fields.selectedModel.value,
     isActive: elements.fields.isActive.checked,
+    viralReusePercentage: Number(elements.fields.viralReusePercentage.value || 0),
+    minViewsToReuse: Number(elements.fields.minViewsToReuse.value || 1000),
     textStyle: {
       fontFamily: elements.fields.textStyle.fontFamily.value,
       fontSize: Number(elements.fields.textStyle.fontSize.value),
@@ -638,6 +645,9 @@ function applyProjectToForm(project) {
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
+  elements.fields.viralReusePercentage.value = String(state.currentProject.viralReusePercentage ?? 0);
+  elements.fields.viralReusePercentageLabel.textContent = `${state.currentProject.viralReusePercentage ?? 0}%`;
+  elements.fields.minViewsToReuse.value = String(state.currentProject.minViewsToReuse ?? 1000);
 
   const style = {
     ...defaultProject().textStyle,
@@ -791,6 +801,10 @@ function bindEvents() {
       console.error(error);
       setStatus(error.message);
     }
+  });
+
+  elements.fields.viralReusePercentage.addEventListener('input', (event) => {
+    elements.fields.viralReusePercentageLabel.textContent = `${event.target.value}%`;
   });
 
   elements.referenceImageInput.addEventListener('change', async (event) => {

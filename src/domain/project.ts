@@ -61,6 +61,8 @@ export interface Project {
   endFrameVerticalMargin: number;
   endFrameWidthPercent: number;
   endFrameXPercent: number;
+  viralReusePercentage: number;
+  minViewsToReuse: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,4 +90,6 @@ export interface ProjectInput {
   endFrameVerticalMargin?: number;
   endFrameWidthPercent?: number;
   endFrameXPercent?: number;
+  viralReusePercentage?: number;
+  minViewsToReuse?: number;
 }

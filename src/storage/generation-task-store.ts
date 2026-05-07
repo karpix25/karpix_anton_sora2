@@ -283,6 +283,23 @@ export const generationTaskStore = {
 
     return result.rows.map((row) => mapRowToTask(row));
   },
+  
+  async findTasksWithPublication(projectId: string): Promise<GenerationTask[]> {
+    try {
+      const result = await db.query<GenerationTaskRow>(
+        `SELECT * FROM generation_tasks 
+         WHERE project_id = $1 
+         AND publication_url IS NOT NULL 
+         AND publication_url != ''
+         ORDER BY created_at DESC`,
+        [projectId]
+      );
+      return result.rows.map(mapRowToTask);
+    } catch (error: any) {
+      console.error('[GenerationTaskStore] Failed to find tasks with publication:', error.message);
+      throw error;
+    }
+  },
 
   async updateTask(taskId: string, update: GenerationTaskUpdate): Promise<GenerationTask | null> {
     const existingResult = await query<GenerationTaskRow>(
@@ -377,6 +394,22 @@ export const generationTaskStore = {
     );
 
     return result.rows[0] ? mapRowToTask(result.rows[0]) : null;
+  },
+
+  async countTasksForDate(projectId: string, dateIso: string): Promise<number> {
+    try {
+      const result = await db.query<{ count: string }>(
+        `SELECT COUNT(*) FROM generation_tasks 
+         WHERE project_id = $1 
+         AND created_at::text LIKE $2
+         AND status != 'failed'`,
+        [projectId, `${dateIso}%`]
+      );
+      return parseInt(result.rows[0].count, 10);
+    } catch (error: any) {
+      console.error('[GenerationTaskStore] Failed to count tasks for date:', error.message);
+      throw error;
+    }
   },
 
   async deleteProjectTasks(projectId: string): Promise<void> {

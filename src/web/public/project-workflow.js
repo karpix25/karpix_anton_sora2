@@ -347,20 +347,27 @@ export function createProjectWorkflow(context) {
 
     elements.generationTasks.className = 'library-list';
     elements.generationTasks.innerHTML = tasks
-      .map(
-        (task) => {
+        .map((task) => {
           const yandexFinalUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
           const s3Url = String(task.s3ObjectUrl || '').trim();
+          const viewsCount = task.views || 0;
+          const isRemix = task.triggerMode === 'auto_remix';
+          
           return `
           <article class="library-item">
             <div class="library-item-header">
               <div>
                 <strong>${context.escapeHtml(task.targetModel.toUpperCase())}</strong>
+                ${isRemix ? '<span class="viral-badge">Viral Remix 🔄</span>' : ''}
                 <p class="meta-line">${context.escapeHtml(new Date(task.createdAt).toLocaleString())}</p>
                 <p class="meta-line">Провайдер: ${context.escapeHtml((task.provider || 'kie').toUpperCase())}</p>
               </div>
-              <span class="library-status">${context.escapeHtml(task.status)}</span>
+              <div class="header-right-meta">
+                ${viewsCount > 0 ? `<div class="views-count">👁️ ${viewsCount.toLocaleString()}</div>` : ''}
+                <span class="library-status library-status--${context.escapeHtml(task.status)}">${context.escapeHtml(task.status)}</span>
+              </div>
             </div>
+            ${task.publicationUrl ? `<p><strong>Ссылка:</strong> <a class="library-link" href="${context.escapeHtml(task.publicationUrl)}" target="_blank" rel="noreferrer">Перейти к посту</a></p>` : ''}
             ${yandexFinalUrl ? `<p><strong>Финал (Яндекс):</strong> <a class="library-link" href="${context.escapeHtml(yandexFinalUrl)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Финал (Яндекс):</strong> еще не загружен</p>'}
             ${s3Url ? `<p><strong>Оригинал (S3):</strong> <a class="library-link" href="${context.escapeHtml(s3Url)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Оригинал (S3):</strong> еще не загружен</p>'}
             ${task.videoFileName ? `<p class="meta-line">Имя файла: ${context.escapeHtml(task.videoFileName)}</p>` : ''}
@@ -368,7 +375,7 @@ export function createProjectWorkflow(context) {
             ${Array.isArray(task.overlayTexts) && task.overlayTexts.length ? `<p class="meta-line">Текст на видео: ${context.escapeHtml(shortenText(task.overlayTexts.map((item) => item?.text || '').filter(Boolean).join(' | '), 180))}</p>` : ''}
             ${task.yandexDiskPath ? `<p class="meta-line">${context.escapeHtml(task.yandexDiskPath)}</p>` : ''}
             ${task.s3ObjectKey ? `<p class="meta-line">${context.escapeHtml(task.s3ObjectKey)}</p>` : ''}
-            ${task.errorMessage ? `<p class="meta-line">${context.escapeHtml(task.errorMessage)}</p>` : ''}
+            ${task.errorMessage ? `<p class="meta-line library-error-text">${context.escapeHtml(task.errorMessage)}</p>` : ''}
             ${task.promptText ? `<div class="library-analysis">${context.escapeHtml(shortenText(task.promptText))}</div>` : ''}
           </article>
         `;

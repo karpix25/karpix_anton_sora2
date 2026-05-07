@@ -878,3 +878,37 @@ input:checked + .slider:before {
   background: linear-gradient(135deg, #fffaf2 0%, #fffefc 100%);
   margin-bottom: 10px;
 }
+/* Viral Remix & Views */
+.header-right-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.views-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(182, 87, 42, 0.08);
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.viral-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #f1c40f;
+  color: #2c3e50;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  margin-left: 8px;
+  vertical-align: middle;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
