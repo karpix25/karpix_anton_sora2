@@ -86,26 +86,49 @@ export class S3StorageService {
     const objectKey = this.buildObjectKey(input.projectId, input.projectCode, fileName);
     const bucket = config.s3.bucket;
 
-    const response = await axios.get(input.sourceVideoUrl, {
-      responseType: 'stream',
-      timeout: 120000,
-      maxContentLength: Infinity,
-    });
+    const isLocalPath = input.sourceVideoUrl.startsWith('/') || input.sourceVideoUrl.startsWith('.') || !input.sourceVideoUrl.includes('://');
 
-    await this.getClient().send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: objectKey,
-        Body: response.data,
-        ContentType: response.headers['content-type'] || 'video/mp4',
-        Metadata: {
-          project_id: input.projectId,
-          project_code: input.projectCode || '',
-          task_id: input.taskId,
-          source: 'generated_original',
-        },
-      })
-    );
+    if (isLocalPath) {
+      if (!(await fs.pathExists(input.sourceVideoUrl))) {
+        throw new Error(`Source video file does not exist: ${input.sourceVideoUrl}`);
+      }
+
+      await this.getClient().send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: objectKey,
+          Body: fs.createReadStream(input.sourceVideoUrl),
+          ContentType: 'video/mp4',
+          Metadata: {
+            project_id: input.projectId,
+            project_code: input.projectCode || '',
+            task_id: input.taskId,
+            source: 'generated_original_local',
+          },
+        })
+      );
+    } else {
+      const response = await axios.get(input.sourceVideoUrl, {
+        responseType: 'stream',
+        timeout: 120000,
+        maxContentLength: Infinity,
+      });
+
+      await this.getClient().send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: objectKey,
+          Body: response.data,
+          ContentType: response.headers['content-type'] || 'video/mp4',
+          Metadata: {
+            project_id: input.projectId,
+            project_code: input.projectCode || '',
+            task_id: input.taskId,
+            source: 'generated_original_remote',
+          },
+        })
+      );
+    }
 
     return {
       bucket,
