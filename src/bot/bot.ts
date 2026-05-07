@@ -236,13 +236,13 @@ bot.command('bind_project', async (ctx) => {
     return;
   }
 
-  if (targetProject.telegramChatId && targetProject.telegramTopicId) {
-    await ctx.reply(
-      `❌ Проект "${targetProject.name}" уже привязан к теме "${targetProject.telegramTopicName || targetProject.telegramTopicId}" в чате ${targetProject.telegramChatId}.\n\n` +
-      `Один проект нельзя привязывать к нескольким темам.`
-    );
-    return;
-  }
+  const previousBinding = targetProject.telegramChatId && targetProject.telegramTopicId
+    ? {
+        chatId: targetProject.telegramChatId,
+        topicId: targetProject.telegramTopicId,
+        topicName: targetProject.telegramTopicName || `Тема ${targetProject.telegramTopicId}`,
+      }
+    : null;
 
   const inferredTopicName = extractTopicNameFromContext(ctx, topicNameFromCommand) || `Тема ${messageThreadId}`;
   const project = await projectStore.bindProjectToTelegramTopic(
@@ -262,7 +262,11 @@ bot.command('bind_project', async (ctx) => {
     `Проект: ${project.name}\n` +
     `Chat ID: ${project.telegramChatId}\n` +
     `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
-    `Topic ID: ${project.telegramTopicId}\n\n` +
+    `Topic ID: ${project.telegramTopicId}\n` +
+    (previousBinding && previousBinding.topicId !== project.telegramTopicId
+      ? `\nРанее был привязан к: ${previousBinding.topicName} (${previousBinding.topicId}) в чате ${previousBinding.chatId}\n`
+      : '') +
+    `\n` +
     `Открыть проект в вебе: ${getWebInterfaceUrl(project.id)}`
   );
 });
@@ -301,10 +305,13 @@ bot.command('bind_topic', async (ctx) => {
     return;
   }
 
-  if (targetProject.telegramChatId && targetProject.telegramTopicId) {
-    await ctx.reply(`❌ Проект "${targetProject.name}" уже привязан к теме ${targetProject.telegramTopicId} в чате ${targetProject.telegramChatId}.`);
-    return;
-  }
+  const previousBinding = targetProject.telegramChatId && targetProject.telegramTopicId
+    ? {
+        chatId: targetProject.telegramChatId,
+        topicId: targetProject.telegramTopicId,
+        topicName: targetProject.telegramTopicName || `Тема ${targetProject.telegramTopicId}`,
+      }
+    : null;
 
   const inferredTopicName = topicName || `Тема ${topicId}`;
   const project = await projectStore.bindProjectToTelegramTopic(
@@ -323,7 +330,11 @@ bot.command('bind_topic', async (ctx) => {
     `✅ Проект "${project.name}" привязан.\n` +
     `Chat ID: ${project.telegramChatId}\n` +
     `Тема: ${project.telegramTopicName || '(без названия)'}\n` +
-    `Topic ID: ${project.telegramTopicId}\n\n` +
+    `Topic ID: ${project.telegramTopicId}\n` +
+    (previousBinding && previousBinding.topicId !== project.telegramTopicId
+      ? `\nРанее был привязан к: ${previousBinding.topicName} (${previousBinding.topicId}) в чате ${previousBinding.chatId}\n`
+      : '') +
+    `\n` +
     `Открыть проект в вебе: ${getWebInterfaceUrl(project.id)}`
   );
 });
