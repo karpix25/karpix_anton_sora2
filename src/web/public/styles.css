@@ -912,3 +912,29 @@ input:checked + .slider:before {
   vertical-align: middle;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+.remix-task-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(182, 87, 42, 0.2);
+}
+
+.remix-task-button:hover {
+  background: var(--accent-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(182, 87, 42, 0.3);
+}
+
+.remix-task-button:active {
+  transform: translateY(0);
+}

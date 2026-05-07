@@ -377,11 +377,38 @@ export function createProjectWorkflow(context) {
             ${task.s3ObjectKey ? `<p class="meta-line">${context.escapeHtml(task.s3ObjectKey)}</p>` : ''}
             ${task.errorMessage ? `<p class="meta-line library-error-text">${context.escapeHtml(task.errorMessage)}</p>` : ''}
             ${task.promptText ? `<div class="library-analysis">${context.escapeHtml(shortenText(task.promptText))}</div>` : ''}
+            ${task.status === 'completed' && task.resultVideoUrl ? `
+              <div class="library-item-actions">
+                <button class="remix-task-button" data-task-id="${context.escapeHtml(task.id)}" type="button">🔄 Сделать ремикс</button>
+              </div>
+            ` : ''}
           </article>
         `;
         }
       )
       .join('');
+
+    elements.generationTasks.querySelectorAll('.remix-task-button').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const taskId = button.getAttribute('data-task-id');
+        if (!taskId) return;
+        
+        try {
+          setStatus('Запуск ручного ремикса...');
+          const data = await api(`/api/tasks/${taskId}/remix`, {
+            method: 'POST'
+          });
+          
+          if (data.task) {
+            await loadGenerations();
+            setStatus('Ремикс успешно запущен! Новая задача добавлена в историю.');
+          }
+        } catch (error) {
+          console.error(error);
+          setStatus(`Ошибка при ремиксе: ${error.message}`);
+        }
+      });
+    });
   }
 
   async function loadLibrary() {

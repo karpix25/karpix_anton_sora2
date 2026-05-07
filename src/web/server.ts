@@ -201,7 +201,12 @@ function getProjectPrimaryReferenceImageRouteParams(pathname: string): { project
 
 function getProjectLibraryGenerationRouteParams(pathname: string): { projectId?: string; itemId?: string } {
   const match = pathname.match(/^\/api\/projects\/([^/]+)\/library\/([^/]+)\/generate$/);
-  return match?.[1] && match?.[2] ? { projectId: match[1], itemId: match[2] } : {};
+  return { projectId: match?.[1], itemId: match?.[2] };
+}
+
+function getTaskRemixRouteParams(pathname: string): { taskId?: string } {
+  const match = pathname.match(/^\/api\/tasks\/([^/]+)\/remix$/);
+  return { taskId: match?.[1] };
 }
 
 function getProjectLibraryItemRouteParams(pathname: string): { projectId?: string; itemId?: string } {
@@ -536,6 +541,17 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     });
 
     sendJson(res, 200, { task });
+    return true;
+  }
+
+  const taskRemixRoute = getTaskRemixRouteParams(pathname);
+  if (taskRemixRoute.taskId && req.method === 'POST') {
+    try {
+      const task = await ManualGenerationService.runManualRemix(taskRemixRoute.taskId);
+      sendJson(res, 200, { task });
+    } catch (error: any) {
+      sendJson(res, 400, { error: error.message });
+    }
     return true;
   }
 

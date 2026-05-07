@@ -334,50 +334,71 @@ export class ManualGenerationService {
     }
   }
 
-  public static async runViralRemix(projectId: string) {
-    const project = await projectStore.getProject(projectId);
-    if (!project) throw new Error(`Project not found: ${projectId}`);
-
-    // 1. Find all tasks with publication_url
-    const tasksWithPub = await generationTaskStore.findTasksWithPublication(projectId);
-    if (!tasksWithPub.length) {
-      console.log(`[ManualGenerationService] Project ${projectId}: No tasks with publication URLs found for remixing.`);
-      return null;
+  /**
+   * Manually triggers a remix for a specific completed task.
+   */
+  public static async runManualRemix(taskId: string): Promise<GenerationTask> {
+    const task = await generationTaskStore.getTask(taskId);
+    if (!task) throw new Error('Task not found');
+    if (task.status !== 'completed' || !task.resultVideoUrl) {
+      throw new Error('Can only remix completed tasks with a result video');
     }
 
-    // 2. Query Parser DB for view counts
-    const urls = tasksWithPub.map(t => t.publicationUrl!);
+    const project = await projectStore.getProject(task.projectId);
+    if (!project) throw new Error('Project not found');
+
+    return this.executeRemix(task, project);
+  }
+
+  /**
+   * Auto-triggers a viral remix for a project based on performance.
+   */
+  public static async runViralRemix(projectId: string): Promise<GenerationTask> {
+    const project = await projectStore.getProject(projectId);
+    if (!project) throw new Error('Project not found');
+
+    // 1. Get all tasks with publication URLs for this project
+    const tasks = await generationTaskStore.findTasksWithPublication(projectId);
+    if (!tasks.length) throw new Error('No published tasks found to remix');
+
+    // 2. Fetch real-time view counts from Parser DB
+    const urls = tasks.map(t => t.publicationUrl).filter((u): u is string => !!u);
     const viralVideos = await ParserService.getViralVideos(urls, project.minViewsToReuse || 1000);
     
     if (!viralVideos.length) {
-      console.log(`[ManualGenerationService] Project ${projectId}: No viral videos found above threshold ${project.minViewsToReuse}.`);
-      return null;
+      throw new Error(`No viral videos found with >= ${project.minViewsToReuse} views`);
     }
 
-    // 3. Pick one viral video (randomly from the top ones)
+    // 3. Pick a random viral video from the successes
     const viral = viralVideos[Math.floor(Math.random() * viralVideos.length)];
-    const originalTask = tasksWithPub.find(t => t.publicationUrl === viral.url)!;
-    
-    const libraryItem = await referenceLibraryStore.getItem(originalTask.referenceLibraryItemId);
+    const originalTask = tasks.find(t => t.publicationUrl === viral.url);
+    if (!originalTask) throw new Error('Could not match viral URL back to task');
+
+    return this.executeRemix(originalTask, project);
+  }
+
+  /**
+   * Internal logic to execute a remix from an original task.
+   */
+  private static async executeRemix(originalTask: GenerationTask, project: Project): Promise<GenerationTask> {
+    const libraryItemId = originalTask.referenceLibraryItemId;
+    const libraryItem = await referenceLibraryStore.getItem(libraryItemId);
     if (!libraryItem) throw new Error('Original library item not found for viral task');
 
     // 4. Pick a NEW random audio from the project library
-    const allLibraryItems = await referenceLibraryStore.listProjectItems(projectId);
+    const allLibraryItems = await referenceLibraryStore.listProjectItems(project.id);
     const audioItems = allLibraryItems.filter(item => item.audioFilePath || item.directVideoUrl);
     
     // Try to pick one DIFFERENT from the original if possible
-    let remixAudioItem = audioItems.length > 1 
-      ? audioItems.filter(item => item.id !== libraryItem.id)[Math.floor(Math.random() * (audioItems.length - 1))]
-      : audioItems[0];
-    
-    if (!remixAudioItem) {
-      console.log(`[ManualGenerationService] Project ${projectId}: No audio items found in library for remix.`);
-      return null;
+    let remixAudioItem = audioItems[Math.floor(Math.random() * audioItems.length)] || libraryItem;
+    if (audioItems.length > 1) {
+      const others = audioItems.filter(i => i.id !== libraryItemId);
+      remixAudioItem = others[Math.floor(Math.random() * others.length)];
     }
 
-    console.log(`[ManualGenerationService] Project ${projectId}: Remixing viral video ${viral.url} (${viral.views} views). Using audio from ${remixAudioItem.id}.`);
+    console.log(`[ManualGenerationService] Remixing task ${originalTask.id}. Using audio from ${remixAudioItem.id}.`);
 
-    // 5. Generate NEW trigger texts via Gemini (instead of new video prompt)
+    // 5. Generate NEW trigger texts via Gemini
     const newTexts = await GeminiService.generateRemixTexts({
       videoAnalysis: libraryItem.analysis,
       originalTexts: originalTask.overlayTexts || [],
@@ -387,17 +408,17 @@ export class ManualGenerationService {
     // 6. Create new task reusing the clean generated video URL
     const task = await generationTaskStore.createTask({
       projectId: project.id,
-      referenceLibraryItemId: remixAudioItem.id, // Using the new audio item for sound
-      triggerMode: 'auto_remix',
+      referenceLibraryItemId: remixAudioItem.id, 
+      triggerMode: 'web_manual_remix',
       targetModel: project.selectedModel,
-      provider: originalTask.provider, // Reuse provider info
+      provider: originalTask.provider, 
       status: 'pending',
-      promptText: originalTask.promptText, // Keep original prompt for reference
-      resultVideoUrl: originalTask.resultVideoUrl, // CRITICAL: This skips generation in processTask
-      overlayTexts: newTexts, // Use the new viral texts
+      promptText: originalTask.promptText, 
+      resultVideoUrl: originalTask.resultVideoUrl, 
+      overlayTexts: newTexts, 
     });
 
-    // We process it normally, it will skip generation and go straight to postprocess with new audio + new texts
+    // Process it (will skip generation)
     return this.processTask(task, project, remixAudioItem);
   }
 }
