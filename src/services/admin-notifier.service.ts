@@ -64,6 +64,10 @@ export class AdminNotifierService {
       return `❌ Недостаточно средств на балансе провайдера${providerSuffix}. Пожалуйста, пополните счет.`;
     }
 
+    if (lowercase.includes('moderation') || lowercase.includes('safety') || lowercase.includes('blocked by')) {
+      return `🛡 Запрос заблокирован системой модерации провайдера${providerSuffix}. Попробуйте изменить промпт или референс.`;
+    }
+
     if (lowercase.includes('limit') || lowercase.includes('rate limit') || lowercase.includes('too many requests')) {
       return `⏳ Исчерпан лимит запросов к сервису${providerSuffix}. Попробуйте позже.`;
     }
