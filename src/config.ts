@@ -184,7 +184,7 @@ export const config = {
     base: process.env.IG_API_BASE || 'https://instagram-social-api.p.rapidapi.com/v1/info',
   },
   parser: {
-    dbUrl: process.env.PARSER_DATABASE_URL || '',
+    dbUrl: process.env.PARSER_DATABASE_URL || process.env.DATABASE_URL || '',
   },
 };
 
