@@ -385,6 +385,14 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         });
         hydratedTasks.push(updatedTask || { ...task, yandexDownloadUrl: refreshedDownloadUrl });
       } catch (error: any) {
+        if (error?.response?.status === 404) {
+          const updatedTask = task.yandexDownloadUrl
+            ? await generationTaskStore.updateTask(task.id, { yandexDownloadUrl: '' })
+            : null;
+          hydratedTasks.push(updatedTask || { ...task, yandexDownloadUrl: '' });
+          continue;
+        }
+
         console.warn(
           `[WebServer] Failed to refresh Yandex download URL for generation task ${task.id}:`,
           error?.message || error

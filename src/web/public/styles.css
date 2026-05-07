@@ -415,11 +415,40 @@ textarea {
   background: #fffdf9;
 }
 
-.reference-card img {
+.reference-image-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
+  overflow: hidden;
   border-radius: 14px;
+  background: #f6efe6;
+}
+
+.reference-image-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reference-image-frame img.hidden,
+.reference-image-frame.is-broken img {
+  display: none;
+}
+
+.reference-image-fallback {
+  display: none;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.reference-image-frame.is-broken .reference-image-fallback,
+.reference-image-frame:not(:has(img)) .reference-image-fallback {
+  display: grid;
+  gap: 6px;
 }
 
 .reference-card button {

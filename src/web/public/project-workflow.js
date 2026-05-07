@@ -25,9 +25,18 @@ export function createProjectWorkflow(context) {
       .map(
         (image) => `
           <article class="reference-card">
-            <img src="${image.url}" alt="${context.escapeHtml(image.originalName || 'Референс')}" />
+            <div class="reference-image-frame">
+              ${image.url
+                ? `<img src="${context.escapeHtml(image.url)}" alt="${context.escapeHtml(image.originalName || 'Референс')}" />`
+                : ''}
+              <div class="reference-image-fallback">
+                <strong>Фото недоступно</strong>
+                <span>${context.escapeHtml(image.originalName || image.storedName || 'Референс товара')}</span>
+              </div>
+            </div>
             <div>
               <strong>${context.escapeHtml(image.originalName || 'Референс')}</strong>
+              ${image.yandexDiskPath ? `<p class="meta-line">${context.escapeHtml(image.yandexDiskPath)}</p>` : ''}
             </div>
             <div class="reference-card-actions">
               <button type="button" data-set-primary-image="${image.id}">
@@ -39,6 +48,17 @@ export function createProjectWorkflow(context) {
         `
       )
       .join('');
+
+    elements.referenceImages.querySelectorAll('.reference-image-frame img').forEach((img) => {
+      img.addEventListener('error', () => {
+        img.classList.add('hidden');
+        img.closest('.reference-image-frame')?.classList.add('is-broken');
+      });
+      img.addEventListener('load', () => {
+        img.classList.remove('hidden');
+        img.closest('.reference-image-frame')?.classList.remove('is-broken');
+      });
+    });
 
     elements.referenceImages.querySelectorAll('[data-set-primary-image]').forEach((button) => {
       button.addEventListener('click', () => {
