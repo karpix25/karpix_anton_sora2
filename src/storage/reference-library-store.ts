@@ -240,7 +240,7 @@ export const referenceLibraryStore = {
         item.id,
         item.projectId,
         item.sourceUrl,
-        `${normalizeSourceUrlKey(item.sourceUrl)}:${item.id}`,
+        normalizeSourceUrlKey(item.sourceUrl),
         item.directVideoUrl,
         item.thumbnailUrl,
         item.audioFilePath,
@@ -336,7 +336,7 @@ export const referenceLibraryStore = {
       [
         nextItem.id,
         nextItem.sourceUrl,
-        `${normalizeSourceUrlKey(nextItem.sourceUrl)}:${nextItem.id}`,
+        normalizeSourceUrlKey(nextItem.sourceUrl),
         nextItem.directVideoUrl,
         nextItem.thumbnailUrl,
         nextItem.audioFilePath,

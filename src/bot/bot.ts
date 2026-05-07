@@ -559,11 +559,19 @@ bot.on(message('text'), async (ctx) => {
     }
 
     const targetModel = boundProject.selectedModel;
-    let libraryItem = await referenceLibraryStore.createItem({
-      projectId: boundProject.id,
-      sourceUrl: reelUrl,
-      status: 'received',
-    });
+    
+    // Check if we already have this URL in the project to avoid re-analysis
+    let libraryItem = await referenceLibraryStore.findProjectItemBySourceUrl(boundProject.id, reelUrl);
+    
+    if (libraryItem) {
+      console.log(`[Bot] Reusing existing library item for ${reelUrl} (status=${libraryItem.status})`);
+    } else {
+      libraryItem = await referenceLibraryStore.createItem({
+        projectId: boundProject.id,
+        sourceUrl: reelUrl,
+        status: 'received',
+      });
+    }
 
     // 1. Parsing Instagram Reel (Keep in foreground for quick validation)
     const initialStatusMsg = await ctx.reply('⏳ Начинаю обработку Reel...', replyParams);
@@ -578,21 +586,25 @@ bot.on(message('text'), async (ctx) => {
     };
 
     let reel: any;
-    try {
-      await updateStatus('⏳ Разбираю Reel...');
-      await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
-      reel = await InstagramService.getReelInfo(reelUrl);
-      
-      libraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
-        directVideoUrl: reel.url,
-        thumbnailUrl: reel.thumbnail ?? '',
-        status: 'parsed',
-      }) || libraryItem;
-    } catch (error: any) {
-      const localizedMsg = AdminNotifierService.translateError(error.message);
-      await updateStatus(`❌ Ошибка парсинга: ${localizedMsg}`);
-      await referenceLibraryStore.updateItem(libraryItem.id, { status: 'failed', errorMessage: error.message });
-      return;
+    if (libraryItem.status !== 'received' && libraryItem.status !== 'parsing' && libraryItem.directVideoUrl) {
+      console.log(`[Bot] Skipping Instagram parsing for ${libraryItem.id}, already has direct URL.`);
+    } else {
+      try {
+        await updateStatus('⏳ Разбираю Reel...');
+        await referenceLibraryStore.updateItem(libraryItem.id, { status: 'parsing' });
+        reel = await InstagramService.getReelInfo(reelUrl);
+        
+        libraryItem = await referenceLibraryStore.updateItem(libraryItem.id, {
+          directVideoUrl: reel.url,
+          thumbnailUrl: reel.thumbnail ?? '',
+          status: 'parsed',
+        }) || libraryItem;
+      } catch (error: any) {
+        const localizedMsg = AdminNotifierService.translateError(error.message);
+        await updateStatus(`❌ Ошибка парсинга: ${localizedMsg}`);
+        await referenceLibraryStore.updateItem(libraryItem.id, { status: 'failed', errorMessage: error.message });
+        return;
+      }
     }
 
     // 2. Spawn Background Worker
