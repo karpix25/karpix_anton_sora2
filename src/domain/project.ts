@@ -1,5 +1,6 @@
 export type ProjectMode = 'manual' | 'auto';
 export type VideoModel = 'sora-2' | 'seedance-2' | 'veo-3-1' | 'grok-imagine';
+export type ProjectLanguage = 'ru' | 'en';
 
 export interface ReferenceImage {
   id: string;
@@ -49,6 +50,7 @@ export interface Project {
   extraPromptingRules: string;
   targetAudience: string;
   cta: string;
+  projectLanguage: ProjectLanguage;
   mode: ProjectMode;
   automationEnabled: boolean;
   dailyGenerationLimit: number;
@@ -79,6 +81,7 @@ export interface ProjectInput {
   extraPromptingRules?: string;
   targetAudience?: string;
   cta?: string;
+  projectLanguage?: ProjectLanguage;
   mode?: ProjectMode;
   automationEnabled?: boolean;
   dailyGenerationLimit?: number;

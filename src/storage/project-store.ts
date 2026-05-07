@@ -42,6 +42,7 @@ interface ProjectRow {
   extra_prompting_rules: string;
   target_audience: string;
   cta: string;
+  project_language: string;
   mode: string;
   automation_enabled: boolean;
   daily_generation_limit: number;
@@ -99,6 +100,10 @@ function normalizeYandexDiskFolder(value: unknown): string {
     .filter((part) => part && part !== '.' && part !== '..')
     .join('/')
     .slice(0, 240);
+}
+
+function normalizeProjectLanguage(value: unknown, fallback: Project['projectLanguage'] = 'ru'): Project['projectLanguage'] {
+  return normalizeString(value).toLowerCase() === 'en' ? 'en' : fallback;
 }
 
 function normalizeBoolean(value: unknown, defaultValue = false): boolean {
@@ -273,6 +278,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     extraPromptingRules: normalizeString(input.extraPromptingRules ?? existing?.extraPromptingRules),
     targetAudience: normalizeString(input.targetAudience ?? existing?.targetAudience),
     cta: normalizeString(input.cta ?? existing?.cta),
+    projectLanguage: normalizeProjectLanguage(input.projectLanguage ?? existing?.projectLanguage, existing?.projectLanguage ?? 'ru'),
     mode: mode === 'auto' ? 'auto' : 'manual',
     automationEnabled: normalizeBoolean(input.automationEnabled, existing?.automationEnabled ?? false),
     dailyGenerationLimit: normalizeNumber(input.dailyGenerationLimit, existing?.dailyGenerationLimit ?? 1),
@@ -307,6 +313,7 @@ function mapRowToProject(row: ProjectRow): Project {
     extraPromptingRules: normalizeString(row.extra_prompting_rules),
     targetAudience: normalizeString(row.target_audience),
     cta: normalizeString(row.cta),
+    projectLanguage: normalizeProjectLanguage(row.project_language, 'ru'),
     mode: row.mode === 'auto' ? 'auto' : 'manual',
     automationEnabled: Boolean(row.automation_enabled),
     dailyGenerationLimit: normalizeNumber(row.daily_generation_limit, 1),
@@ -352,7 +359,7 @@ async function upsertProject(project: Project): Promise<Project> {
   const queryText = `
     INSERT INTO projects (
       id, project_code, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
-      product_name, product_description, extra_prompting_rules, target_audience, cta,
+      product_name, product_description, extra_prompting_rules, target_audience, cta, project_language,
       mode, automation_enabled, daily_generation_limit, selected_model, is_active,
       primary_reference_image_id, reference_images, text_style,
       end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
@@ -360,9 +367,9 @@ async function upsertProject(project: Project): Promise<Project> {
       created_at, updated_at
     )
     VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-      $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb,
-      $20, $21, $22, $23, $24, $25, $26, $27::timestamptz, $28::timestamptz
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+      $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb,
+      $21, $22, $23, $24, $25, $26, $27, $28::timestamptz, $29::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
       project_code = EXCLUDED.project_code,
@@ -375,6 +382,7 @@ async function upsertProject(project: Project): Promise<Project> {
       extra_prompting_rules = EXCLUDED.extra_prompting_rules,
       target_audience = EXCLUDED.target_audience,
       cta = EXCLUDED.cta,
+      project_language = EXCLUDED.project_language,
       mode = EXCLUDED.mode,
       automation_enabled = EXCLUDED.automation_enabled,
       daily_generation_limit = EXCLUDED.daily_generation_limit,
@@ -406,6 +414,7 @@ async function upsertProject(project: Project): Promise<Project> {
     project.extraPromptingRules,
     project.targetAudience,
     project.cta,
+    project.projectLanguage,
     project.mode,
     project.automationEnabled,
     project.dailyGenerationLimit,

@@ -164,6 +164,7 @@ export class ManualGenerationService {
       let resultVideoUrl = '';
       let analysis = libraryItem.analysis;
       // Prioritize task-level overlay texts (e.g. from a viral remix) over library item defaults
+      const hasTaskOverlayTexts = Boolean(task.overlayTexts && task.overlayTexts.length > 0);
       let textOverlays = (task.overlayTexts && task.overlayTexts.length > 0) 
         ? task.overlayTexts 
         : (libraryItem.textOverlays || []);
@@ -233,6 +234,17 @@ export class ManualGenerationService {
           });
           libraryItem = (await referenceLibraryStore.getItem(libraryItem.id)) || libraryItem;
         }
+      }
+
+      if (!hasTaskOverlayTexts && textOverlays.length) {
+        console.log(
+          `[ManualGenerationService] Task ${task.id}: localizing overlay texts to ${project.projectLanguage === 'en' ? 'English' : 'Russian'}...`
+        );
+        textOverlays = await GeminiService.localizeTextOverlays({
+          overlays: textOverlays,
+          project,
+          videoAnalysis: analysis,
+        });
       }
 
       const projectReferenceImageUrls = await projectStore.getReferenceImageDataUrls(project.referenceImages);

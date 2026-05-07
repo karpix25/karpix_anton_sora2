@@ -11,6 +11,7 @@ const defaultProject = () => ({
   extraPromptingRules: '',
   targetAudience: '',
   cta: '',
+  projectLanguage: 'ru',
   mode: 'manual',
   automationEnabled: false,
   dailyGenerationLimit: 1,
@@ -56,7 +57,7 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.3.7-viral-final-fix';
+const DEBUG_VERSION = '1.3.8-language-overlays';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
 
 // Diagnostic check for the user
@@ -97,6 +98,7 @@ const elements = {
     extraPromptingRules: document.getElementById('extraPromptingRules'),
     targetAudience: document.getElementById('targetAudience'),
     cta: document.getElementById('cta'),
+    projectLanguage: document.getElementById('projectLanguage'),
     mode: document.getElementById('mode'),
     automationEnabled: document.getElementById('automationEnabled'),
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
@@ -389,6 +391,7 @@ function snapshotFromForm() {
     extraPromptingRules: elements.fields.extraPromptingRules.value.trim(),
     targetAudience: elements.fields.targetAudience.value.trim(),
     cta: elements.fields.cta.value.trim(),
+    projectLanguage: elements.fields.projectLanguage.value === 'en' ? 'en' : 'ru',
     mode: elements.fields.mode.value,
     automationEnabled: elements.fields.automationEnabled.checked,
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
@@ -436,6 +439,21 @@ function loadGoogleFont(fontFamily) {
   document.head.appendChild(link);
 }
 
+function getPreviewScale() {
+  const container = elements.textPreviewFrame?.closest('.preview-9-16-container');
+  if (!(container instanceof HTMLElement)) {
+    return 1;
+  }
+
+  const previewHeight = container.getBoundingClientRect().height || 1280;
+  return previewHeight / 1280;
+}
+
+function scalePreviewValue(value, fallback = 0) {
+  const numericValue = Number(value ?? fallback);
+  return Math.max(0, numericValue * getPreviewScale());
+}
+
 function updateTextPreview() {
   const style = state.currentProject.textStyle;
   if (!style || !elements.textPreview || !elements.textPreviewFrame) return;
@@ -446,7 +464,7 @@ function updateTextPreview() {
   const frame = elements.textPreviewFrame;
   const normalizedOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity ?? 0.82)));
   p.style.fontFamily = `'${style.fontFamily}', sans-serif`;
-  p.style.fontSize = `${style.fontSize}px`;
+  p.style.fontSize = `${scalePreviewValue(style.fontSize, 30)}px`;
   p.style.color = style.fontColor;
   p.style.fontWeight = style.fontWeight;
   p.style.textAlign = style.textAlign || 'center';
@@ -458,17 +476,19 @@ function updateTextPreview() {
 
   if (style.borderStyle === 3) {
     p.style.backgroundColor = hexToRgba(style.backgroundColor || '#000000', normalizedOpacity);
-    p.style.padding = `${style.boxPaddingY ?? 12}px ${style.boxPaddingX ?? 18}px`;
+    p.style.padding = `${scalePreviewValue(style.boxPaddingY, 12)}px ${scalePreviewValue(style.boxPaddingX, 18)}px`;
     p.style.webkitTextStroke = '0';
     p.style.textShadow = 'none';
-    p.style.borderRadius = `${style.boxRadius ?? 10}px`;
+    p.style.borderRadius = `${scalePreviewValue(style.boxRadius, 10)}px`;
     frame.classList.remove('disabled');
   } else {
     p.style.backgroundColor = 'transparent';
     p.style.padding = '0';
     if (style.outlineEnabled) {
-      p.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor}`;
-      p.style.textShadow = `2px 2px 4px rgba(0,0,0,0.5)`;
+      p.style.webkitTextStroke = `${scalePreviewValue(style.outlineWidth || 1.5, 1.5)}px ${style.outlineColor}`;
+      const shadowOffset = scalePreviewValue(2, 2);
+      const shadowBlur = scalePreviewValue(4, 4);
+      p.style.textShadow = `${shadowOffset}px ${shadowOffset}px ${shadowBlur}px rgba(0,0,0,0.5)`;
     } else {
       p.style.webkitTextStroke = '0';
       p.style.textShadow = 'none';
@@ -509,7 +529,7 @@ function updateEndFramePreview() {
 
   if (style) {
     el.style.fontFamily = `'${style.fontFamily}', sans-serif`;
-    el.style.fontSize = `${style.fontSize}px`;
+    el.style.fontSize = `${scalePreviewValue(style.fontSize, 30)}px`;
     el.style.color = style.fontColor;
     el.style.fontWeight = style.fontWeight;
     el.style.textAlign = style.textAlign || 'center';
@@ -518,16 +538,18 @@ function updateEndFramePreview() {
     if (style.borderStyle === 3) {
       const normalizedOpacity = Math.max(0, Math.min(1, Number(style.backgroundOpacity ?? 0.82)));
       el.style.backgroundColor = hexToRgba(style.backgroundColor || '#000000', normalizedOpacity);
-      el.style.padding = `${style.boxPaddingY ?? 12}px ${style.boxPaddingX ?? 18}px`;
+      el.style.padding = `${scalePreviewValue(style.boxPaddingY, 12)}px ${scalePreviewValue(style.boxPaddingX, 18)}px`;
       el.style.webkitTextStroke = '0';
       el.style.textShadow = 'none';
-      el.style.borderRadius = `${style.boxRadius ?? 10}px`;
+      el.style.borderRadius = `${scalePreviewValue(style.boxRadius, 10)}px`;
     } else {
       el.style.backgroundColor = 'transparent';
       el.style.padding = '0';
       if (style.outlineEnabled) {
-        el.style.webkitTextStroke = `${style.outlineWidth || 1.5}px ${style.outlineColor || '#000000'}`;
-        el.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+        el.style.webkitTextStroke = `${scalePreviewValue(style.outlineWidth || 1.5, 1.5)}px ${style.outlineColor || '#000000'}`;
+        const shadowOffset = scalePreviewValue(2, 2);
+        const shadowBlur = scalePreviewValue(4, 4);
+        el.style.textShadow = `${shadowOffset}px ${shadowOffset}px ${shadowBlur}px rgba(0,0,0,0.5)`;
       } else {
         el.style.webkitTextStroke = '0';
         el.style.textShadow = 'none';
@@ -652,7 +674,11 @@ function renderProjectList() {
   elements.projectList.innerHTML = state.projects
     .map((project) => {
       const activeClass = project.id === state.currentProject.id ? 'active' : '';
-      const subtitle = [project.mode === 'auto' ? 'Авто' : 'Ручной', project.automationEnabled ? 'автоматизация включена' : 'автоматизация выключена']
+      const subtitle = [
+        project.mode === 'auto' ? 'Авто' : 'Ручной',
+        project.projectLanguage === 'en' ? 'EN' : 'RU',
+        project.automationEnabled ? 'автоматизация включена' : 'автоматизация выключена',
+      ]
         .filter(Boolean)
         .join(' · ');
 
@@ -701,6 +727,7 @@ function applyProjectToForm(project) {
   elements.fields.extraPromptingRules.value = state.currentProject.extraPromptingRules || '';
   elements.fields.targetAudience.value = state.currentProject.targetAudience || '';
   elements.fields.cta.value = state.currentProject.cta || '';
+  elements.fields.projectLanguage.value = state.currentProject.projectLanguage === 'en' ? 'en' : 'ru';
   elements.fields.mode.value = state.currentProject.mode || 'manual';
   elements.fields.automationEnabled.checked = Boolean(state.currentProject.automationEnabled);
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
@@ -842,6 +869,11 @@ function bindEvents() {
     button.addEventListener('click', () => {
       activateTab(button.dataset.tabTarget);
     });
+  });
+
+  window.addEventListener('resize', () => {
+    updateTextPreview();
+    updateEndFramePreview();
   });
 
   elements.createProjectButton.addEventListener('click', async () => {

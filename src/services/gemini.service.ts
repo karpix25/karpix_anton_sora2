@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import { config } from '../config.js';
 import { AdminNotifierService } from './admin-notifier.service.js';
 import type { Project, VideoModel } from '../domain/project.js';
+import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,6 +144,31 @@ function stripTextOverlaySections(videoAnalysis: string): string {
     .trim();
 }
 
+function getProjectLanguageLabel(project?: Project | null): string {
+  return project?.projectLanguage === 'en' ? 'English' : 'Russian';
+}
+
+function getProjectLanguageInstruction(project?: Project | null): string {
+  return project?.projectLanguage === 'en'
+    ? 'All generated overlay text must be in English.'
+    : 'All generated overlay text must be in Russian.';
+}
+
+function extractJsonObject(raw: string): string {
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    return fencedMatch[1].trim();
+  }
+
+  const startIndex = raw.indexOf('{');
+  const endIndex = raw.lastIndexOf('}');
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    throw new Error('LLM did not return JSON');
+  }
+
+  return raw.slice(startIndex, endIndex + 1);
+}
+
 export class GeminiService {
   /**
    * Analyzes an Instagram video beat-by-beat using Gemini 2.0 Flash via OpenRouter.
@@ -272,6 +298,7 @@ export class GeminiService {
         - Product Description: ${project?.productDescription || 'Not specified'}
         - Target Audience: ${project?.targetAudience || 'Not specified'}
         - Call To Action: ${project?.cta || 'Not specified'}
+        - Project Text Language: ${getProjectLanguageLabel(project)}
         - Extra Prompting Rules: ${project?.extraPromptingRules || 'Not specified'}
         - DESIRED SHOOTING STYLE: ${(await (await import('../storage/system-config-store.js')).systemConfigStore.getConfig()).grokStyle}
       `;
@@ -399,6 +426,7 @@ export class GeminiService {
         - Even if the reference video has text, you must IGNORE it entirely and describe ONLY the visual action and scenery.
         - You are strictly forbidden from including phrases like "with text", "showing caption", or "subtitle appears".
         - Text from the original video will be added later in post-production by a different system. Your job is ONLY the visual footage.
+        - Post-production text language for that different system: ${getProjectLanguageLabel(project)}.
 
         REFERENCE VIDEO ANALYSIS:
         ${cleanVideoAnalysis}
@@ -482,6 +510,100 @@ export class GeminiService {
   }
 
   /**
+   * Rewrites extracted overlay texts into the project's selected language while preserving timing and layout.
+   */
+  public static async localizeTextOverlays(input: {
+    overlays: ReferenceTextOverlay[];
+    project: Project;
+    videoAnalysis?: string;
+  }): Promise<ReferenceTextOverlay[]> {
+    const overlays = input.overlays.filter((overlay) => overlay.text.trim());
+    if (!overlays.length) {
+      return [];
+    }
+
+    const targetLanguage = getProjectLanguageLabel(input.project);
+    const payload = overlays.map((overlay, index) => ({
+      index,
+      text: overlay.text,
+      startSeconds: overlay.startSeconds,
+      endSeconds: overlay.endSeconds,
+      isStatic: Boolean(overlay.isStatic),
+    }));
+
+    const systemInstructions = `
+      You adapt short on-video text overlays for product Reels.
+
+      TARGET LANGUAGE: ${targetLanguage}
+
+      Rules:
+      - Rewrite every overlay text in ${targetLanguage}, regardless of the source language.
+      - Preserve the meaning, hook, tone, and commercial intent.
+      - Keep each line short enough for a 9:16 mobile video.
+      - Preserve line breaks only when they help readability.
+      - Do not change timing, order, ids, or layout. Return only text replacements by index.
+      - Do not translate brand names, model numbers, product codes, SKUs, @handles, hashtags, or article numbers.
+      - Manual project CTA/end-frame text is handled separately, so do not add or invent a CTA here.
+      - Return valid JSON only, no markdown.
+
+      Response format:
+      {
+        "overlays": [
+          { "index": 0, "text": "rewritten overlay text" }
+        ]
+      }
+    `;
+
+    try {
+      const response = await createChatCompletionWithRetry(
+        {
+          model: config.openRouter.models.pro,
+          provider: buildProviderRouting(),
+          messages: [
+            { role: 'system', content: systemInstructions },
+            {
+              role: 'user',
+              content: `Project context:
+Product: ${input.project.productName || 'Not specified'}
+Audience: ${input.project.targetAudience || 'Not specified'}
+Description: ${input.project.productDescription || 'Not specified'}
+Reference analysis:
+${input.videoAnalysis || 'Not provided'}
+
+Overlay texts to rewrite:
+${JSON.stringify(payload)}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        },
+        'Gemini Overlay Localization',
+        config.openRouter.models.flash
+      );
+
+      const content = response.data.choices[0]?.message?.content || '{}';
+      const parsed = JSON.parse(extractJsonObject(content));
+      const replacements = Array.isArray(parsed?.overlays) ? parsed.overlays : [];
+      const replacementByIndex = new Map<number, string>();
+
+      for (const item of replacements) {
+        const index = Number(item?.index);
+        const text = typeof item?.text === 'string' ? item.text.trim() : '';
+        if (Number.isInteger(index) && index >= 0 && text) {
+          replacementByIndex.set(index, text);
+        }
+      }
+
+      return overlays.map((overlay, index) => ({
+        ...overlay,
+        text: replacementByIndex.get(index) || overlay.text,
+      }));
+    } catch (error: any) {
+      console.error('[GeminiService] Overlay localization failed:', error.message);
+      return overlays;
+    }
+  }
+
+  /**
    * Generates new catchy text overlays for a viral video remix.
    * Based on the original analysis and product context.
    */
@@ -493,6 +615,7 @@ export class GeminiService {
     }
   ): Promise<any[]> {
     const { videoAnalysis, originalTexts, project } = input;
+    const languageInstruction = getProjectLanguageInstruction(project);
 
     const systemInstructions = `
       You are a viral content strategist for TikTok/Reels. 
@@ -504,12 +627,13 @@ export class GeminiService {
       Product: ${project.productName}
       Target Audience: ${project.targetAudience}
       CTA: ${project.cta}
+      Project Text Language: ${getProjectLanguageLabel(project)}
 
       RULES:
       1. Create 2-4 text overlays that appear at different times.
       2. Use a "Fresh Hook" — a different angle than the original captions. 
       3. Make them short, punchy, and provocative (trigger curiosity or emotion).
-      4. Use emojis.
+      4. ${languageInstruction}
       5. Output ONLY a JSON array of objects with fields: "text", "startSeconds", "endSeconds".
       6. The total duration should not exceed 10 seconds.
       7. Example: [{"text": "You won't believe this... 😱", "startSeconds": 0, "endSeconds": 3}]
