@@ -74,6 +74,53 @@
         <section class="card">
           <div class="card-title-row">
             <div>
+              <p class="card-eyebrow">Настройки</p>
+              <h3>Управление автоматизацией</h3>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Режим</span>
+              <select id="mode">
+                <option value="manual">Ручной</option>
+                <option value="auto">Авто</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Дневной лимит генераций</span>
+              <input id="dailyGenerationLimit" type="number" min="0" step="1" />
+            </label>
+
+            <label class="checkbox-label">
+              <input id="automationEnabled" type="checkbox" />
+              <span>Автоматизация включена</span>
+            </label>
+
+            <label class="checkbox-label">
+              <input id="isActive" type="checkbox" />
+              <span>Проект активен</span>
+            </label>
+
+            <label class="full-width">
+              <span>% Перегенерации (Viral Remix) vs Новых</span>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
+                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold;">0%</span>
+              </div>
+            </label>
+
+            <label>
+              <span>Мин. просмотров для ремикса</span>
+              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="1000" />
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title-row">
+            <div>
               <p class="card-eyebrow">Входные данные</p>
               <h3>Контекст товара</h3>
             </div>
@@ -303,53 +350,6 @@
           </div>
         </section>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Настройки</p>
-              <h3>Управление автоматизацией</h3>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <label>
-              <span>Режим</span>
-              <select id="mode">
-                <option value="manual">Ручной</option>
-                <option value="auto">Авто</option>
-              </select>
-            </label>
-
-            <label>
-              <span>Дневной лимит генераций</span>
-              <input id="dailyGenerationLimit" type="number" min="0" step="1" />
-            </label>
-
-            <label class="checkbox-label">
-              <input id="automationEnabled" type="checkbox" />
-              <span>Автоматизация включена</span>
-            </label>
-
-            <label class="checkbox-label">
-              <input id="isActive" type="checkbox" />
-              <span>Проект активен</span>
-            </label>
-
-            <label class="full-width">
-              <span>% Перегенерации (Viral Remix) vs Новых</span>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
-                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold;">0%</span>
-              </div>
-            </label>
-
-            <label>
-              <span>Мин. просмотров для ремикса</span>
-              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="1000" />
-            </label>
-
-          </div>
-        </section>
       </main>
     </div>
 
@@ -367,6 +367,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=1.3.5-shortest-media-default"></script>
+    <script type="module" src="/app.js?v=1.3.6-viral-remix-controls-v2"></script>
   </body>
 </html>
