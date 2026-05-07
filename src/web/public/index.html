@@ -33,179 +33,191 @@
           </div>
         </header>
 
+        <nav class="tab-bar" aria-label="Разделы проекта">
+          <button class="tab-button active" type="button" data-tab-target="project" aria-selected="true">Проект</button>
+          <button class="tab-button" type="button" data-tab-target="content" aria-selected="false">Контент</button>
+          <button class="tab-button" type="button" data-tab-target="visual" aria-selected="false">Визуал</button>
+          <button class="tab-button" type="button" data-tab-target="generations" aria-selected="false">Генерации</button>
+        </nav>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Проект</p>
-              <h3>Идентификация и привязка Telegram</h3>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <label>
-              <span>Название проекта</span>
-              <input id="name" type="text" placeholder="Luxury Watches / Topic #13" />
-            </label>
-
-            <label>
-              <span>Модель</span>
-              <select id="selectedModel">
-                <option value="sora-2">Sora 2 (Comet)</option>
-                <option value="seedance-2">Seedance 2 (Comet)</option>
-                <option value="veo-3-1">Veo 3.1 (Kie.ai)</option>
-                <option value="grok-imagine">Grok Imagine (Kie.ai)</option>
-              </select>
-            </label>
-
-            <div class="info-panel">
-              <span>ID проекта</span>
-              <strong id="project-id">Сначала сохраните проект</strong>
-            </div>
-
-            <div class="info-panel full-width">
-              <span>Привязка Telegram</span>
-              <strong id="telegram-binding-status">Пока не привязан</strong>
-              <code id="binding-command">Сначала сохраните проект, чтобы получить команду привязки.</code>
-            </div>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Настройки</p>
-              <h3>Управление автоматизацией</h3>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <label>
-              <span>Режим</span>
-              <select id="mode">
-                <option value="manual">Ручной</option>
-                <option value="auto">Авто</option>
-              </select>
-            </label>
-
-            <label>
-              <span>Дневной лимит генераций</span>
-              <input id="dailyGenerationLimit" type="number" min="0" step="1" />
-            </label>
-
-            <label class="full-width">
-              <span>Папка Яндекс.Диска внутри SORA2</span>
-              <div class="inline-control">
-                <select id="yandexDiskFolder">
-                  <option value="">По умолчанию</option>
-                </select>
-                <button id="refresh-yandex-folders-button" class="secondary-button" type="button">Обновить</button>
+        <div class="tab-panels">
+          <section class="tab-panel is-active" data-tab-panel="project">
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Проект</p>
+                  <h3>Идентификация и привязка Telegram</h3>
+                </div>
               </div>
-            </label>
 
-            <label class="checkbox-label">
-              <input id="automationEnabled" type="checkbox" />
-              <span>Автоматизация включена</span>
-            </label>
+              <div class="form-grid">
+                <label>
+                  <span>Название проекта</span>
+                  <input id="name" type="text" placeholder="Luxury Watches / Topic #13" />
+                </label>
 
-            <label class="checkbox-label">
-              <input id="isActive" type="checkbox" />
-              <span>Проект активен</span>
-            </label>
+                <label>
+                  <span>Модель</span>
+                  <select id="selectedModel">
+                    <option value="sora-2">Sora 2 (Comet)</option>
+                    <option value="seedance-2">Seedance 2 (Comet)</option>
+                    <option value="veo-3-1">Veo 3.1 (Kie.ai)</option>
+                    <option value="grok-imagine">Grok Imagine (Kie.ai)</option>
+                  </select>
+                </label>
 
-            <label class="full-width" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(76,54,39,0.1);">
-              <span style="font-weight: bold; color: var(--accent-dark);">🔥 Виральный ремикс (Viral Remix)</span>
-              <span>% Перегенерации хитов vs Новых видео</span>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
-                <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold; color: var(--accent);">0%</span>
+                <div class="info-panel">
+                  <span>ID проекта</span>
+                  <strong id="project-id">Сначала сохраните проект</strong>
+                </div>
+
+                <div class="info-panel full-width">
+                  <span>Привязка Telegram</span>
+                  <strong id="telegram-binding-status">Пока не привязан</strong>
+                  <code id="binding-command">Сначала сохраните проект, чтобы получить команду привязки.</code>
+                </div>
               </div>
-            </label>
+            </section>
 
-            <label class="full-width">
-              <span>Мин. просмотров для автоматического ремикса</span>
-              <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="Например: 5000" />
-            </label>
-          </div>
-        </section>
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Настройки</p>
+                  <h3>Управление автоматизацией</h3>
+                </div>
+              </div>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Входные данные</p>
-              <h3>Контекст товара</h3>
-            </div>
-          </div>
+              <div class="form-grid">
+                <label>
+                  <span>Режим</span>
+                  <select id="mode">
+                    <option value="manual">Ручной</option>
+                    <option value="auto">Авто</option>
+                  </select>
+                </label>
 
-          <div class="form-grid">
-            <label>
-              <span>Название товара</span>
-              <input id="productName" type="text" placeholder="Золотые часы-хронограф" />
-            </label>
+                <label>
+                  <span>Дневной лимит генераций</span>
+                  <input id="dailyGenerationLimit" type="number" min="0" step="1" />
+                </label>
 
-            <label>
-              <span>Целевая аудитория</span>
-              <input id="targetAudience" type="text" placeholder="Мужчины 25–40, покупатели премиум-сегмента" />
-            </label>
+                <label class="full-width">
+                  <span>Папка Яндекс.Диска внутри SORA2</span>
+                  <div class="inline-control">
+                    <select id="yandexDiskFolder">
+                      <option value="">По умолчанию</option>
+                    </select>
+                    <button id="refresh-yandex-folders-button" class="secondary-button" type="button">Обновить</button>
+                  </div>
+                </label>
 
-            <label class="full-width">
-              <span>Описание товара</span>
-              <textarea id="productDescription" rows="5" placeholder="Опишите товар, материалы, особенности и что должно оставаться точным при генерации."></textarea>
-            </label>
+                <label class="checkbox-label">
+                  <input id="automationEnabled" type="checkbox" />
+                  <span>Автоматизация включена</span>
+                </label>
 
-            <label class="full-width">
-              <span>Дополнительные правила для промпта</span>
-              <textarea id="extraPromptingRules" rows="5" placeholder="Ограничения бренда, запрещенные сцены, предпочтения по камере и темпу."></textarea>
-            </label>
+                <label class="checkbox-label">
+                  <input id="isActive" type="checkbox" />
+                  <span>Проект активен</span>
+                </label>
 
-            <label class="full-width">
-              <span>Призыв к действию</span>
-              <input id="cta" type="text" placeholder="Напишите в директ / запросите каталог" />
-            </label>
-          </div>
-        </section>
+                <label class="full-width" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(76,54,39,0.1);">
+                  <span style="font-weight: bold; color: var(--accent-dark);">🔥 Виральный ремикс (Viral Remix)</span>
+                  <span>% Перегенерации хитов vs Новых видео</span>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <input id="viralReusePercentage" type="range" min="0" max="100" step="5" style="flex: 1;" />
+                    <span id="viralReusePercentageLabel" style="min-width: 40px; font-weight: bold; color: var(--accent);">0%</span>
+                  </div>
+                </label>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Референсы</p>
-              <h3>Изображения товара</h3>
-            </div>
-            <div class="reference-actions">
-              <label class="upload-button">
-                <input id="reference-image-input" type="file" accept="image/*" multiple />
-                Загрузить изображения
-              </label>
-            </div>
-          </div>
-          <div id="primary-image-status" class="inline-note">Первое изображение используется как основной референс для Sora 2 и должно быть синхронизировано с Яндекс Диском.</div>
-          <div id="reference-images" class="reference-grid empty-state">
-            Загрузите фото товара, чтобы сформировать входные данные проекта.
-          </div>
-        </section>
+                <label class="full-width">
+                  <span>Мин. просмотров для автоматического ремикса</span>
+                  <input id="minViewsToReuse" type="number" min="0" step="100" placeholder="Например: 5000" />
+                </label>
+              </div>
+            </section>
+          </section>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Библиотека</p>
-              <h3>Референсы reels из Telegram</h3>
-            </div>
-            <button id="refresh-library-button" class="secondary-button" type="button">Обновить</button>
-          </div>
-          <div id="reference-library" class="library-list empty-state">
-            Привяжите проект к теме Telegram и отправляйте туда ссылки на Instagram Reels, чтобы пополнять библиотеку.
-          </div>
-        </section>
+          <section class="tab-panel" data-tab-panel="content">
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Входные данные</p>
+                  <h3>Контекст товара</h3>
+                </div>
+              </div>
 
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Оверлеи (Система CTA v1.3.7)</p>
-              <h3>Стиль текста и превью</h3>
-            </div>
-          </div>
+              <div class="form-grid">
+                <label>
+                  <span>Название товара</span>
+                  <input id="productName" type="text" placeholder="Золотые часы-хронограф" />
+                </label>
 
-          <div class="text-styling-grid">
+                <label>
+                  <span>Целевая аудитория</span>
+                  <input id="targetAudience" type="text" placeholder="Мужчины 25–40, покупатели премиум-сегмента" />
+                </label>
+
+                <label class="full-width">
+                  <span>Описание товара</span>
+                  <textarea id="productDescription" rows="5" placeholder="Опишите товар, материалы, особенности и что должно оставаться точным при генерации."></textarea>
+                </label>
+
+                <label class="full-width">
+                  <span>Дополнительные правила для промпта</span>
+                  <textarea id="extraPromptingRules" rows="5" placeholder="Ограничения бренда, запрещенные сцены, предпочтения по камере и темпу."></textarea>
+                </label>
+
+                <label class="full-width">
+                  <span>Призыв к действию</span>
+                  <input id="cta" type="text" placeholder="Напишите в директ / запросите каталог" />
+                </label>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Референсы</p>
+                  <h3>Изображения товара</h3>
+                </div>
+                <div class="reference-actions">
+                  <label class="upload-button">
+                    <input id="reference-image-input" type="file" accept="image/*" multiple />
+                    Загрузить изображения
+                  </label>
+                </div>
+              </div>
+              <div id="primary-image-status" class="inline-note">Первое изображение используется как основной референс для Sora 2 и должно быть синхронизировано с Яндекс Диском.</div>
+              <div id="reference-images" class="reference-grid empty-state">
+                Загрузите фото товара, чтобы сформировать входные данные проекта.
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Библиотека</p>
+                  <h3>Референсы reels из Telegram</h3>
+                </div>
+                <button id="refresh-library-button" class="secondary-button" type="button">Обновить</button>
+              </div>
+              <div id="reference-library" class="library-list empty-state">
+                Привяжите проект к теме Telegram и отправляйте туда ссылки на Instagram Reels, чтобы пополнять библиотеку.
+              </div>
+            </section>
+          </section>
+
+          <section class="tab-panel" data-tab-panel="visual">
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Оверлеи (Система CTA v1.3.7)</p>
+                  <h3>Стиль текста и превью</h3>
+                </div>
+              </div>
+
+              <div class="text-styling-grid">
             <div class="form-grid" style="margin-top: 0;">
               <div class="full-width cta-main-wrap">
                 <label class="end-frame-label">
@@ -346,20 +358,23 @@
               </div>
             </div>
           </div>
+            </section>
+          </section>
 
-        </section>
-
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <p class="card-eyebrow">Генерации</p>
-              <h3>История генераций</h3>
-            </div>
-          </div>
-          <div id="generation-tasks" class="library-list empty-state">
-            Генераций пока нет.
-          </div>
-        </section>
+          <section class="tab-panel" data-tab-panel="generations">
+            <section class="card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Генерации</p>
+                  <h3>История генераций</h3>
+                </div>
+              </div>
+              <div id="generation-tasks" class="library-list empty-state">
+                Генераций пока нет.
+              </div>
+            </section>
+          </section>
+        </div>
 
       </main>
     </div>

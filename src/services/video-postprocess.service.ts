@@ -1218,6 +1218,27 @@ export class VideoPostprocessService {
             const endFrameWidthPercent = input.endFrameWidthPercent ?? 50;
             const endFrameXPercent = input.endFrameXPercent ?? 50;
 
+            effectiveTextOverlays = effectiveTextOverlays
+              .map((overlay) => {
+                if (overlay.isStatic) {
+                  return overlay;
+                }
+
+                if (overlay.endSeconds <= endFrameStart || overlay.startSeconds >= endFrameEnd) {
+                  return overlay;
+                }
+
+                if (overlay.startSeconds < endFrameStart) {
+                  return {
+                    ...overlay,
+                    endSeconds: endFrameStart,
+                  };
+                }
+
+                return null;
+              })
+              .filter((overlay): overlay is ReferenceTextOverlay => overlay !== null && overlay.endSeconds > overlay.startSeconds);
+
             effectiveTextOverlays = [
               ...effectiveTextOverlays,
               {

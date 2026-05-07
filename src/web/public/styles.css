@@ -20,6 +20,7 @@ body {
   min-height: 100vh;
   font-family: Georgia, 'Times New Roman', serif;
   color: var(--text);
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(182, 87, 42, 0.14), transparent 28%),
     radial-gradient(circle at right 15%, rgba(54, 105, 89, 0.12), transparent 24%),
@@ -134,6 +135,52 @@ select {
   justify-content: flex-end;
 }
 
+.tab-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(250, 245, 238, 0.82);
+  min-width: 0;
+}
+
+.tab-button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.15;
+  min-width: 0;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.tab-button:hover,
+.tab-button.active {
+  background: #fffaf2;
+  color: var(--accent-dark);
+  box-shadow: 0 8px 20px rgba(91, 63, 45, 0.1);
+}
+
+.tab-panels {
+  min-width: 0;
+}
+
+.tab-panel {
+  display: none;
+  min-width: 0;
+}
+
+.tab-panel.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .card {
   background: var(--panel-strong);
   border: 1px solid var(--border);
@@ -160,7 +207,7 @@ label {
 }
 
 .full-width {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
 .inline-control {
@@ -737,6 +784,10 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .tab-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }

@@ -70,6 +70,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 const elements = {
+  tabButtons: Array.from(document.querySelectorAll('[data-tab-target]')),
+  tabPanels: Array.from(document.querySelectorAll('[data-tab-panel]')),
   projectList: document.getElementById('project-list'),
   statusText: document.getElementById('status-text'),
   createProjectButton: document.getElementById('create-project-button'),
@@ -193,6 +195,25 @@ async function saveGlobalConfig() {
 
 function setStatus(message) {
   elements.statusText.textContent = message;
+}
+
+function activateTab(tabName) {
+  elements.tabButtons.forEach((button) => {
+    const isActive = button.dataset.tabTarget === tabName;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-selected', String(isActive));
+  });
+
+  elements.tabPanels.forEach((panel) => {
+    panel.classList.toggle('is-active', panel.dataset.tabPanel === tabName);
+  });
+
+  if (tabName === 'visual') {
+    window.requestAnimationFrame(() => {
+      updateTextPreview();
+      updateEndFramePreview();
+    });
+  }
 }
 
 async function api(url, options = {}) {
@@ -817,6 +838,12 @@ async function createProject() {
 }
 
 function bindEvents() {
+  elements.tabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      activateTab(button.dataset.tabTarget);
+    });
+  });
+
   elements.createProjectButton.addEventListener('click', async () => {
     try {
       await createProject();
