@@ -150,6 +150,15 @@ export const generationTaskStore = {
     return result.rows[0] ? mapRowToTask(result.rows[0]) : null;
   },
 
+  async findByShortId(shortId: string): Promise<GenerationTask | null> {
+    const result = await query<GenerationTaskRow>(
+      'SELECT * FROM generation_tasks WHERE id::text LIKE $1 LIMIT 1',
+      [`${normalizeString(shortId)}%`]
+    );
+
+    return result.rows[0] ? mapRowToTask(result.rows[0]) : null;
+  },
+
   async listRecoverableTasks(input?: {
     limit?: number;
     pendingOlderThanSeconds?: number;

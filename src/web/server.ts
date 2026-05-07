@@ -125,14 +125,19 @@ async function handlePublicationWebhook(req: IncomingMessage, res: ServerRespons
       return true;
     }
 
-    const task = await generationTaskStore.updateTask(payload.taskId, {
-      publicationUrl: payload.publicationUrl,
-    });
+    let task = await generationTaskStore.getTask(payload.taskId);
+    if (!task && payload.taskId.length >= 8) {
+      task = await generationTaskStore.findByShortId(payload.taskId);
+    }
 
     if (!task) {
       sendJson(res, 404, { error: 'Task not found' });
       return true;
     }
+
+    const updatedTask = await generationTaskStore.updateTask(task.id, {
+      publicationUrl: payload.publicationUrl,
+    });
 
     console.log(`[Webhook] Updated task ${payload.taskId} with publication URL: ${payload.publicationUrl}`);
     sendJson(res, 200, { ok: true, taskId: task.id });
