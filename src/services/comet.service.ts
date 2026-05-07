@@ -316,7 +316,9 @@ export class CometService {
         const status = data?.status;
 
         if (this.isFailureStatus(status)) {
-          throw new Error(`Comet video generation failed early: ${data?.error || 'Unknown error'}`);
+          const rawError = data?.error || data?.msg || data?.message || data?.failMsg || 'Unknown error';
+          const errorDetails = typeof rawError === 'object' ? JSON.stringify(rawError) : String(rawError);
+          throw new Error(`Comet video generation failed early: ${errorDetails}`);
         }
 
         if (this.isCompletedStatus(status) || progressValue === 100) {

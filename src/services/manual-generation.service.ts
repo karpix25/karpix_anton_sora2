@@ -315,10 +315,11 @@ export class ManualGenerationService {
       console.log(`[ManualGenerationService] Task ${task.id}: completed successfully.`);
       return completedTask;
     } catch (error: any) {
-      console.error(`[ManualGenerationService] Task ${task.id}: failed:`, error?.message || error);
+      const errorMsg = error?.message || String(error);
+      console.error(`[ManualGenerationService] Task ${task.id}: failed:`, errorMsg);
       await generationTaskStore.updateTask(task.id, {
         status: 'failed',
-        errorMessage: error.message,
+        errorMessage: errorMsg,
         finishedAt: nowIso(),
       });
       throw error;

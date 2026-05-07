@@ -69,8 +69,9 @@ export class VideoGenerationService {
         );
         const videoPathOrUrl = await CometService.pollStatus(taskId);
         return { provider: 'comet', providerTaskId: taskId, resultVideoUrl: videoPathOrUrl };
-      } catch (error) {
-        console.warn('Comet API generation failed, falling back to Kie:', error instanceof Error ? error.message : error);
+      } catch (error: any) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`Comet API generation failed, falling back to Kie: ${errorMsg}`);
       }
     }
 
