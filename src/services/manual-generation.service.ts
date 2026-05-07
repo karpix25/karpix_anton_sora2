@@ -41,6 +41,14 @@ function extractFileNameFromPath(value: string): string {
   return parts[parts.length - 1] || '';
 }
 
+function isExpiredDirectUrlError(error: any): boolean {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('403') ||
+    message.includes('forbidden') ||
+    message.includes('access denied') ||
+    message.includes('server returned 403');
+}
+
 export class ManualGenerationService {
   public static async runFromLibraryItem(input: {
     projectId: string;
@@ -100,6 +108,45 @@ export class ManualGenerationService {
     return { project, libraryItem };
   }
 
+  private static async refreshReferenceDirectVideoUrl(
+    libraryItem: ReferenceLibraryItem,
+    reason: string
+  ): Promise<ReferenceLibraryItem> {
+    if (!libraryItem.sourceUrl) {
+      return libraryItem;
+    }
+
+    console.log(`[ManualGenerationService] Refreshing Instagram direct URL for ${libraryItem.id} (${reason})...`);
+    const reel = await InstagramService.getReelInfo(libraryItem.sourceUrl);
+    return await referenceLibraryStore.updateItem(libraryItem.id, {
+      directVideoUrl: reel.url,
+      thumbnailUrl: reel.thumbnail ?? libraryItem.thumbnailUrl,
+      status: libraryItem.analysis ? 'analyzed' : 'parsed',
+      errorMessage: '',
+    }) || libraryItem;
+  }
+
+  private static async ensureAudioTrackWithFreshDirectUrl(
+    libraryItem: ReferenceLibraryItem
+  ): Promise<{ audio: Awaited<ReturnType<typeof ReferenceAudioService.ensureAudioTrack>>; libraryItem: ReferenceLibraryItem }> {
+    try {
+      return {
+        audio: await ReferenceAudioService.ensureAudioTrack(libraryItem),
+        libraryItem,
+      };
+    } catch (error: any) {
+      if (!isExpiredDirectUrlError(error)) {
+        throw error;
+      }
+
+      const refreshedLibraryItem = await this.refreshReferenceDirectVideoUrl(libraryItem, 'audio URL expired');
+      return {
+        audio: await ReferenceAudioService.ensureAudioTrack(refreshedLibraryItem),
+        libraryItem: refreshedLibraryItem,
+      };
+    }
+  }
+
   private static async processTask(task: GenerationTask, project: Project, initialLibraryItem: ReferenceLibraryItem) {
     console.log(
       `[ManualGenerationService] Task ${task.id}: starting processing (project=${project.id}, libraryItem=${initialLibraryItem.id})`
@@ -120,6 +167,13 @@ export class ManualGenerationService {
       let textOverlays = (task.overlayTexts && task.overlayTexts.length > 0) 
         ? task.overlayTexts 
         : (libraryItem.textOverlays || []);
+
+      if ((!analysis || !textOverlays.length || !libraryItem.audioFilePath) && libraryItem.sourceUrl) {
+        libraryItem = await this.refreshReferenceDirectVideoUrl(
+          libraryItem,
+          !analysis || !textOverlays.length ? 'missing analysis/text overlays' : 'missing stored audio'
+        );
+      }
       
       // Force processing if missing components
       if (!analysis || !textOverlays.length) {
@@ -139,17 +193,18 @@ export class ManualGenerationService {
 
           // 1. Parallelize Video Analysis and Audio Extraction
           console.log('[ManualGenerationService] Running video analysis and audio extraction in parallel...');
-          const [analysisResult] = await Promise.all([
+          const [analysisResult, audioResult] = await Promise.all([
             !analysis 
               ? GeminiService.analyzeVideo({
                   videoUrl: libraryItem.directVideoUrl,
                   ...(videoLocalPath ? { localPath: videoLocalPath } : {}),
                 })
               : Promise.resolve(analysis),
-            ReferenceAudioService.ensureAudioTrack(libraryItem),
+            this.ensureAudioTrackWithFreshDirectUrl(libraryItem),
           ]);
 
           analysis = analysisResult;
+          libraryItem = audioResult.libraryItem;
           needsUpdate = true;
 
           // 2. Text extraction depends on analysis result
@@ -209,7 +264,9 @@ export class ManualGenerationService {
       }
 
       // Audio was already ensured in the parallel pre-processing block above
-      const audio = await ReferenceAudioService.ensureAudioTrack(libraryItem);
+      const audioResult = await this.ensureAudioTrackWithFreshDirectUrl(libraryItem);
+      libraryItem = audioResult.libraryItem;
+      const audio = audioResult.audio;
 
       if (task.resultVideoUrl) {
         resultVideoUrl = task.resultVideoUrl;
