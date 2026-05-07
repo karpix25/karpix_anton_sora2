@@ -47,11 +47,14 @@ export class S3StorageService {
     const objectKey = this.buildObjectKey(input.projectId, input.projectCode, fileName);
     const bucket = config.s3.bucket;
 
+    const fileBuffer = await fs.readFile(input.filePath);
+
     await this.getClient().send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: objectKey,
-        Body: fs.createReadStream(input.filePath),
+        Body: fileBuffer,
+        ContentLength: fileBuffer.length,
         ContentType: 'video/mp4',
         Metadata: {
           project_id: input.projectId,
@@ -93,11 +96,14 @@ export class S3StorageService {
         throw new Error(`Source video file does not exist: ${input.sourceVideoUrl}`);
       }
 
+      const fileBuffer = await fs.readFile(input.sourceVideoUrl);
+
       await this.getClient().send(
         new PutObjectCommand({
           Bucket: bucket,
           Key: objectKey,
-          Body: fs.createReadStream(input.sourceVideoUrl),
+          Body: fileBuffer,
+          ContentLength: fileBuffer.length,
           ContentType: 'video/mp4',
           Metadata: {
             project_id: input.projectId,
@@ -109,16 +115,19 @@ export class S3StorageService {
       );
     } else {
       const response = await axios.get(input.sourceVideoUrl, {
-        responseType: 'stream',
+        responseType: 'arraybuffer',
         timeout: 120000,
         maxContentLength: Infinity,
       });
+
+      const buffer = Buffer.from(response.data);
 
       await this.getClient().send(
         new PutObjectCommand({
           Bucket: bucket,
           Key: objectKey,
-          Body: response.data,
+          Body: buffer,
+          ContentLength: buffer.length,
           ContentType: response.headers['content-type'] || 'video/mp4',
           Metadata: {
             project_id: input.projectId,
