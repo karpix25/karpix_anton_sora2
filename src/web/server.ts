@@ -108,6 +108,41 @@ async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, 
   return true;
 }
 
+async function handlePublicationWebhook(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+  if (pathname !== '/api/webhooks/publications') {
+    return false;
+  }
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return true;
+  }
+
+  try {
+    const payload = await readJsonBody<{ taskId: string; publicationUrl: string }>(req);
+    if (!payload.taskId || !payload.publicationUrl) {
+      sendJson(res, 400, { error: 'taskId and publicationUrl are required' });
+      return true;
+    }
+
+    const task = await generationTaskStore.updateTask(payload.taskId, {
+      publicationUrl: payload.publicationUrl,
+    });
+
+    if (!task) {
+      sendJson(res, 404, { error: 'Task not found' });
+      return true;
+    }
+
+    console.log(`[Webhook] Updated task ${payload.taskId} with publication URL: ${payload.publicationUrl}`);
+    sendJson(res, 200, { ok: true, taskId: task.id });
+    return true;
+  } catch (error: any) {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return true;
+  }
+}
+
 async function serveFile(res: ServerResponse, filePath: string): Promise<void> {
   if (!(await fs.pathExists(filePath))) {
     sendNotFound(res);
@@ -588,6 +623,11 @@ export async function startWebServer(): Promise<void> {
       const url = new URL(req.url, 'http://localhost');
       const handledWebhook = await handleTelegramWebhook(req, res, url.pathname);
       if (handledWebhook) {
+        return;
+      }
+
+      const handledPublication = await handlePublicationWebhook(req, res, url.pathname);
+      if (handledPublication) {
         return;
       }
 

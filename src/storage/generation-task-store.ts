@@ -27,6 +27,7 @@ interface GenerationTaskRow {
   error_message: string;
   started_at: string;
   finished_at: string;
+  publication_url: string;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -102,6 +103,7 @@ function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): Ge
     errorMessage: normalizeString(input.errorMessage ?? existing?.errorMessage),
     startedAt: normalizeString(input.startedAt ?? existing?.startedAt),
     finishedAt: normalizeString(input.finishedAt ?? existing?.finishedAt),
+    publicationUrl: normalizeString(input.publicationUrl ?? existing?.publicationUrl),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -132,6 +134,7 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
     errorMessage: normalizeString(row.error_message),
     startedAt: normalizeString(row.started_at),
     finishedAt: normalizeString(row.finished_at),
+    publicationUrl: normalizeString(row.publication_url),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
@@ -216,11 +219,12 @@ export const generationTaskStore = {
           error_message,
           started_at,
           finished_at,
+          publication_url,
           created_at,
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::timestamptz, $25::timestamptz
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::timestamptz, $26::timestamptz
         )
         RETURNING *
       `,
@@ -248,6 +252,7 @@ export const generationTaskStore = {
         task.errorMessage,
         task.startedAt,
         task.finishedAt,
+        task.publicationUrl,
         task.createdAt,
         task.updatedAt,
       ]
@@ -305,6 +310,7 @@ export const generationTaskStore = {
         errorMessage: update.errorMessage ?? existing.errorMessage,
         startedAt: update.startedAt ?? existing.startedAt,
         finishedAt: update.finishedAt ?? existing.finishedAt,
+        publicationUrl: update.publicationUrl ?? existing.publicationUrl,
       },
       existing
     );
@@ -331,7 +337,8 @@ export const generationTaskStore = {
           error_message = $17,
           started_at = $18,
           finished_at = $19,
-          updated_at = $20::timestamptz
+          publication_url = $20,
+          updated_at = $21::timestamptz
         WHERE id = $1
         RETURNING *
       `,
@@ -355,6 +362,7 @@ export const generationTaskStore = {
         nextTask.errorMessage,
         nextTask.startedAt,
         nextTask.finishedAt,
+        nextTask.publicationUrl,
         nextTask.updatedAt,
       ]
     );

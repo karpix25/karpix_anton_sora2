@@ -112,9 +112,9 @@ export class AdminNotifierService {
       return;
     }
 
-    const videoUrl = task.yandexDownloadUrl || task.resultVideoUrl;
+    const videoUrl = task.yandexDownloadUrl || task.resultVideoUrl || task.s3ObjectUrl;
     if (!videoUrl) return;
-    const trackingToken = this.getTrackingTokenFromDiskPath(task.yandexDiskPath);
+    const trackingToken = this.getTrackingTokenFromDiskPath(task.yandexDiskPath || task.videoFileName || task.s3ObjectKey);
 
     const caption = 
       `✨ <b>Видео готово!</b> (Восстановлено)\n\n` +

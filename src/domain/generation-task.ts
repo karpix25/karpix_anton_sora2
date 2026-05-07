@@ -29,6 +29,7 @@ export interface GenerationTask {
   errorMessage: string;
   startedAt: string;
   finishedAt: string;
+  publicationUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -56,6 +57,7 @@ export interface GenerationTaskInput {
   errorMessage?: string;
   startedAt?: string;
   finishedAt?: string;
+  publicationUrl?: string;
 }
 
 export interface GenerationTaskUpdate {
@@ -77,4 +79,5 @@ export interface GenerationTaskUpdate {
   errorMessage?: string;
   startedAt?: string;
   finishedAt?: string;
+  publicationUrl?: string;
 }

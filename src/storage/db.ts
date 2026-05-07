@@ -144,9 +144,14 @@ export async function initDatabase(): Promise<void> {
       error_message TEXT NOT NULL DEFAULT '',
       started_at TEXT NOT NULL DEFAULT '',
       finished_at TEXT NOT NULL DEFAULT '',
+      publication_url TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS publication_url TEXT NOT NULL DEFAULT '';
   `);
 
   await db.query(`
