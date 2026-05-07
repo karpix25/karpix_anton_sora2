@@ -322,7 +322,7 @@ export class CometService {
         }
 
         if (this.isCompletedStatus(status) || progressValue === 100) {
-          // Download the completed video content via canonical video ID.
+          console.log(`[CometService] Video ${resolvedVideoId} is ready (status=${status}, progress=${progressValue}%). Starting download...`);
           return await this.downloadVideo(resolvedVideoId);
         }
 
@@ -331,14 +331,16 @@ export class CometService {
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
 
+        const isDownloadError = error.message.includes('Failed to download video');
         const statusCode = Number(error?.response?.status || 0);
         const isTransientServerError = statusCode >= 500 && statusCode < 600;
-        const backoffMs = isTransientServerError
+        
+        const backoffMs = (isTransientServerError || isDownloadError)
           ? Math.min(30000, 5000 * Math.pow(1.35, i)) + Math.floor(Math.random() * 750)
           : 5000;
 
         console.warn(
-          `[CometService] pollStatus retry for ${resolvedVideoId} (${i + 1}/${maxRetries}): ${this.buildAxiosDebugContext(error)} | backoff=${backoffMs}ms`
+          `[CometService] pollStatus retry for ${resolvedVideoId} (${i + 1}/${maxRetries}): ${isDownloadError ? error.message : this.buildAxiosDebugContext(error)} | backoff=${backoffMs}ms`
         );
         await this.sleep(backoffMs);
       }
