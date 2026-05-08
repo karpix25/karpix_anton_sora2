@@ -14,6 +14,8 @@ export interface GenerationTask {
   id: string;
   projectId: string;
   referenceLibraryItemId: string;
+  remixSourceTaskId: string;
+  remixSourceUrl: string;
   triggerMode: GenerationTriggerMode;
   status: GenerationTaskStatus;
   targetModel: VideoModel;
@@ -42,6 +44,8 @@ export interface GenerationTask {
 export interface GenerationTaskInput {
   projectId: string;
   referenceLibraryItemId: string;
+  remixSourceTaskId?: string;
+  remixSourceUrl?: string;
   triggerMode: GenerationTriggerMode;
   status?: GenerationTaskStatus;
   targetModel: VideoModel;
@@ -66,6 +70,8 @@ export interface GenerationTaskInput {
 }
 
 export interface GenerationTaskUpdate {
+  remixSourceTaskId?: string;
+  remixSourceUrl?: string;
   status?: GenerationTaskStatus;
   provider?: GenerationProvider;
   providerTaskId?: string;

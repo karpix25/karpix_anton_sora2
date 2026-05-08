@@ -488,6 +488,8 @@ export class ManualGenerationService {
     const task = await generationTaskStore.createTask({
       projectId: project.id,
       referenceLibraryItemId: remixAudioItem.id, 
+      remixSourceTaskId: originalTask.id,
+      remixSourceUrl: originalTask.publicationUrl || originalTask.resultVideoUrl || '',
       triggerMode,
       targetModel: project.selectedModel,
       provider: originalTask.provider, 

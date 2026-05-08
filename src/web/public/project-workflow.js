@@ -370,8 +370,9 @@ export function createProjectWorkflow(context) {
         .map((task) => {
           const yandexFinalUrl = getYandexDiskFileUrl(task.yandexDiskPath, task.yandexDownloadUrl || '');
           const s3Url = String(task.s3ObjectUrl || '').trim();
+          const remixSourceUrl = String(task.remixSourceUrl || '').trim();
           const viewsCount = task.views || 0;
-          const isRemix = task.triggerMode === 'auto_remix';
+          const isRemix = task.triggerMode === 'auto_remix' || task.triggerMode === 'web_manual_remix';
           
           return `
           <article class="library-item">
@@ -388,6 +389,7 @@ export function createProjectWorkflow(context) {
               </div>
             </div>
             ${task.publicationUrl ? `<p><strong>Ссылка:</strong> <a class="library-link" href="${context.escapeHtml(task.publicationUrl)}" target="_blank" rel="noreferrer">Перейти к посту</a></p>` : ''}
+            ${remixSourceUrl ? `<p><strong>Оригинал ремикса:</strong> <a class="library-link" href="${context.escapeHtml(remixSourceUrl)}" target="_blank" rel="noreferrer">${context.escapeHtml(shortenText(remixSourceUrl, 120))}</a></p>` : ''}
             ${yandexFinalUrl ? `<p><strong>Финал (Яндекс):</strong> <a class="library-link" href="${context.escapeHtml(yandexFinalUrl)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Финал (Яндекс):</strong> еще не загружен</p>'}
             ${s3Url ? `<p><strong>Оригинал (S3):</strong> <a class="library-link" href="${context.escapeHtml(s3Url)}" target="_blank" rel="noreferrer">Открыть</a></p>` : '<p class="meta-line"><strong>Оригинал (S3):</strong> еще не загружен</p>'}
             ${task.videoFileName ? `<p class="meta-line">Имя файла: ${context.escapeHtml(task.videoFileName)}</p>` : ''}

@@ -7,6 +7,8 @@ interface GenerationTaskRow {
   id: string;
   project_id: string;
   reference_library_item_id: string;
+  remix_source_task_id: string;
+  remix_source_url: string;
   trigger_mode: string;
   status: string;
   target_model: string;
@@ -89,6 +91,8 @@ function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): Ge
     id: existing?.id ?? randomUUID(),
     projectId: normalizeString(input.projectId ?? existing?.projectId),
     referenceLibraryItemId: normalizeString(input.referenceLibraryItemId ?? existing?.referenceLibraryItemId),
+    remixSourceTaskId: normalizeString(input.remixSourceTaskId ?? existing?.remixSourceTaskId),
+    remixSourceUrl: normalizeString(input.remixSourceUrl ?? existing?.remixSourceUrl),
     triggerMode: normalizeTriggerMode(input.triggerMode ?? existing?.triggerMode),
     status: normalizeStatus(input.status ?? existing?.status),
     targetModel: input.targetModel ?? existing?.targetModel ?? 'sora-2',
@@ -122,6 +126,8 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
     id: normalizeString(row.id),
     projectId: normalizeString(row.project_id),
     referenceLibraryItemId: normalizeString(row.reference_library_item_id),
+    remixSourceTaskId: normalizeString(row.remix_source_task_id),
+    remixSourceUrl: normalizeString(row.remix_source_url),
     triggerMode: normalizeTriggerMode(row.trigger_mode),
     status: normalizeStatus(row.status),
     targetModel: row.target_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
@@ -216,6 +222,8 @@ export const generationTaskStore = {
           id,
           project_id,
           reference_library_item_id,
+          remix_source_task_id,
+          remix_source_url,
           trigger_mode,
           status,
           target_model,
@@ -241,7 +249,7 @@ export const generationTaskStore = {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::timestamptz, $26::timestamptz
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28::timestamptz, $29::timestamptz
         )
         RETURNING *
       `,
@@ -249,6 +257,8 @@ export const generationTaskStore = {
         task.id,
         task.projectId,
         task.referenceLibraryItemId,
+        task.remixSourceTaskId,
+        task.remixSourceUrl,
         task.triggerMode,
         task.status,
         task.targetModel,
@@ -324,6 +334,8 @@ export const generationTaskStore = {
       {
         projectId: existing.projectId,
         referenceLibraryItemId: existing.referenceLibraryItemId,
+        remixSourceTaskId: update.remixSourceTaskId ?? existing.remixSourceTaskId,
+        remixSourceUrl: update.remixSourceUrl ?? existing.remixSourceUrl,
         triggerMode: existing.triggerMode,
         targetModel: existing.targetModel,
         provider: update.provider ?? existing.provider,
@@ -356,23 +368,25 @@ export const generationTaskStore = {
           provider = $2,
           provider_task_id = $3,
           status = $4,
-          prompt_text = $5,
-          result_video_url = $6,
-          video_file_name = $7,
-          video_description = $8,
-          overlay_texts = $9::jsonb,
-          yandex_disk_path = $10,
-          yandex_download_url = $11,
-          s3_bucket = $12,
-          s3_object_key = $13,
-          s3_object_url = $14,
-          s3_stored_at = $15,
-          stored_at = $16,
-          error_message = $17,
-          started_at = $18,
-          finished_at = $19,
-          publication_url = $20,
-          updated_at = $21::timestamptz
+          remix_source_task_id = $5,
+          remix_source_url = $6,
+          prompt_text = $7,
+          result_video_url = $8,
+          video_file_name = $9,
+          video_description = $10,
+          overlay_texts = $11::jsonb,
+          yandex_disk_path = $12,
+          yandex_download_url = $13,
+          s3_bucket = $14,
+          s3_object_key = $15,
+          s3_object_url = $16,
+          s3_stored_at = $17,
+          stored_at = $18,
+          error_message = $19,
+          started_at = $20,
+          finished_at = $21,
+          publication_url = $22,
+          updated_at = $23::timestamptz
         WHERE id = $1
         RETURNING *
       `,
@@ -381,6 +395,8 @@ export const generationTaskStore = {
         nextTask.provider,
         nextTask.providerTaskId,
         nextTask.status,
+        nextTask.remixSourceTaskId,
+        nextTask.remixSourceUrl,
         nextTask.promptText,
         nextTask.resultVideoUrl,
         nextTask.videoFileName,

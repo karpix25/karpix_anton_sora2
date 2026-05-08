@@ -130,6 +130,8 @@ export async function initDatabase(): Promise<void> {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       reference_library_item_id TEXT NOT NULL REFERENCES reference_library(id) ON DELETE CASCADE,
+      remix_source_task_id TEXT NOT NULL DEFAULT '',
+      remix_source_url TEXT NOT NULL DEFAULT '',
       trigger_mode TEXT NOT NULL DEFAULT 'web_manual',
       status TEXT NOT NULL DEFAULT 'pending',
       target_model TEXT NOT NULL DEFAULT 'sora-2',
@@ -158,6 +160,12 @@ export async function initDatabase(): Promise<void> {
 
   await db.query(`
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS publication_url TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS remix_source_task_id TEXT NOT NULL DEFAULT '';
+  `);
+  await db.query(`
+    ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS remix_source_url TEXT NOT NULL DEFAULT '';
   `);
 
   await db.query(`

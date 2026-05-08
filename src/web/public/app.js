@@ -256,6 +256,12 @@ function renderYandexFolderOptions(selectedValue = state.currentProject.yandexDi
   const normalizedSelectedValue = String(selectedValue || '').trim();
   const folders = Array.isArray(state.yandexFolders) ? state.yandexFolders : [];
   const knownValues = new Set(folders.map((folder) => folder.relativePath));
+  const formatFolderLabel = (folder) => {
+    const relativePath = String(folder?.relativePath || '').trim();
+    const name = String(folder?.name || relativePath.split('/').filter(Boolean).pop() || relativePath).trim();
+    const depth = Math.max(0, relativePath.split('/').filter(Boolean).length - 1);
+    return `${'  '.repeat(depth)}${depth > 0 ? '└ ' : ''}${name}`;
+  };
 
   select.innerHTML = [
     '<option value="">По умолчанию</option>',
@@ -263,7 +269,7 @@ function renderYandexFolderOptions(selectedValue = state.currentProject.yandexDi
       ? `<option value="${escapeHtml(normalizedSelectedValue)}">${escapeHtml(normalizedSelectedValue)} (текущая)</option>`
       : '',
     ...folders.map((folder) => (
-      `<option value="${escapeHtml(folder.relativePath)}">${escapeHtml(folder.relativePath)}</option>`
+      `<option value="${escapeHtml(folder.relativePath)}">${escapeHtml(formatFolderLabel(folder))}</option>`
     )),
   ].join('');
   select.value = normalizedSelectedValue;
