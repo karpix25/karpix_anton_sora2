@@ -99,7 +99,6 @@ const elements = {
     targetAudience: document.getElementById('targetAudience'),
     cta: document.getElementById('cta'),
     projectLanguage: document.getElementById('projectLanguage'),
-    mode: document.getElementById('mode'),
     automationEnabled: document.getElementById('automationEnabled'),
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
     yandexDiskFolder: document.getElementById('yandexDiskFolder'),
@@ -396,6 +395,8 @@ async function loadGoogleCyrillicFonts() {
 }
 
 function snapshotFromForm() {
+  const automationEnabled = elements.fields.automationEnabled.checked;
+
   return {
     ...state.currentProject,
     name: elements.fields.name.value.trim(),
@@ -405,8 +406,8 @@ function snapshotFromForm() {
     targetAudience: elements.fields.targetAudience.value.trim(),
     cta: elements.fields.cta.value.trim(),
     projectLanguage: elements.fields.projectLanguage.value === 'en' ? 'en' : 'ru',
-    mode: elements.fields.mode.value,
-    automationEnabled: elements.fields.automationEnabled.checked,
+    mode: automationEnabled ? 'auto' : 'manual',
+    automationEnabled,
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
     yandexDiskFolder: elements.fields.yandexDiskFolder.value.trim(),
     selectedModel: elements.fields.selectedModel.value,
@@ -688,7 +689,6 @@ function renderProjectList() {
     .map((project) => {
       const activeClass = project.id === state.currentProject.id ? 'active' : '';
       const subtitle = [
-        project.mode === 'auto' ? 'Авто' : 'Ручной',
         project.projectLanguage === 'en' ? 'EN' : 'RU',
         project.automationEnabled ? 'автоматизация включена' : 'автоматизация выключена',
       ]
@@ -741,7 +741,6 @@ function applyProjectToForm(project) {
   elements.fields.targetAudience.value = state.currentProject.targetAudience || '';
   elements.fields.cta.value = state.currentProject.cta || '';
   elements.fields.projectLanguage.value = state.currentProject.projectLanguage === 'en' ? 'en' : 'ru';
-  elements.fields.mode.value = state.currentProject.mode || 'manual';
   elements.fields.automationEnabled.checked = Boolean(state.currentProject.automationEnabled);
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
   renderYandexFolderOptions(state.currentProject.yandexDiskFolder || '');

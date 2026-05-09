@@ -21,24 +21,26 @@
       </aside>
 
       <main class="main-panel">
-        <header class="page-header">
-          <div>
+        <div class="sticky-project-header">
+          <header class="page-header">
+            <div>
               <p class="eyebrow">Веб-интерфейс</p>
               <h2>Системная конфигурация</h2>
             </div>
-          <div class="header-actions">
-            <span id="status-text" class="status-text">Готово</span>
-            <button id="delete-project-button" class="danger-button" type="button">Удалить</button>
-            <button id="save-project-button" class="primary-button" type="button">Сохранить</button>
-          </div>
-        </header>
+            <div class="header-actions">
+              <span id="status-text" class="status-text">Готово</span>
+              <button id="delete-project-button" class="danger-button" type="button">Удалить</button>
+              <button id="save-project-button" class="primary-button" type="button">Сохранить</button>
+            </div>
+          </header>
 
-        <nav class="tab-bar" aria-label="Разделы проекта">
-          <button class="tab-button active" type="button" data-tab-target="project" aria-selected="true">Проект</button>
-          <button class="tab-button" type="button" data-tab-target="content" aria-selected="false">Контент</button>
-          <button class="tab-button" type="button" data-tab-target="visual" aria-selected="false">Визуал</button>
-          <button class="tab-button" type="button" data-tab-target="generations" aria-selected="false">Генерации</button>
-        </nav>
+          <nav class="tab-bar" aria-label="Разделы проекта">
+            <button class="tab-button active" type="button" data-tab-target="project" aria-selected="true">Проект</button>
+            <button class="tab-button" type="button" data-tab-target="content" aria-selected="false">Контент</button>
+            <button class="tab-button" type="button" data-tab-target="visual" aria-selected="false">Визуал</button>
+            <button class="tab-button" type="button" data-tab-target="generations" aria-selected="false">Генерации</button>
+          </nav>
+        </div>
 
         <div class="tab-panels">
           <section class="tab-panel is-active" data-tab-panel="project">
@@ -96,14 +98,6 @@
               </div>
 
               <div class="form-grid">
-                <label>
-                  <span>Режим</span>
-                  <select id="mode">
-                    <option value="manual">Ручной</option>
-                    <option value="auto">Авто</option>
-                  </select>
-                </label>
-
                 <label>
                   <span>Дневной лимит генераций</span>
                   <input id="dailyGenerationLimit" type="number" min="0" step="1" />
