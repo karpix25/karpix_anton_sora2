@@ -256,17 +256,24 @@ function renderYandexFolderOptions(selectedValue = state.currentProject.yandexDi
   const normalizedSelectedValue = String(selectedValue || '').trim();
   const folders = Array.isArray(state.yandexFolders) ? state.yandexFolders : [];
   const knownValues = new Set(folders.map((folder) => folder.relativePath));
+  const formatFolderPath = (relativePath) => {
+    const normalizedPath = String(relativePath || '')
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .join(' / ');
+
+    return normalizedPath ? `SORA2 / ${normalizedPath}` : 'SORA2';
+  };
   const formatFolderLabel = (folder) => {
     const relativePath = String(folder?.relativePath || '').trim();
-    const name = String(folder?.name || relativePath.split('/').filter(Boolean).pop() || relativePath).trim();
-    const depth = Math.max(0, relativePath.split('/').filter(Boolean).length - 1);
-    return `${'  '.repeat(depth)}${depth > 0 ? '└ ' : ''}${name}`;
+    return formatFolderPath(relativePath);
   };
 
   select.innerHTML = [
     '<option value="">По умолчанию</option>',
     normalizedSelectedValue && !knownValues.has(normalizedSelectedValue)
-      ? `<option value="${escapeHtml(normalizedSelectedValue)}">${escapeHtml(normalizedSelectedValue)} (текущая)</option>`
+      ? `<option value="${escapeHtml(normalizedSelectedValue)}">${escapeHtml(formatFolderPath(normalizedSelectedValue))} (текущая)</option>`
       : '',
     ...folders.map((folder) => (
       `<option value="${escapeHtml(folder.relativePath)}">${escapeHtml(formatFolderLabel(folder))}</option>`

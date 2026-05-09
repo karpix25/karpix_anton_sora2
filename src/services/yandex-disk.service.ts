@@ -74,7 +74,7 @@ export class YandexDiskService {
     return `${this.getGeneratedVideosFolderPath(projectName, projectFolder)}/${safeName}`;
   }
 
-  public static async listGeneratedVideoFolders(maxDepth = 4): Promise<YandexFolderOption[]> {
+  public static async listGeneratedVideoFolders(maxDepth = 8): Promise<YandexFolderOption[]> {
     if (!this.isConfigured()) {
       throw new Error('Yandex Disk token is not configured');
     }
