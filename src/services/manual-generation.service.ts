@@ -60,6 +60,7 @@ export class ManualGenerationService {
     triggerMode: GenerationTriggerMode;
     promptText?: string;
     fallbackReferenceImageUrl?: string;
+    skipProviderModerationRewrite?: boolean;
   }) {
     const project = await projectStore.getProject(input.projectId);
     if (!project) {
@@ -81,7 +82,9 @@ export class ManualGenerationService {
       promptText: typeof input.promptText === 'string' ? input.promptText.trim() : '',
     });
 
-    return this.processTask(task, project, libraryItem);
+    return this.processTask(task, project, libraryItem, {
+      skipProviderModerationRewrite: Boolean(input.skipProviderModerationRewrite),
+    });
   }
 
   public static async resumeTask(taskId: string) {
@@ -151,7 +154,12 @@ export class ManualGenerationService {
     }
   }
 
-  private static async processTask(task: GenerationTask, project: Project, initialLibraryItem: ReferenceLibraryItem) {
+  private static async processTask(
+    task: GenerationTask,
+    project: Project,
+    initialLibraryItem: ReferenceLibraryItem,
+    options: { skipProviderModerationRewrite?: boolean } = {}
+  ) {
     console.log(
       `[ManualGenerationService] Task ${task.id}: starting processing (project=${project.id}, libraryItem=${initialLibraryItem.id})`
     );
@@ -303,6 +311,13 @@ export class ManualGenerationService {
           generationResult = await generateVideo(promptText);
         } catch (error: any) {
           if (!isPromptModerationError(error)) {
+            throw error;
+          }
+
+          if (options.skipProviderModerationRewrite) {
+            console.warn(
+              `[ManualGenerationService] Task ${task.id}: provider moderation blocked prompt. Auto mode will try another project reference instead of rewriting this one.`
+            );
             throw error;
           }
 

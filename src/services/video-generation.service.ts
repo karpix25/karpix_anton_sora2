@@ -36,6 +36,7 @@ function isModerationError(error: unknown): boolean {
     message.includes('blocked by moderation') ||
     message.includes('blocked by our moderation') ||
     message.includes('flagged categories') ||
+    message.includes('prohibited_content') ||
     message.includes('safety filter') ||
     message.includes('nsfw')
   );

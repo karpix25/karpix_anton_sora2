@@ -166,6 +166,7 @@ export class AutoGenerationService {
           projectId: project.id,
           referenceLibraryItemId: item.id,
           triggerMode: 'auto',
+          skipProviderModerationRewrite: true,
         });
         recentReferenceIds.push(item.id);
         while (recentReferenceIds.length > this.recentReferenceWindow) {
@@ -176,6 +177,14 @@ export class AutoGenerationService {
           `[AutoGenerationService] Project ${project.name}: failed to auto-generate library item ${item.id}:`,
           err.message
         );
+
+        if (isPromptModerationError(err)) {
+          console.warn(
+            `[AutoGenerationService] Project ${project.name}: reference ${item.id} is blocked by moderation. Skipping it for this tick and trying another project reference.`
+          );
+          candidates.splice(candidateIndex, 1);
+          continue;
+        }
 
         if (this.shouldPauseProjectAfterFailure(err)) {
           console.warn(
