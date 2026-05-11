@@ -41,6 +41,10 @@ function extractFileNameFromPath(value: string): string {
   return parts[parts.length - 1] || '';
 }
 
+function getStoredTaskVideoUrl(task: GenerationTask): string {
+  return task.s3ObjectUrl || task.yandexDownloadUrl || task.resultVideoUrl;
+}
+
 function isExpiredDirectUrlError(error: any): boolean {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('403') ||
@@ -439,8 +443,8 @@ export class ManualGenerationService {
   public static async runManualRemix(taskId: string): Promise<GenerationTask> {
     const task = await generationTaskStore.getTask(taskId);
     if (!task) throw new Error('Task not found');
-    if (task.status !== 'completed' || !task.resultVideoUrl) {
-      throw new Error('Can only remix completed tasks with a result video');
+    if (task.status !== 'completed' || !getStoredTaskVideoUrl(task)) {
+      throw new Error('Can only remix completed tasks with a stored result video');
     }
 
     const project = await projectStore.getProject(task.projectId);
@@ -474,6 +478,9 @@ export class ManualGenerationService {
 
     const originalTask = tasks.find(t => t.publicationUrl === viral.url);
     if (!originalTask) throw new Error('Could not match viral URL back to task');
+    if (!getStoredTaskVideoUrl(originalTask)) {
+      throw new Error('Matched viral task has no stored video URL');
+    }
 
     return this.executeRemix(originalTask, project, 'auto_remix');
   }
@@ -489,10 +496,16 @@ export class ManualGenerationService {
     const libraryItemId = originalTask.referenceLibraryItemId;
     const libraryItem = await referenceLibraryStore.getItem(libraryItemId);
     if (!libraryItem) throw new Error('Original library item not found for viral task');
+    const storedVideoUrl = getStoredTaskVideoUrl(originalTask);
+    if (!storedVideoUrl) throw new Error('Original viral task has no stored video URL');
 
     // 4. Pick a NEW random audio from the project library
     const allLibraryItems = await referenceLibraryStore.listProjectItems(project.id);
-    const audioItems = allLibraryItems.filter(item => item.audioFilePath || item.directVideoUrl);
+    const audioItems = allLibraryItems.filter(item =>
+      item.status === 'analyzed' &&
+      item.analysis &&
+      (item.audioFilePath || item.audioS3ObjectKey || item.directVideoUrl)
+    );
     
     // Try to pick one DIFFERENT from the original if possible
     let remixAudioItem = audioItems[Math.floor(Math.random() * audioItems.length)] || libraryItem;
@@ -518,13 +531,13 @@ export class ManualGenerationService {
       projectId: project.id,
       referenceLibraryItemId: remixAudioItem.id, 
       remixSourceTaskId: originalTask.id,
-      remixSourceUrl: originalTask.publicationUrl || originalTask.resultVideoUrl || '',
+      remixSourceUrl: originalTask.publicationUrl || storedVideoUrl,
       triggerMode,
       targetModel: project.selectedModel,
       provider: originalTask.provider, 
       status: 'pending',
       promptText: originalTask.promptText, 
-      resultVideoUrl: originalTask.resultVideoUrl, 
+      resultVideoUrl: storedVideoUrl, 
       overlayTexts: newTexts, 
     });
 
