@@ -112,7 +112,8 @@ function renderHistory() {
         const primaryUrl = finalUrl || originalUrl || event.sourceUrl || event.referenceSourceUrl || '';
         const statusClass = `status-${String(event.status || 'unknown').toLowerCase()}`;
         const sourceUrl = event.sourceUrl || event.referenceSourceUrl || '';
-        const prompt = isGeneration ? shorten(event.promptText || '', 130) : '';
+        const fullPrompt = isGeneration ? String(event.promptText || '').trim() : '';
+        const promptPreview = fullPrompt ? shorten(fullPrompt, 130) : '';
         return `
           <article class="dashboard-row ${escapeHtml(statusClass)}">
             <div class="dashboard-row-main">
@@ -148,7 +149,15 @@ function renderHistory() {
                 <span>Audio: ${event.hasAudio ? 'есть' : 'нет'}</span>
               `}
             </div>
-            ${prompt ? `<p class="dashboard-prompt">${escapeHtml(prompt)}</p>` : ''}
+            ${fullPrompt ? `
+              <details class="dashboard-prompt">
+                <summary>
+                  <span>${escapeHtml(promptPreview)}</span>
+                  <strong>Показать весь промпт</strong>
+                </summary>
+                <pre>${escapeHtml(fullPrompt)}</pre>
+              </details>
+            ` : ''}
             ${event.errorMessage ? `<p class="dashboard-error">${escapeHtml(event.errorMessage)}</p>` : ''}
           </article>
         `;

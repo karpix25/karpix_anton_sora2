@@ -1253,6 +1253,54 @@ input:checked + .slider:before {
   padding: 8px;
 }
 
+.dashboard-prompt summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.dashboard-prompt summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-prompt summary span {
+  min-width: 0;
+  flex: 1;
+}
+
+.dashboard-prompt summary strong {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dashboard-prompt[open] summary {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(76, 54, 39, 0.1);
+}
+
+.dashboard-prompt[open] summary strong {
+  font-size: 0;
+}
+
+.dashboard-prompt[open] summary strong::after {
+  content: 'Скрыть промпт';
+  font-size: 12px;
+}
+
+.dashboard-prompt pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.5;
+}
+
 .dashboard-error {
   color: #a93226;
   background: rgba(192, 57, 43, 0.08);
