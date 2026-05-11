@@ -82,8 +82,13 @@ export async function createChatCompletionWithRetry(
 
       // Check for empty response content which often indicates a safety block or provider glitch
       const content = response.data.choices?.[0]?.message?.content;
-      if (!content && attempt < maxAttempts - 1) {
+      if (!content) {
         console.warn(`${label}: Received empty response content. Attempt ${attempt + 1}/${maxAttempts}.`);
+
+        if (attempt >= maxAttempts - 1) {
+          const responseShape = JSON.stringify(response.data || {}).slice(0, 1000);
+          throw new Error(`${label} returned empty content after ${maxAttempts} attempts. response=${responseShape}`);
+        }
         
         // If we have a fallback model and it's not the last attempt, try switching to fallback
         if (fallbackModel && currentPayload.model !== fallbackModel) {
@@ -497,7 +502,7 @@ export class GeminiService {
         config.openRouter.models.flash
       );
 
-      const finalPrompt = response.data.choices[0]?.message?.content;
+      const finalPrompt = response.data.choices?.[0]?.message?.content;
       if (!finalPrompt) {
         console.error('[GeminiService] Empty prompt result. Full response:', JSON.stringify(response.data, null, 2));
         throw new Error('Empty prompt result from Gemini Pro (possibly safety filter or provider error)');
