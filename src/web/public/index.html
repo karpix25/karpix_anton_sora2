@@ -39,6 +39,7 @@
             <button class="tab-button" type="button" data-tab-target="content" aria-selected="false">Контент</button>
             <button class="tab-button" type="button" data-tab-target="visual" aria-selected="false">Визуал</button>
             <button class="tab-button" type="button" data-tab-target="generations" aria-selected="false">Генерации</button>
+            <button class="tab-button" type="button" data-tab-target="dashboard" aria-selected="false">Дашборд</button>
           </nav>
         </div>
 
@@ -371,6 +372,32 @@
               </div>
               <div id="generation-tasks" class="library-list empty-state">
                 Генераций пока нет.
+              </div>
+            </section>
+          </section>
+
+          <section class="tab-panel" data-tab-panel="dashboard">
+            <section class="card dashboard-card">
+              <div class="card-title-row">
+                <div>
+                  <p class="card-eyebrow">Все проекты</p>
+                  <h3>История входов и генераций</h3>
+                </div>
+                <div class="dashboard-actions">
+                  <select id="dashboard-type-filter" aria-label="Фильтр событий">
+                    <option value="all">Все события</option>
+                    <option value="reference">Только референсы</option>
+                    <option value="generation">Только генерации</option>
+                    <option value="auto">Автогенерации</option>
+                    <option value="failed">Ошибки</option>
+                  </select>
+                  <button id="refresh-dashboard-button" class="secondary-button" type="button">Обновить</button>
+                </div>
+              </div>
+
+              <div id="dashboard-summary" class="dashboard-summary"></div>
+              <div id="dashboard-history" class="dashboard-history empty-state">
+                История пока не загружена.
               </div>
             </section>
           </section>

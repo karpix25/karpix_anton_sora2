@@ -231,6 +231,104 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     return true;
   }
 
+  if (pathname === '/api/dashboard/history' && req.method === 'GET') {
+    const projects = await projectStore.listProjects();
+    const projectById = new Map(projects.map((project) => [project.id, project]));
+    const events: any[] = [];
+
+    for (const project of projects) {
+      const [items, tasks] = await Promise.all([
+        referenceLibraryStore.listProjectItems(project.id),
+        generationTaskStore.listProjectTasks(project.id),
+      ]);
+
+      const itemById = new Map(items.map((item) => [item.id, item]));
+
+      for (const item of items) {
+        events.push({
+          id: `reference:${item.id}`,
+          type: 'reference',
+          eventAt: item.createdAt,
+          projectId: project.id,
+          projectName: project.name,
+          projectCode: project.projectCode,
+          title: 'Входящий референс',
+          status: item.status,
+          referenceLibraryItemId: item.id,
+          sourceUrl: item.sourceUrl,
+          directVideoUrl: item.directVideoUrl,
+          thumbnailUrl: item.thumbnailUrl,
+          hasAnalysis: Boolean(item.analysis),
+          hasAudio: Boolean(item.audioFilePath || item.audioS3ObjectKey),
+          errorMessage: item.errorMessage,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        });
+      }
+
+      for (const task of tasks) {
+        const item = itemById.get(task.referenceLibraryItemId);
+        const isAuto = task.triggerMode === 'auto' || task.triggerMode === 'auto_remix';
+        const isRemix = task.triggerMode === 'auto_remix' || task.triggerMode === 'web_manual_remix';
+
+        events.push({
+          id: `generation:${task.id}`,
+          type: 'generation',
+          eventAt: task.createdAt,
+          projectId: task.projectId,
+          projectName: projectById.get(task.projectId)?.name || project.name,
+          projectCode: projectById.get(task.projectId)?.projectCode || project.projectCode,
+          title: isRemix ? 'Ремикс' : isAuto ? 'Автогенерация' : 'Ручная генерация',
+          status: task.status,
+          triggerMode: task.triggerMode,
+          targetModel: task.targetModel,
+          provider: task.provider,
+          taskId: task.id,
+          referenceLibraryItemId: task.referenceLibraryItemId,
+          referenceSourceUrl: item?.sourceUrl || '',
+          remixSourceTaskId: task.remixSourceTaskId,
+          remixSourceUrl: task.remixSourceUrl,
+          promptText: task.promptText,
+          resultVideoUrl: task.resultVideoUrl,
+          s3ObjectUrl: task.s3ObjectUrl,
+          yandexDownloadUrl: task.yandexDownloadUrl,
+          yandexDiskPath: task.yandexDiskPath,
+          publicationUrl: task.publicationUrl,
+          videoFileName: task.videoFileName,
+          views: 0,
+          errorMessage: task.errorMessage,
+          startedAt: task.startedAt,
+          finishedAt: task.finishedAt,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+        });
+      }
+    }
+
+    const publicationUrls = events
+      .filter((event) => event.type === 'generation' && event.publicationUrl)
+      .map((event) => event.publicationUrl);
+    const viewsMap = await ParserService.getViewCountsMap(publicationUrls);
+    const hydratedEvents = events.map((event) => event.publicationUrl
+      ? { ...event, views: viewsMap[event.publicationUrl] || 0 }
+      : event
+    );
+
+    hydratedEvents.sort((a, b) => Date.parse(b.eventAt || b.createdAt || '') - Date.parse(a.eventAt || a.createdAt || ''));
+    sendJson(res, 200, {
+      events: hydratedEvents.slice(0, 500),
+      totals: {
+        projects: projects.length,
+        references: hydratedEvents.filter((event) => event.type === 'reference').length,
+        generations: hydratedEvents.filter((event) => event.type === 'generation').length,
+        completed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'completed').length,
+        failed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'failed').length,
+        processing: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'processing').length,
+      },
+    });
+    return true;
+  }
+
   if (pathname === '/api/fonts/google-cyrillic' && req.method === 'GET') {
     const { GoogleFontsService } = await import('../services/google-fonts.service.js');
     const fonts = await GoogleFontsService.listCyrillicFonts();

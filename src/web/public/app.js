@@ -52,6 +52,8 @@ const state = {
   generationTasks: [],
   googleCyrillicFonts: [],
   yandexFolders: [],
+  dashboardEvents: [],
+  dashboardTotals: {},
 };
 
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
@@ -87,6 +89,10 @@ const elements = {
   referenceImages: document.getElementById('reference-images'),
   referenceLibrary: document.getElementById('reference-library'),
   generationTasks: document.getElementById('generation-tasks'),
+  dashboardHistory: document.getElementById('dashboard-history'),
+  dashboardSummary: document.getElementById('dashboard-summary'),
+  dashboardTypeFilter: document.getElementById('dashboard-type-filter'),
+  refreshDashboardButton: document.getElementById('refresh-dashboard-button'),
   primaryImageStatus: document.getElementById('primary-image-status'),
   libraryItemModal: document.getElementById('library-item-modal'),
   libraryItemModalContent: document.getElementById('library-item-modal-content'),
@@ -215,6 +221,13 @@ function activateTab(tabName) {
       updateEndFramePreview();
     });
   }
+
+  if (tabName === 'dashboard') {
+    loadDashboardHistory().catch((error) => {
+      console.error(error);
+      setStatus(error.message);
+    });
+  }
 }
 
 async function api(url, options = {}) {
@@ -244,6 +257,148 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '—';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function shorten(value, maxLength = 90) {
+  const text = String(value || '').trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function renderDashboardSummary() {
+  if (!elements.dashboardSummary) {
+    return;
+  }
+
+  const totals = state.dashboardTotals || {};
+  const cards = [
+    ['Проекты', totals.projects || 0],
+    ['Референсы', totals.references || 0],
+    ['Генерации', totals.generations || 0],
+    ['Готово', totals.completed || 0],
+    ['В работе', totals.processing || 0],
+    ['Ошибки', totals.failed || 0],
+  ];
+
+  elements.dashboardSummary.innerHTML = cards
+    .map(([label, value]) => `
+      <div class="dashboard-stat">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </div>
+    `)
+    .join('');
+}
+
+function filterDashboardEvents(events) {
+  const filter = elements.dashboardTypeFilter?.value || 'all';
+  return events.filter((event) => {
+    if (filter === 'all') return true;
+    if (filter === 'reference') return event.type === 'reference';
+    if (filter === 'generation') return event.type === 'generation';
+    if (filter === 'auto') return event.triggerMode === 'auto' || event.triggerMode === 'auto_remix';
+    if (filter === 'failed') return event.status === 'failed';
+    return true;
+  });
+}
+
+function renderDashboardHistory() {
+  if (!elements.dashboardHistory) {
+    return;
+  }
+
+  renderDashboardSummary();
+  const events = filterDashboardEvents(state.dashboardEvents || []);
+  if (!events.length) {
+    elements.dashboardHistory.classList.add('empty-state');
+    elements.dashboardHistory.innerHTML = 'Нет событий по выбранному фильтру.';
+    return;
+  }
+
+  elements.dashboardHistory.classList.remove('empty-state');
+  elements.dashboardHistory.innerHTML = `
+    <div class="dashboard-table">
+      ${events.map((event) => {
+        const isGeneration = event.type === 'generation';
+        const primaryUrl = event.s3ObjectUrl || event.yandexDownloadUrl || event.resultVideoUrl || event.sourceUrl || event.referenceSourceUrl || '';
+        const statusClass = `status-${String(event.status || 'unknown').toLowerCase()}`;
+        const sourceUrl = event.sourceUrl || event.referenceSourceUrl || '';
+        const prompt = isGeneration ? shorten(event.promptText || '', 130) : '';
+        return `
+          <article class="dashboard-row ${escapeHtml(statusClass)}">
+            <div class="dashboard-row-main">
+              <div>
+                <div class="dashboard-title-line">
+                  <strong>${escapeHtml(event.title || event.type)}</strong>
+                  <span class="dashboard-status">${escapeHtml(event.status || '—')}</span>
+                  ${event.views ? `<span class="views-count">👁 ${Number(event.views).toLocaleString('ru-RU')}</span>` : ''}
+                </div>
+                <p class="dashboard-meta">
+                  ${escapeHtml(formatDateTime(event.eventAt || event.createdAt))}
+                  · ${escapeHtml(event.projectName || 'Проект без названия')}
+                  ${event.projectCode ? ` · ${escapeHtml(event.projectCode)}` : ''}
+                </p>
+              </div>
+              <div class="dashboard-links">
+                ${primaryUrl ? `<a href="${escapeHtml(primaryUrl)}" target="_blank" rel="noreferrer">Видео</a>` : ''}
+                ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Референс</a>` : ''}
+                ${event.publicationUrl ? `<a href="${escapeHtml(event.publicationUrl)}" target="_blank" rel="noreferrer">Публикация</a>` : ''}
+              </div>
+            </div>
+            <div class="dashboard-row-details">
+              ${isGeneration ? `
+                <span>Task: ${escapeHtml(shorten(event.taskId || '', 12))}</span>
+                <span>Trigger: ${escapeHtml(event.triggerMode || '—')}</span>
+                <span>Model: ${escapeHtml(event.targetModel || '—')}</span>
+                <span>Provider: ${escapeHtml(event.provider || '—')}</span>
+              ` : `
+                <span>Reference: ${escapeHtml(shorten(event.referenceLibraryItemId || '', 12))}</span>
+                <span>Analysis: ${event.hasAnalysis ? 'есть' : 'нет'}</span>
+                <span>Audio: ${event.hasAudio ? 'есть' : 'нет'}</span>
+              `}
+            </div>
+            ${prompt ? `<p class="dashboard-prompt">${escapeHtml(prompt)}</p>` : ''}
+            ${event.errorMessage ? `<p class="dashboard-error">${escapeHtml(event.errorMessage)}</p>` : ''}
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function loadDashboardHistory() {
+  if (!elements.dashboardHistory) {
+    return;
+  }
+
+  elements.dashboardHistory.classList.add('empty-state');
+  elements.dashboardHistory.innerHTML = 'Загрузка истории...';
+  const data = await api('/api/dashboard/history');
+  state.dashboardEvents = Array.isArray(data?.events) ? data.events : [];
+  state.dashboardTotals = data?.totals || {};
+  renderDashboardHistory();
+  setStatus('Дашборд обновлен');
 }
 
 function renderYandexFolderOptions(selectedValue = state.currentProject.yandexDiskFolder || '') {
@@ -949,6 +1104,20 @@ function bindEvents() {
       console.error(error);
       setStatus(error.message);
     }
+  });
+
+  elements.refreshDashboardButton?.addEventListener('click', async () => {
+    try {
+      setStatus('Обновление дашборда...');
+      await loadDashboardHistory();
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  });
+
+  elements.dashboardTypeFilter?.addEventListener('change', () => {
+    renderDashboardHistory();
   });
 
   elements.closeLibraryItemModalButton.addEventListener('click', () => {
