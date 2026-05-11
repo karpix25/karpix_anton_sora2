@@ -17,6 +17,13 @@ export class PromptModerationError extends Error {
   }
 }
 
+export class ProviderRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderRateLimitError';
+  }
+}
+
 export function isPromptModerationError(error: unknown): error is PromptModerationError {
   return error instanceof PromptModerationError || isModerationError(error);
 }
@@ -34,7 +41,25 @@ function isModerationError(error: unknown): boolean {
   );
 }
 
+function isProviderRateLimitError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    message.includes('429') ||
+    message.includes('too many requests') ||
+    message.includes('rate limit') ||
+    message.includes('saturated') ||
+    message.includes('try again later') ||
+    message.includes('upstream load')
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class VideoGenerationService {
+  private static readonly cometRateRetryDelaysMs = [30_000, 60_000, 120_000, 180_000];
+
   public static async generateWithFallback(input: {
     prompt: string;
     imageUrl: string;
@@ -81,22 +106,20 @@ export class VideoGenerationService {
     // 1. Comet API (Primary for Sora 2 & Seedance 2)
     if (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') {
       try {
-        console.log(`[VideoGenerationService] Attempting Comet API (${effectiveModel})...`);
-        const taskId = await CometService.generateVideo(
-          promptWithFormat,
-          input.imageUrl,
-          effectiveModel,
-          {
-            duration: 8,
-            aspect_ratio: '9:16'
-          }
-        );
+        const taskId = await this.startCometWithRateLimitRetry({
+          prompt: promptWithFormat,
+          imageUrl: input.imageUrl,
+          model: effectiveModel,
+        });
         const videoPathOrUrl = await CometService.pollStatus(taskId);
         return { provider: 'comet', providerTaskId: taskId, resultVideoUrl: videoPathOrUrl };
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         if (isModerationError(error)) {
           throw new PromptModerationError(`Comet blocked prompt by moderation: ${errorMsg}`);
+        }
+        if (error instanceof ProviderRateLimitError || isProviderRateLimitError(error)) {
+          throw new ProviderRateLimitError(`Comet API is rate limited or saturated after retries: ${errorMsg}`);
         }
         console.warn(`Comet API generation failed, falling back to Kie: ${errorMsg}`);
       }
@@ -124,5 +147,46 @@ export class VideoGenerationService {
       }
       throw new Error(`Video generation failed (Kie.ai): ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private static async startCometWithRateLimitRetry(input: {
+    prompt: string;
+    imageUrl: string;
+    model: VideoModel;
+  }): Promise<string> {
+    for (let attempt = 0; attempt <= this.cometRateRetryDelaysMs.length; attempt += 1) {
+      try {
+        console.log(`[VideoGenerationService] Attempting Comet API (${input.model})...`);
+        return await CometService.generateVideo(
+          input.prompt,
+          input.imageUrl,
+          input.model,
+          {
+            duration: 8,
+            aspect_ratio: '9:16',
+          }
+        );
+      } catch (error: any) {
+        if (isModerationError(error)) {
+          throw error;
+        }
+
+        if (!isProviderRateLimitError(error)) {
+          throw error;
+        }
+
+        const delayMs = this.cometRateRetryDelaysMs[attempt];
+        if (delayMs === undefined) {
+          throw new ProviderRateLimitError(error instanceof Error ? error.message : String(error));
+        }
+
+        console.warn(
+          `[VideoGenerationService] Comet API is saturated/rate-limited. Waiting ${Math.round(delayMs / 1000)}s before retry (${attempt + 1}/${this.cometRateRetryDelaysMs.length})...`
+        );
+        await sleep(delayMs);
+      }
+    }
+
+    throw new ProviderRateLimitError('Comet API rate-limit retries exhausted');
   }
 }

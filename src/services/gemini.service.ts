@@ -294,7 +294,17 @@ export class GeminiService {
         projectReferenceImageUrls = [],
       } = input;
 
-      const cleanVideoAnalysis = stripTextOverlaySections(videoAnalysis);
+      const rawVideoAnalysis = String(videoAnalysis || '').trim();
+      const cleanVideoAnalysis = stripTextOverlaySections(rawVideoAnalysis);
+      const effectiveVideoAnalysis = cleanVideoAnalysis || rawVideoAnalysis;
+
+      if (!effectiveVideoAnalysis) {
+        throw new Error('Cannot generate prompt: reference video analysis is empty');
+      }
+
+      console.log(
+        `[GeminiService] Prompt generation input: project=${project?.id || 'none'}, analysisLength=${rawVideoAnalysis.length}, cleanAnalysisLength=${cleanVideoAnalysis.length}, images=${projectReferenceImageUrls.length + (fallbackProductPhotoUrl ? 1 : 0)}`
+      );
 
       const projectContextBlock = `
         PROJECT INPUTS:
@@ -434,7 +444,7 @@ export class GeminiService {
         - Post-production text language for that different system: ${getProjectLanguageLabel(project)}.
 
         REFERENCE VIDEO ANALYSIS:
-        ${cleanVideoAnalysis}
+        ${effectiveVideoAnalysis}
 
         ${projectContextBlock}
 
@@ -461,7 +471,10 @@ export class GeminiService {
         {
           type: 'text',
           text:
-            'Generate a short timestamped product-video prompt in plain language. Keep it simple, visual, and action-based. Use 3 to 5 short blocks. One main action per block. Keep product integration native to the original action flow; do not create ad-like insert shots. Add final reveal only if the reference clearly has it.',
+            `Generate a short timestamped product-video prompt in plain language. Keep it simple, visual, and action-based. Use 3 to 5 short blocks. One main action per block. Keep product integration native to the original action flow; do not create ad-like insert shots. Add final reveal only if the reference clearly has it.
+
+Reference video analysis to use:
+${effectiveVideoAnalysis}`,
         },
       ];
 
