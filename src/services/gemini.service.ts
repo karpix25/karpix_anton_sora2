@@ -142,8 +142,9 @@ export async function createChatCompletionWithRetry(
 
 function stripTextOverlaySections(videoAnalysis: string): string {
   return videoAnalysis
-    .replace(/###\s*\*\*3\.\s*Text\s*&\s*Overlays Detection[\s\S]*?(?=###\s*\*\*4\.|$)/i, '')
+    .replace(/###\s*(?:\*\*)?\s*3\.\s*Text\s*&\s*Overlays Detection(?:\*\*)?[\s\S]*?(?=###\s*(?:\*\*)?\s*4\.|$)/i, '')
     .replace(/###\s*\*\*SUMMARY OF TEXT OVERLAYS\*\*[\s\S]*$/i, '')
+    .replace(/^\s*-\s*Text on screen:.*$/gim, '')
     .replace(/^\s*\*\s*Text Overlay:.*$/gim, '')
     .replace(/^\s*Text Overlay:.*$/gim, '')
     .trim();
@@ -219,36 +220,51 @@ export class GeminiService {
               content: [
                 {
                   type: 'text',
-                  text: `                  Выполни глубокий технический и режиссерский реверс-инжиниринг видео по протоколу Regisseur Protocol v3.0. Твоя цель — создать исчерпывающее описание (Prompt Sheet), которое позволит ней                  - Semantic Core: В чем заключается главный визуальный хук или физический механизм (морфинг, левитация, резкая смена планов, комедийный тайминг).
-                  - Acting & Emotions Map (CRITICAL): Опиши мимику персонажа, направление взгляда и микро-эмоции. Как меняется выражение лица в ответ на события?
-                  - Prop & Environment Scan: Перечисли все важные предметы в кадре (наушники, телефон, аксессуары) и опиши их взаимодействие с персонажем.
-                  - Object State & Readiness (CRITICAL): Фиксируй состояние ключевых объектов (крышка открыта/закрыта, дозатор нажат/отпущен, защитная мембрана снята). Это критично для логики взаимодействия (например, нельзя лить воду из закрытой бутылки).
-                  - Optical Geometry & Continuity: Определи тип линзы и глубину резкости. Укажи тип съемки: ONE-SHOT (один непрерывный план без склеек) или MULTI-SHOT (наличие монтажных склеек).
-                  - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
-                  - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
-                  - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
-                  - Product Effect & Transformation (CRITICAL): Выяви «До» и «После». Какое влияние оказывает товар на окружение или субъект? (например: поверхность была грязной — стала чистой; волосы были тусклыми — стала сияющими). Опиши механику этого изменения.T (наличие монтажных склеек).
-                  - Lighting & Materials: Определи схему света и свойства материалов (кожа, металл, ткань).
-                  - Spatial Physics & Occlusion: Опиши эшелонирование кадра и Z-depth.
-                  - Kinetic Dynamics: Опиши инерцию тел, волос и тканей.
-                  - Product Effect & Transformation (CRITICAL): Выяви «До» и «После». Какое влияние оказывает товар на окружение или субъект? (например: поверхность была грязной — стала чистой; волосы были тусклыми — стали сияющими). Опиши механику этого изменения.
+                  text: `You are performing a video reverse-engineering pass for later recreation. Think like a careful video analyst: first identify what is visibly present, then infer only what the evidence supports. Do not write a cinematic essay. Write a compact production note that can be used to clone the reference later.
 
-                  3. Text & Overlays Detection (CRITICAL):
-                  - Выяви все текстовые элементы на видео.
-                  - Категоризируй как: "Static Text", "Dynamic Text" или "Subtitles".
-                  - Для каждого элемента укажи: [Start - End] тайминг, точный текст и его тип.
+Treat the video as a sequence of key visual moments. Prefer concrete observations over general summaries. If something is not clearly visible, say so. Do not invent hidden actions, off-screen causes, or design details.
 
-                  4. Выходной формат (Strict Timeline):
-                  Выдай результат в виде списка по таймкодам. Для каждого отрезка укажи:
-                  - [Time]: (например, 00:00 - 00:02)
-                  - Action: Техническое описание движения.
-                  - Acting/Emotions: Детальное описание мимики и настроения.
-                  - Camera & Continuity: Движение камеры и подтверждение отсутствия склеек (если это длинный план).
-                  - Physics & Props: Нюансы физики и взаимодействие с предметами.
-                  - State Transformation: Опиши изменение состояния объекта или окружения в этом блоке (если происходит).
-                  - Text Overlay: Присутствует ли текст?
-                  
-                  В конце добавь отдельный блок "SUMMARY OF TEXT OVERLAYS" со списком всех найденных текстов.`,
+Use this structure exactly:
+
+### 1. OVERVIEW
+- Duration.
+- One-shot or multi-shot.
+- Main subject.
+- Setting.
+- Core visual hook.
+- Primary action arc in one or two lines.
+
+### 2. TIMELINE / KEY MOMENTS
+For each beat, use a short block with:
+- [Time]
+- Visible evidence: only what can be seen on screen
+- Motion: subject motion and camera motion
+- Subject & props: people, products, hands, objects, environment
+- Object state: open/closed, held/released, clean/dirty, active/inactive, etc.
+- Continuity: what must stay consistent across the next beat
+- Text on screen: exact text if present, or "none"
+
+Rules for the timeline:
+- Break the video at real visual changes, not every few seconds.
+- Capture the first visible state, the transition, and the final visible state.
+- If the video is a continuous shot, say so explicitly.
+- If there are cuts, say where they happen.
+- Note micro-events that matter for later cloning: hand enters frame, object is picked up, product changes state, face reaction changes, reveal appears, etc.
+- Be precise about framing, subject placement, and hand-to-object contact.
+
+### 3. TEXT & OVERLAYS DETECTION
+- List every on-screen graphic text element.
+- Categorize each item as Static Text, Dynamic Text, or Subtitles.
+- For each item, include exact text and approximate [Start - End] timing.
+- Ignore printed labels on physical objects unless they are clearly part of the video overlay design.
+
+### 4. COPY MAP
+- Must preserve: 3 to 7 details that are essential to recreate the reference.
+- Can change: details that may be swapped when re-skinning to a new product.
+- Likely failure points: details the generator may get wrong if the analysis is too loose.
+- Best cloning strategy: one short paragraph summarizing how to reproduce the reference rhythm, framing, and action logic.
+
+Output must be concise, factual, and structured exactly with these four sections. No markdown intro, no extra explanation, no closing commentary.`,
                 },
                 videoContent,
               ],
@@ -331,6 +347,19 @@ export class GeminiService {
         - Keep the prompt compact but vivid.
         - One clear action per time beat.
         - Do not explain the analysis. Turn it into a cinematic storyboard.
+
+        MODERATION-SAFE PROMPTING (STRICT):
+        - Write the final prompt so it is safe for strict commercial video generation moderation on the first attempt.
+        - If the reference analysis contains risky, adult, provocative, violent, medical, illegal, self-harm, weapon, drug, dangerous-stunt, or shock-content cues, preserve only the harmless visual structure and replace the risky action with a safe everyday commercial equivalent.
+        - Never include sexual, sensual, erotic, nude, lingerie, fetish, intimate-touching, body-part-focused, or provocative wording.
+        - Keep every person clearly adult, fully clothed, non-provocative, and presented in a neutral lifestyle or commercial context.
+        - Avoid describing exposed skin, curves, chest, hips, seductive poses, bedroom intimacy, or flirtatious behavior.
+        - Avoid violence, threats, injuries, blood, weapons, fear, distress, accidents, dangerous challenges, or unsafe behavior. Replace with calm gestures, product handling, walking, grooming, cleaning, organizing, cooking, styling, or other safe daily actions.
+        - Avoid medical claims, diagnosis, before/after disease treatment, pain relief, healing, scars, wounds, injections, pills, or clinical procedures. For wellness/beauty products, describe only cosmetic appearance, comfort, routine, texture, shine, neatness, freshness, or confidence.
+        - Avoid illegal drugs, alcohol abuse, tobacco, vaping, gambling, political persuasion, and financial promises.
+        - Do not mention real celebrities, public figures, copyrighted characters, brands, logos, watermarks, UI screens, social media app interfaces, or recognizable third-party IP unless they are part of the provided product images and project context.
+        - Do not mention moderation, policy, blocked content, safety rewrite, or any meta-safety language in the final prompt.
+        - When a risky reference detail is removed, do not explain the removal; silently substitute a safe visual action that keeps the same timing, framing, and motion rhythm.
 
         ANTI-STATIC DYNAMIC START (CRITICAL):
         - The video MUST NOT start with a static frame or a "freeze" of the reference image.
