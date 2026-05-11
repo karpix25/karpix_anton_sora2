@@ -341,7 +341,9 @@ function renderDashboardHistory() {
     <div class="dashboard-table">
       ${events.map((event) => {
         const isGeneration = event.type === 'generation';
-        const primaryUrl = event.s3ObjectUrl || event.yandexDownloadUrl || event.resultVideoUrl || event.sourceUrl || event.referenceSourceUrl || '';
+        const originalUrl = event.s3ObjectUrl || event.resultVideoUrl || '';
+        const finalUrl = event.yandexDownloadUrl || '';
+        const primaryUrl = finalUrl || originalUrl || event.sourceUrl || event.referenceSourceUrl || '';
         const statusClass = `status-${String(event.status || 'unknown').toLowerCase()}`;
         const sourceUrl = event.sourceUrl || event.referenceSourceUrl || '';
         const prompt = isGeneration ? shorten(event.promptText || '', 130) : '';
@@ -361,7 +363,9 @@ function renderDashboardHistory() {
                 </p>
               </div>
               <div class="dashboard-links">
-                ${primaryUrl ? `<a href="${escapeHtml(primaryUrl)}" target="_blank" rel="noreferrer">Видео</a>` : ''}
+                ${finalUrl ? `<a href="${escapeHtml(finalUrl)}" target="_blank" rel="noreferrer">Финал ffmpeg</a>` : ''}
+                ${originalUrl ? `<a href="${escapeHtml(originalUrl)}" target="_blank" rel="noreferrer">Оригинал</a>` : ''}
+                ${!finalUrl && !originalUrl && primaryUrl ? `<a href="${escapeHtml(primaryUrl)}" target="_blank" rel="noreferrer">Видео</a>` : ''}
                 ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Референс</a>` : ''}
                 ${event.publicationUrl ? `<a href="${escapeHtml(event.publicationUrl)}" target="_blank" rel="noreferrer">Публикация</a>` : ''}
               </div>
