@@ -41,6 +41,10 @@ export interface ReferenceLibraryItem {
   thumbnailUrl: string;
   audioFilePath: string;
   audioStoredAt: string;
+  audioS3Bucket: string;
+  audioS3ObjectKey: string;
+  audioS3ObjectUrl: string;
+  audioS3StoredAt: string;
   durationSeconds: number;
   textOverlays: ReferenceTextOverlay[];
   status: ReferenceLibraryStatus;
@@ -57,6 +61,10 @@ export interface ReferenceLibraryInput {
   thumbnailUrl?: string;
   audioFilePath?: string;
   audioStoredAt?: string;
+  audioS3Bucket?: string;
+  audioS3ObjectKey?: string;
+  audioS3ObjectUrl?: string;
+  audioS3StoredAt?: string;
   durationSeconds?: number;
   textOverlays?: ReferenceTextOverlay[];
   status?: ReferenceLibraryStatus;
@@ -69,6 +77,10 @@ export interface ReferenceLibraryUpdate {
   thumbnailUrl?: string;
   audioFilePath?: string;
   audioStoredAt?: string;
+  audioS3Bucket?: string;
+  audioS3ObjectKey?: string;
+  audioS3ObjectUrl?: string;
+  audioS3StoredAt?: string;
   durationSeconds?: number;
   textOverlays?: ReferenceTextOverlay[];
   status?: ReferenceLibraryStatus;

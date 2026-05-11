@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import fs from 'fs-extra';
 import type { ReferenceLibraryItem } from '../domain/reference-library.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
+import { S3StorageService } from './s3-storage.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,11 +115,18 @@ export class ReferenceAudioService {
           });
         }
 
+        await this.ensureAudioStoredInS3(item, existingAudioPath);
+
         return {
           audioFilePath: existingAudioPath,
           durationSeconds,
         };
       }
+    }
+
+    const restoredAudio = await this.restoreAudioTrackFromS3(item);
+    if (restoredAudio) {
+      return restoredAudio;
     }
 
     if (!item.directVideoUrl) {
@@ -142,16 +150,100 @@ export class ReferenceAudioService {
 
     const durationSeconds = await runFfprobeDuration(outputPath);
 
-    await referenceLibraryStore.updateItem(item.id, {
+    const update: Parameters<typeof referenceLibraryStore.updateItem>[1] = {
       audioFilePath: this.getAudioRelativePath(item.id),
       audioStoredAt: nowIso(),
       durationSeconds,
-    });
+    };
+
+    const s3Upload = await this.tryUploadAudioToS3(item, outputPath);
+    if (s3Upload) {
+      update.audioS3Bucket = s3Upload.bucket;
+      update.audioS3ObjectKey = s3Upload.objectKey;
+      update.audioS3ObjectUrl = s3Upload.objectUrl;
+      update.audioS3StoredAt = s3Upload.storedAt;
+    }
+
+    await referenceLibraryStore.updateItem(item.id, update);
 
     return {
       audioFilePath: outputPath,
       durationSeconds,
     };
+  }
+
+  private static async restoreAudioTrackFromS3(item: ReferenceLibraryItem): Promise<ReferenceAudioDetails | null> {
+    if (!item.audioS3ObjectKey || !S3StorageService.isConfigured()) {
+      return null;
+    }
+
+    const outputPath = path.join(dataDir, `${item.id}.m4a`);
+    try {
+      await S3StorageService.downloadObjectToFile({
+        bucket: item.audioS3Bucket,
+        objectKey: item.audioS3ObjectKey,
+        filePath: outputPath,
+      });
+
+      const durationSeconds = item.durationSeconds > 0
+        ? item.durationSeconds
+        : await runFfprobeDuration(outputPath);
+
+      await referenceLibraryStore.updateItem(item.id, {
+        audioFilePath: this.getAudioRelativePath(item.id),
+        audioStoredAt: item.audioStoredAt || nowIso(),
+        durationSeconds,
+      });
+
+      console.log(`[ReferenceAudioService] Restored reference audio ${item.id} from S3.`);
+      return {
+        audioFilePath: outputPath,
+        durationSeconds,
+      };
+    } catch (error: any) {
+      console.warn(`[ReferenceAudioService] Failed to restore reference audio ${item.id} from S3: ${error.message}`);
+      return null;
+    }
+  }
+
+  private static async ensureAudioStoredInS3(item: ReferenceLibraryItem, audioFilePath: string): Promise<void> {
+    if (item.audioS3ObjectKey || !S3StorageService.isConfigured()) {
+      return;
+    }
+
+    const s3Upload = await this.tryUploadAudioToS3(item, audioFilePath);
+    if (!s3Upload) {
+      return;
+    }
+
+    await referenceLibraryStore.updateItem(item.id, {
+      audioS3Bucket: s3Upload.bucket,
+      audioS3ObjectKey: s3Upload.objectKey,
+      audioS3ObjectUrl: s3Upload.objectUrl,
+      audioS3StoredAt: s3Upload.storedAt,
+    });
+  }
+
+  private static async tryUploadAudioToS3(
+    item: ReferenceLibraryItem,
+    audioFilePath: string
+  ): Promise<Awaited<ReturnType<typeof S3StorageService.uploadReferenceAudioFile>> | null> {
+    if (!S3StorageService.isConfigured()) {
+      return null;
+    }
+
+    try {
+      const upload = await S3StorageService.uploadReferenceAudioFile({
+        projectId: item.projectId,
+        referenceLibraryItemId: item.id,
+        filePath: audioFilePath,
+      });
+      console.log(`[ReferenceAudioService] Stored reference audio ${item.id} in S3 (${upload.objectKey}).`);
+      return upload;
+    } catch (error: any) {
+      console.warn(`[ReferenceAudioService] Failed to store reference audio ${item.id} in S3: ${error.message}`);
+      return null;
+    }
   }
 
   public static async extractTemporaryAudioTrack(videoUrl: string): Promise<ReferenceAudioDetails> {

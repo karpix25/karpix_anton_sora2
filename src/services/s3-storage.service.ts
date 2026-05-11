@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'fs-extra';
 import axios from 'axios';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { config } from '../config.js';
 
 export interface S3UploadResult {
@@ -148,6 +148,74 @@ export class S3StorageService {
     };
   }
 
+  public static async uploadReferenceAudioFile(input: {
+    projectId: string;
+    referenceLibraryItemId: string;
+    filePath: string;
+    fileName?: string;
+  }): Promise<S3UploadResult> {
+    if (!this.isConfigured()) {
+      throw new Error('S3 is not configured');
+    }
+
+    if (!(await fs.pathExists(input.filePath))) {
+      throw new Error(`Reference audio file does not exist: ${input.filePath}`);
+    }
+
+    const fileName = input.fileName || this.buildReferenceAudioFileName(input.referenceLibraryItemId, input.filePath);
+    const objectKey = this.buildReferenceAudioObjectKey(input.projectId, fileName);
+    const bucket = config.s3.bucket;
+    const fileBuffer = await fs.readFile(input.filePath);
+
+    await this.getClient().send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: objectKey,
+        Body: fileBuffer,
+        ContentLength: fileBuffer.length,
+        ContentType: 'audio/mp4',
+        Metadata: {
+          project_id: input.projectId,
+          reference_library_item_id: input.referenceLibraryItemId,
+          source: 'reference_audio',
+        },
+      })
+    );
+
+    return {
+      bucket,
+      objectKey,
+      objectUrl: this.buildObjectUrl(bucket, objectKey),
+      fileName,
+      storedAt: new Date().toISOString(),
+    };
+  }
+
+  public static async downloadObjectToFile(input: {
+    bucket: string;
+    objectKey: string;
+    filePath: string;
+  }): Promise<void> {
+    if (!this.isConfigured()) {
+      throw new Error('S3 is not configured');
+    }
+
+    const response = await this.getClient().send(
+      new GetObjectCommand({
+        Bucket: input.bucket || config.s3.bucket,
+        Key: input.objectKey,
+      })
+    );
+
+    if (!response.Body) {
+      throw new Error(`S3 object has no body: ${input.objectKey}`);
+    }
+
+    const buffer = await this.streamToBuffer(response.Body);
+    await fs.ensureDir(path.dirname(input.filePath));
+    await fs.writeFile(input.filePath, buffer);
+  }
+
   private static getClient(): S3Client {
     if (!this.client) {
       this.client = new S3Client({
@@ -169,6 +237,12 @@ export class S3StorageService {
     const safeProjectId = sanitizeSegment(projectId, 'project');
     const safeFileName = sanitizeSegment(path.basename(fileName), 'video.mp4');
     return `projects/${safeProjectCode}/${safeProjectId}/videos/${safeFileName}`;
+  }
+
+  private static buildReferenceAudioObjectKey(projectId: string, fileName: string): string {
+    const safeProjectId = sanitizeSegment(projectId, 'project');
+    const safeFileName = sanitizeSegment(path.basename(fileName), 'audio.m4a');
+    return `projects/${safeProjectId}/reference-audio/${safeFileName}`;
   }
 
   private static buildObjectUrl(bucket: string, objectKey: string): string {
@@ -196,6 +270,12 @@ export class S3StorageService {
     return `p${projectCodePart}_${yyyymmdd}_${hhmmss}_${taskSuffix}${extension}`;
   }
 
+  private static buildReferenceAudioFileName(referenceLibraryItemId: string, sourceAudioPath: string): string {
+    const itemSuffix = referenceLibraryItemId.replace(/[^A-Za-z0-9]/g, '').slice(0, 12).toLowerCase() || 'reference';
+    const extension = path.extname(sourceAudioPath) || '.m4a';
+    return `reference_${itemSuffix}${extension}`;
+  }
+
   private static getFileExtensionFromSource(source: string): string {
     try {
       const pathname = new URL(source).pathname;
@@ -205,5 +285,17 @@ export class S3StorageService {
       const extension = path.extname(source);
       return extension || '.mp4';
     }
+  }
+
+  private static async streamToBuffer(body: any): Promise<Buffer> {
+    if (Buffer.isBuffer(body)) {
+      return body;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 }

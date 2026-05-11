@@ -43,14 +43,14 @@ export class ParserService {
       `
       WITH latest_stats AS (
         SELECT
-          "Video URL" AS url,
-          COALESCE("Views", 0)::integer AS views,
+          video_url AS url,
+          COALESCE(views, 0)::integer AS views,
           ROW_NUMBER() OVER (
-            PARTITION BY "Video URL"
-            ORDER BY "Created At" DESC NULLS LAST, "ID" DESC NULLS LAST
+            PARTITION BY video_url
+            ORDER BY created_at DESC NULLS LAST, id DESC NULLS LAST
           ) AS rn
-        FROM "Video Stats"
-        WHERE "Video URL" = ANY($1)
+        FROM video_stats
+        WHERE video_url = ANY($1)
       )
       SELECT url, views
       FROM latest_stats
@@ -70,14 +70,14 @@ export class ParserService {
       `
       WITH latest_stats AS (
         SELECT
-          "Video URL" AS url,
-          COALESCE("Views", 0)::integer AS views,
+          video_url AS url,
+          COALESCE(views, 0)::integer AS views,
           ROW_NUMBER() OVER (
-            PARTITION BY "Video URL"
-            ORDER BY "Created At" DESC NULLS LAST, "ID" DESC NULLS LAST
+            PARTITION BY video_url
+            ORDER BY created_at DESC NULLS LAST, id DESC NULLS LAST
           ) AS rn
-        FROM "Video Stats"
-        WHERE "Video URL" = ANY($1)
+        FROM video_stats
+        WHERE video_url = ANY($1)
       )
       SELECT url, views
       FROM latest_stats

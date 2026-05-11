@@ -115,6 +115,10 @@ export async function initDatabase(): Promise<void> {
       thumbnail_url TEXT NOT NULL DEFAULT '',
       audio_file_path TEXT NOT NULL DEFAULT '',
       audio_stored_at TEXT NOT NULL DEFAULT '',
+      audio_s3_bucket TEXT NOT NULL DEFAULT '',
+      audio_s3_object_key TEXT NOT NULL DEFAULT '',
+      audio_s3_object_url TEXT NOT NULL DEFAULT '',
+      audio_s3_stored_at TEXT NOT NULL DEFAULT '',
       duration_seconds DOUBLE PRECISION NOT NULL DEFAULT 0,
       text_overlays JSONB NOT NULL DEFAULT '[]'::jsonb,
       status TEXT NOT NULL DEFAULT 'received',
@@ -124,6 +128,11 @@ export async function initDatabase(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  await db.query(`ALTER TABLE reference_library ADD COLUMN IF NOT EXISTS audio_s3_bucket TEXT NOT NULL DEFAULT ''`);
+  await db.query(`ALTER TABLE reference_library ADD COLUMN IF NOT EXISTS audio_s3_object_key TEXT NOT NULL DEFAULT ''`);
+  await db.query(`ALTER TABLE reference_library ADD COLUMN IF NOT EXISTS audio_s3_object_url TEXT NOT NULL DEFAULT ''`);
+  await db.query(`ALTER TABLE reference_library ADD COLUMN IF NOT EXISTS audio_s3_stored_at TEXT NOT NULL DEFAULT ''`);
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS generation_tasks (

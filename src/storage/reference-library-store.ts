@@ -17,6 +17,10 @@ interface ReferenceLibraryRow {
   thumbnail_url: string;
   audio_file_path: string;
   audio_stored_at: string;
+  audio_s3_bucket: string;
+  audio_s3_object_key: string;
+  audio_s3_object_url: string;
+  audio_s3_stored_at: string;
   duration_seconds: number;
   text_overlays: unknown;
   status: string;
@@ -156,6 +160,10 @@ function sanitizeItem(input: ReferenceLibraryInput, existing?: ReferenceLibraryI
     thumbnailUrl: normalizeString(input.thumbnailUrl ?? existing?.thumbnailUrl),
     audioFilePath: normalizeString(input.audioFilePath ?? existing?.audioFilePath),
     audioStoredAt: normalizeString(input.audioStoredAt ?? existing?.audioStoredAt),
+    audioS3Bucket: normalizeString(input.audioS3Bucket ?? existing?.audioS3Bucket),
+    audioS3ObjectKey: normalizeString(input.audioS3ObjectKey ?? existing?.audioS3ObjectKey),
+    audioS3ObjectUrl: normalizeString(input.audioS3ObjectUrl ?? existing?.audioS3ObjectUrl),
+    audioS3StoredAt: normalizeString(input.audioS3StoredAt ?? existing?.audioS3StoredAt),
     durationSeconds: normalizeDurationSeconds(input.durationSeconds ?? existing?.durationSeconds),
     textOverlays: normalizeTextOverlays(input.textOverlays ?? existing?.textOverlays),
     status: normalizeStatus(input.status ?? existing?.status),
@@ -175,6 +183,10 @@ function mapRowToItem(row: ReferenceLibraryRow): ReferenceLibraryItem {
     thumbnailUrl: normalizeString(row.thumbnail_url),
     audioFilePath: normalizeString(row.audio_file_path),
     audioStoredAt: normalizeString(row.audio_stored_at),
+    audioS3Bucket: normalizeString(row.audio_s3_bucket),
+    audioS3ObjectKey: normalizeString(row.audio_s3_object_key),
+    audioS3ObjectUrl: normalizeString(row.audio_s3_object_url),
+    audioS3StoredAt: normalizeString(row.audio_s3_stored_at),
     durationSeconds: normalizeDurationSeconds(row.duration_seconds),
     textOverlays: normalizeTextOverlays(row.text_overlays),
     status: normalizeStatus(row.status),
@@ -223,6 +235,10 @@ export const referenceLibraryStore = {
           thumbnail_url,
           audio_file_path,
           audio_stored_at,
+          audio_s3_bucket,
+          audio_s3_object_key,
+          audio_s3_object_url,
+          audio_s3_stored_at,
           duration_seconds,
           text_overlays,
           status,
@@ -232,7 +248,7 @@ export const referenceLibraryStore = {
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14::timestamptz, $15::timestamptz
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::timestamptz, $19::timestamptz
         )
         RETURNING *
       `,
@@ -245,6 +261,10 @@ export const referenceLibraryStore = {
         item.thumbnailUrl,
         item.audioFilePath,
         item.audioStoredAt,
+        item.audioS3Bucket,
+        item.audioS3ObjectKey,
+        item.audioS3ObjectUrl,
+        item.audioS3StoredAt,
         item.durationSeconds,
         JSON.stringify(item.textOverlays),
         item.status,
@@ -305,6 +325,10 @@ export const referenceLibraryStore = {
         thumbnailUrl: update.thumbnailUrl ?? existing.thumbnailUrl,
         audioFilePath: update.audioFilePath ?? existing.audioFilePath,
         audioStoredAt: update.audioStoredAt ?? existing.audioStoredAt,
+        audioS3Bucket: update.audioS3Bucket ?? existing.audioS3Bucket,
+        audioS3ObjectKey: update.audioS3ObjectKey ?? existing.audioS3ObjectKey,
+        audioS3ObjectUrl: update.audioS3ObjectUrl ?? existing.audioS3ObjectUrl,
+        audioS3StoredAt: update.audioS3StoredAt ?? existing.audioS3StoredAt,
         durationSeconds: update.durationSeconds ?? existing.durationSeconds,
         textOverlays: update.textOverlays ?? existing.textOverlays,
         status: update.status ?? existing.status,
@@ -324,12 +348,16 @@ export const referenceLibraryStore = {
           thumbnail_url = $5,
           audio_file_path = $6,
           audio_stored_at = $7,
-          duration_seconds = $8,
-          text_overlays = $9::jsonb,
-          status = $10,
-          analysis = $11,
-          error_message = $12,
-          updated_at = $13::timestamptz
+          audio_s3_bucket = $8,
+          audio_s3_object_key = $9,
+          audio_s3_object_url = $10,
+          audio_s3_stored_at = $11,
+          duration_seconds = $12,
+          text_overlays = $13::jsonb,
+          status = $14,
+          analysis = $15,
+          error_message = $16,
+          updated_at = $17::timestamptz
         WHERE id = $1
         RETURNING *
       `,
@@ -341,6 +369,10 @@ export const referenceLibraryStore = {
         nextItem.thumbnailUrl,
         nextItem.audioFilePath,
         nextItem.audioStoredAt,
+        nextItem.audioS3Bucket,
+        nextItem.audioS3ObjectKey,
+        nextItem.audioS3ObjectUrl,
+        nextItem.audioS3StoredAt,
         nextItem.durationSeconds,
         JSON.stringify(nextItem.textOverlays),
         nextItem.status,
