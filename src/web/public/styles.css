@@ -1090,6 +1090,37 @@ input:checked + .slider:before {
   min-height: 520px;
 }
 
+.dashboard-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.dashboard-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(76, 54, 39, 0.12);
+  background: rgba(255, 255, 255, 0.84);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(14px);
+}
+
+.dashboard-page-header h1 {
+  margin: 2px 0 0;
+  font-size: 28px;
+}
+
+.dashboard-page-main {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+}
+
 .dashboard-actions {
   display: flex;
   align-items: center;

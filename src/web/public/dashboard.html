@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOra2 Дашборд генераций</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="dashboard-page">
+      <header class="dashboard-page-header">
+        <div>
+          <p class="eyebrow">SOra2</p>
+          <h1>История генераций</h1>
+        </div>
+        <div class="dashboard-actions">
+          <select id="dashboard-type-filter" aria-label="Фильтр событий">
+            <option value="all">Все события</option>
+            <option value="reference">Только референсы</option>
+            <option value="generation">Только генерации</option>
+            <option value="auto">Автогенерации</option>
+            <option value="failed">Ошибки</option>
+          </select>
+          <button id="refresh-dashboard-button" class="secondary-button" type="button">Обновить</button>
+          <a class="primary-button" href="/" style="text-decoration: none;">Проекты</a>
+        </div>
+      </header>
+
+      <main class="dashboard-page-main">
+        <section class="card dashboard-card">
+          <div class="card-title-row">
+            <div>
+              <p class="card-eyebrow">Все проекты</p>
+              <h3>Референсы, автогенерации, ремиксы и ошибки</h3>
+            </div>
+            <span id="status-text" class="status-text">Загрузка...</span>
+          </div>
+          <div id="dashboard-summary" class="dashboard-summary"></div>
+          <div id="dashboard-history" class="dashboard-history empty-state">
+            История пока не загружена.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/dashboard.js?v=1.3.9-dashboard"></script>
+  </body>
+</html>
