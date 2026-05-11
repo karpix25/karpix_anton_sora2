@@ -3,7 +3,7 @@ import { ProjectReferenceService } from './project-reference.service.js';
 import { ReferenceAudioService } from './reference-audio.service.js';
 import { TextOverlayService } from './text-overlay.service.js';
 import { VideoPostprocessService } from './video-postprocess.service.js';
-import { VideoGenerationService } from './video-generation.service.js';
+import { VideoGenerationService, isPromptModerationError } from './video-generation.service.js';
 import { YandexDiskService } from './yandex-disk.service.js';
 import { S3StorageService } from './s3-storage.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
@@ -248,7 +248,7 @@ export class ManualGenerationService {
       }
 
       const projectReferenceImageUrls = await projectStore.getReferenceImageDataUrls(project.referenceImages);
-      const promptText =
+      let promptText =
         task.promptText ||
         await GeminiService.generateClonningPrompt({
           videoAnalysis: analysis,
@@ -264,9 +264,6 @@ export class ManualGenerationService {
       } else {
         console.log(`[ManualGenerationService] Task ${task.id}: reusing previously generated prompt (length: ${promptText.length}).`);
       }
-
-      // Sanitize prompt for providers (trim and reasonable length limit)
-      const sanitizedPrompt = promptText.trim().slice(0, 1000);
 
       const generationReferenceImageUrl = await ProjectReferenceService.getGenerationReferenceImageUrl(
         project
@@ -286,13 +283,45 @@ export class ManualGenerationService {
           `[ManualGenerationService] Task ${task.id}: reusing existing generated video URL and continuing from postprocess.`
         );
       } else {
-        console.log(`[ManualGenerationService] Task ${task.id}: starting generation with model=${project.selectedModel}, promptLength=${sanitizedPrompt.length}...`);
-        const generationResult = await VideoGenerationService.generateWithFallback({
-          prompt: sanitizedPrompt,
-          imageUrl: generationReferenceImageUrl,
-          model: project.selectedModel,
-          referenceDurationSeconds: audio.durationSeconds,
-        });
+        const generateVideo = async (candidatePrompt: string) => {
+          const sanitizedPrompt = candidatePrompt.trim().slice(0, 1000);
+          console.log(`[ManualGenerationService] Task ${task.id}: starting generation with model=${project.selectedModel}, promptLength=${sanitizedPrompt.length}...`);
+          return await VideoGenerationService.generateWithFallback({
+            prompt: sanitizedPrompt,
+            imageUrl: generationReferenceImageUrl,
+            model: project.selectedModel,
+            referenceDurationSeconds: audio.durationSeconds,
+          });
+        };
+
+        let generationResult;
+        try {
+          generationResult = await generateVideo(promptText);
+        } catch (error: any) {
+          if (!isPromptModerationError(error)) {
+            throw error;
+          }
+
+          console.warn(
+            `[ManualGenerationService] Task ${task.id}: provider moderation blocked prompt. Rewriting prompt and retrying once...`
+          );
+          const rewrittenPrompt = await GeminiService.rewritePromptForModerationFallback({
+            originalPrompt: promptText,
+            videoAnalysis: analysis,
+            targetModel: project.selectedModel,
+            project,
+            projectReferenceImageUrls,
+          });
+
+          promptText = rewrittenPrompt;
+          await generationTaskStore.updateTask(task.id, {
+            promptText,
+            errorMessage: 'Original prompt was blocked by moderation; regenerated safer prompt.',
+          });
+
+          generationResult = await generateVideo(promptText);
+        }
+
         console.log(
           `[ManualGenerationService] Task ${task.id}: generation completed by ${generationResult.provider} (providerTaskId=${generationResult.providerTaskId})`
         );

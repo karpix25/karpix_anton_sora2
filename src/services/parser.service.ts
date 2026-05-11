@@ -27,6 +27,13 @@ export class ParserService {
     return message.includes('does not exist') || error?.code === '42P01';
   }
 
+  private static isMissingStatsSchemaError(error: any): boolean {
+    const message = String(error?.message || '').toLowerCase();
+    return this.isMissingRelationError(error) ||
+      error?.code === '42703' ||
+      message.includes('column') && message.includes('does not exist');
+  }
+
   private static async getViralVideosFromVideoStats(
     pool: Pool,
     urls: string[],
@@ -151,15 +158,16 @@ export class ParserService {
     try {
       return await this.getViralVideosFromVideoStats(pool, urls, minViews);
     } catch (error: any) {
-      if (this.isMissingRelationError(error)) {
+      if (this.isMissingStatsSchemaError(error)) {
         console.warn('[ParserService] "Video Stats" table is unavailable, falling back to reels_views_history.');
         try {
           return await this.getViralVideosFromLegacyHistory(pool, urls, minViews);
         } catch (legacyError: any) {
-          console.error('[ParserService] Failed to fetch viral videos from legacy history:', legacyError.message);
-          if (this.isMissingRelationError(legacyError)) {
+          if (this.isMissingStatsSchemaError(legacyError)) {
+            console.warn('[ParserService] Legacy views history schema is unavailable. Viral remix will skip stats for now.');
             return [];
           }
+          console.error('[ParserService] Failed to fetch viral videos from legacy history:', legacyError.message);
           throw legacyError;
         }
       }
@@ -176,11 +184,15 @@ export class ParserService {
     try {
       return await this.getViewCountsMapFromVideoStats(pool, urls);
     } catch (error: any) {
-      if (this.isMissingRelationError(error)) {
+      if (this.isMissingStatsSchemaError(error)) {
         console.warn('[ParserService] "Video Stats" table is unavailable, falling back to reels_views_history.');
         try {
           return await this.getViewCountsMapFromLegacyHistory(pool, urls);
         } catch (legacyError: any) {
+          if (this.isMissingStatsSchemaError(legacyError)) {
+            console.warn('[ParserService] Legacy views history schema is unavailable. Returning empty view counts.');
+            return {};
+          }
           console.error('[ParserService] Failed to fetch view counts map from legacy history:', legacyError.message);
           return {};
         }

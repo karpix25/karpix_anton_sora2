@@ -10,6 +10,30 @@ export interface VideoGenerationResult {
   resultVideoUrl: string;
 }
 
+export class PromptModerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PromptModerationError';
+  }
+}
+
+export function isPromptModerationError(error: unknown): error is PromptModerationError {
+  return error instanceof PromptModerationError || isModerationError(error);
+}
+
+function isModerationError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    message.includes('content_moderation_failed') ||
+    message.includes('moderation system') ||
+    message.includes('blocked by moderation') ||
+    message.includes('blocked by our moderation') ||
+    message.includes('flagged categories') ||
+    message.includes('safety filter') ||
+    message.includes('nsfw')
+  );
+}
+
 export class VideoGenerationService {
   public static async generateWithFallback(input: {
     prompt: string;
@@ -71,6 +95,9 @@ export class VideoGenerationService {
         return { provider: 'comet', providerTaskId: taskId, resultVideoUrl: videoPathOrUrl };
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
+        if (isModerationError(error)) {
+          throw new PromptModerationError(`Comet blocked prompt by moderation: ${errorMsg}`);
+        }
         console.warn(`Comet API generation failed, falling back to Kie: ${errorMsg}`);
       }
     }
@@ -92,6 +119,9 @@ export class VideoGenerationService {
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {
       console.error('Kie.ai generation failed:', error instanceof Error ? error.message : error);
+      if (isModerationError(error)) {
+        throw new PromptModerationError(`Kie.ai blocked prompt by moderation: ${error instanceof Error ? error.message : 'Unknown moderation error'}`);
+      }
       throw new Error(`Video generation failed (Kie.ai): ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

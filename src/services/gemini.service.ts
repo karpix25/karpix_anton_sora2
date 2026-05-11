@@ -510,6 +510,104 @@ export class GeminiService {
   }
 
   /**
+   * Rewrites a generation prompt after provider moderation blocks it.
+   * Keeps the reference structure, but removes risky wording and adult/body-focused cues.
+   */
+  public static async rewritePromptForModerationFallback(input: {
+    originalPrompt: string;
+    videoAnalysis: string;
+    targetModel: VideoModel;
+    project?: Project | null;
+    projectReferenceImageUrls?: string[];
+  }): Promise<string> {
+    const {
+      originalPrompt,
+      videoAnalysis,
+      targetModel,
+      project,
+      projectReferenceImageUrls = [],
+    } = input;
+
+    const cleanVideoAnalysis = stripTextOverlaySections(videoAnalysis);
+    const systemInstructions = `
+      You rewrite short product-video prompts after a video provider moderation block.
+
+      Goal:
+      - Keep the same product, scene logic, camera flow, and simple action beats.
+      - Make the prompt safe for strict commercial video moderation.
+
+      Safety rewrite rules:
+      - Remove all sexual, sensual, revealing, intimate, fetish, nude, bedroom, lingerie, body-part-focused, or provocative wording.
+      - For clothing/fashion products, describe fit, fabric, silhouette, styling, movement, and confident everyday presentation. Do not describe exposed skin, curves, chest, hips, seductive poses, or erotic appeal.
+      - For beauty products, describe grooming, clean texture, shine, neat styling, practical use, and satisfied expression. Avoid intimate body language.
+      - Use neutral commercial language: everyday lifestyle, catalog, UGC, fitting-room mirror, street style, office, home routine.
+      - Keep people fully clothed and non-provocative.
+      - Do not include text overlays, subtitles, captions, labels, UI, watermarks, or visible letters/numbers inside the generated video.
+      - Do not mention moderation, safety, policy, blocked content, sexuality, or anything meta in the output.
+
+      Output:
+      - Return only the rewritten final video prompt.
+      - Use 3 to 5 timestamped beats.
+      - Keep it under 900 characters if possible.
+      - Target model: ${targetModel}
+
+      Project:
+      - Name: ${project?.name || 'Not specified'}
+      - Product: ${project?.productName || 'Not specified'}
+      - Description: ${project?.productDescription || 'Not specified'}
+      - Audience: ${project?.targetAudience || 'Not specified'}
+      - Extra rules: ${project?.extraPromptingRules || 'Not specified'}
+
+      Reference analysis:
+      ${cleanVideoAnalysis}
+
+      Blocked prompt to rewrite:
+      ${originalPrompt}
+    `;
+
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string } }
+    > = [
+      {
+        type: 'text',
+        text: 'Rewrite the blocked prompt as a safe, neutral, commercial product video prompt. Preserve the reference action structure and product integration.',
+      },
+    ];
+
+    for (const imageUrl of projectReferenceImageUrls) {
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: imageUrl },
+      });
+    }
+
+    try {
+      const response = await createChatCompletionWithRetry(
+        {
+          model: config.openRouter.models.pro,
+          provider: buildProviderRouting(),
+          messages: [
+            { role: 'system', content: systemInstructions },
+            { role: 'user', content: userContent },
+          ],
+        },
+        'Gemini Moderation Fallback Prompt Rewrite',
+        config.openRouter.models.flash
+      );
+
+      const rewrittenPrompt = response.data.choices[0]?.message?.content?.trim();
+      if (!rewrittenPrompt) {
+        throw new Error('Empty moderation fallback prompt result');
+      }
+      return rewrittenPrompt;
+    } catch (error: any) {
+      console.error('[GeminiService] Moderation fallback prompt rewrite failed:', error.message);
+      throw new Error(`Moderation fallback prompt rewrite failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Rewrites extracted overlay texts into the project's selected language while preserving timing and layout.
    */
   public static async localizeTextOverlays(input: {
