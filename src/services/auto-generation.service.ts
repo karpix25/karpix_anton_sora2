@@ -22,6 +22,25 @@ function toPositiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function getDateKey(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value || '').slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function calculateDailyRemixLimit(dailyLimit: number, remixPercentage: number): number {
+  const normalizedDailyLimit = Math.max(0, Math.floor(dailyLimit));
+  const normalizedPercentage = Math.max(0, Math.min(100, Math.floor(remixPercentage)));
+  if (!normalizedDailyLimit || !normalizedPercentage) {
+    return 0;
+  }
+
+  const calculated = Math.floor((normalizedDailyLimit * normalizedPercentage) / 100);
+  return Math.min(normalizedDailyLimit, Math.max(1, calculated));
+}
+
 export class AutoGenerationService {
   private static interval: NodeJS.Timeout | null = null;
   private static isRunning = false;
@@ -92,10 +111,19 @@ export class AutoGenerationService {
       `[AutoGenerationService] Project ${project.name}: limit not reached (${tasksToday}/${project.dailyGenerationLimit}). Processing auto queue...`
     );
 
-    const shouldRemix = Math.random() * 100 < project.viralReusePercentage;
+    const projectTasks = await generationTaskStore.listProjectTasks(projectId);
+    const remixDailyLimit = calculateDailyRemixLimit(project.dailyGenerationLimit, project.viralReusePercentage);
+    const remixTasksToday = projectTasks.filter((task) =>
+      task.triggerMode === 'auto_remix' &&
+      task.status !== 'failed' &&
+      getDateKey(task.createdAt) === today
+    ).length;
+    const shouldRemix = remixTasksToday < remixDailyLimit;
 
     if (shouldRemix) {
-      console.log(`[AutoGenerationService] Project ${project.name}: Decided to trigger VIRAL REMIX.`);
+      console.log(
+        `[AutoGenerationService] Project ${project.name}: remix quota not reached (${remixTasksToday}/${remixDailyLimit}). Trying VIRAL REMIX.`
+      );
       try {
         await ManualGenerationService.runViralRemix(projectId);
         return;
