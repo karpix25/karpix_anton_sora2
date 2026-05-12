@@ -66,6 +66,7 @@ function renderSummary() {
     ['Проекты', totals.projects || 0],
     ['Референсы', totals.references || 0],
     ['Генерации', totals.generations || 0],
+    ['В очереди', totals.autoQueueRemaining || 0],
     ['Готово', totals.completed || 0],
     ['В работе', totals.processing || 0],
     ['Ошибки', totals.failed || 0],
@@ -114,6 +115,9 @@ function renderHistory() {
         const sourceUrl = event.sourceUrl || event.referenceSourceUrl || '';
         const fullPrompt = isGeneration ? String(event.promptText || '').trim() : '';
         const promptPreview = fullPrompt ? shorten(fullPrompt, 130) : '';
+        const autoProgress = isGeneration && event.autoDailyIndex && event.autoDailyLimit
+          ? `${event.autoDailyIndex}/${event.autoDailyLimit}`
+          : '';
         return `
           <article class="dashboard-row ${escapeHtml(statusClass)}">
             <div class="dashboard-row-main">
@@ -121,6 +125,7 @@ function renderHistory() {
                 <div class="dashboard-title-line">
                   <strong>${escapeHtml(event.title || event.type)}</strong>
                   <span class="dashboard-status">${escapeHtml(event.status || '—')}</span>
+                  ${autoProgress ? `<span class="dashboard-auto-progress">День: ${escapeHtml(autoProgress)}</span>` : ''}
                   ${event.views ? `<span class="views-count">👁 ${Number(event.views).toLocaleString('ru-RU')}</span>` : ''}
                 </div>
                 <p class="dashboard-meta">
@@ -143,6 +148,7 @@ function renderHistory() {
                 <span>Trigger: ${escapeHtml(event.triggerMode || '—')}</span>
                 <span>Model: ${escapeHtml(event.targetModel || '—')}</span>
                 <span>Provider: ${escapeHtml(event.provider || '—')}</span>
+                ${autoProgress ? `<span>Auto limit: ${escapeHtml(autoProgress)}</span>` : ''}
               ` : `
                 <span>Reference: ${escapeHtml(shorten(event.referenceLibraryItemId || '', 12))}</span>
                 <span>Analysis: ${event.hasAnalysis ? 'есть' : 'нет'}</span>

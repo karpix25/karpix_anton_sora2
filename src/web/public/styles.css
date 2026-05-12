@@ -1225,13 +1225,19 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
-.dashboard-status {
+.dashboard-status,
+.dashboard-auto-progress {
   font-size: 12px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 999px;
   background: rgba(76, 54, 39, 0.08);
   color: var(--muted);
+}
+
+.dashboard-auto-progress {
+  background: rgba(178, 103, 55, 0.12);
+  color: var(--accent);
 }
 
 .dashboard-meta,

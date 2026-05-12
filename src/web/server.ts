@@ -13,6 +13,7 @@ import { ManualGenerationService } from '../services/manual-generation.service.j
 import { ParserService } from '../services/parser.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
 import { bot } from '../bot/bot.js';
+import type { GenerationTask } from '../domain/generation-task.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +74,41 @@ function readSecretHeader(req: IncomingMessage): string {
   }
 
   return '';
+}
+
+function getDateKey(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value || '').slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function isAutoGenerationTask(task: GenerationTask): boolean {
+  return task.triggerMode === 'auto' || task.triggerMode === 'auto_remix';
+}
+
+function buildAutoDailyPositionMap(tasks: GenerationTask[], dailyLimit: number): Map<string, number> {
+  const positions = new Map<string, number>();
+  const orderedTasks = [...tasks].sort(
+    (a, b) => Date.parse(a.createdAt || '') - Date.parse(b.createdAt || '')
+  );
+  const countedByDay = new Map<string, number>();
+
+  for (const task of orderedTasks) {
+    const day = getDateKey(task.createdAt);
+    const countedBefore = countedByDay.get(day) || 0;
+
+    if (isAutoGenerationTask(task)) {
+      positions.set(task.id, Math.min(countedBefore + 1, Math.max(1, dailyLimit)));
+    }
+
+    if (task.status !== 'failed') {
+      countedByDay.set(day, countedBefore + 1);
+    }
+  }
+
+  return positions;
 }
 
 async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
@@ -235,6 +271,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const projects = await projectStore.listProjects();
     const projectById = new Map(projects.map((project) => [project.id, project]));
     const events: any[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+    let totalAutoQueueRemaining = 0;
 
     for (const project of projects) {
       const [items, tasks] = await Promise.all([
@@ -243,6 +281,20 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       ]);
 
       const itemById = new Map(items.map((item) => [item.id, item]));
+      const autoDailyPositionByTaskId = buildAutoDailyPositionMap(tasks, project.dailyGenerationLimit);
+      const tasksToday = tasks.filter(
+        (task) => getDateKey(task.createdAt) === today && task.status !== 'failed'
+      ).length;
+      const reusableReferenceCount = items.filter((item) => {
+        if (item.status !== 'analyzed' || !item.analysis) {
+          return false;
+        }
+        return tasks.some((task) => task.referenceLibraryItemId === item.id && task.status === 'completed');
+      }).length;
+      const projectQueueRemaining = project.isActive && project.automationEnabled && project.dailyGenerationLimit > 0 && reusableReferenceCount > 0
+        ? Math.max(0, project.dailyGenerationLimit - tasksToday)
+        : 0;
+      totalAutoQueueRemaining += projectQueueRemaining;
 
       for (const item of items) {
         events.push({
@@ -283,6 +335,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
           triggerMode: task.triggerMode,
           targetModel: task.targetModel,
           provider: task.provider,
+          autoDailyIndex: isAuto ? autoDailyPositionByTaskId.get(task.id) || 0 : 0,
+          autoDailyLimit: isAuto ? project.dailyGenerationLimit : 0,
+          projectQueueRemaining,
           taskId: task.id,
           referenceLibraryItemId: task.referenceLibraryItemId,
           referenceSourceUrl: item?.sourceUrl || '',
@@ -324,6 +379,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         completed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'completed').length,
         failed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'failed').length,
         processing: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'processing').length,
+        autoQueueRemaining: totalAutoQueueRemaining,
       },
     });
     return true;
