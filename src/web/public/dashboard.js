@@ -62,11 +62,12 @@ function shorten(value, maxLength = 90) {
 
 function renderSummary() {
   const totals = state.totals || {};
+  const autoTodayValue = `${totals.autoCompletedToday || 0}/${totals.autoPlannedToday || 0}`;
   const cards = [
     ['Проекты', totals.projects || 0],
     ['Референсы', totals.references || 0],
     ['Генерации', totals.generations || 0],
-    ['В очереди', totals.autoQueueRemaining || 0],
+    ['Авто сегодня', autoTodayValue],
     ['Готово', totals.completed || 0],
     ['В работе', totals.processing || 0],
     ['Ошибки', totals.failed || 0],

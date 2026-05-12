@@ -101,10 +101,10 @@ function buildAutoDailyPositionMap(tasks: GenerationTask[], dailyLimit: number):
 
     if (isAutoGenerationTask(task)) {
       positions.set(task.id, Math.min(countedBefore + 1, Math.max(1, dailyLimit)));
-    }
 
-    if (task.status !== 'failed') {
-      countedByDay.set(day, countedBefore + 1);
+      if (task.status !== 'failed') {
+        countedByDay.set(day, countedBefore + 1);
+      }
     }
   }
 
@@ -272,7 +272,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const projectById = new Map(projects.map((project) => [project.id, project]));
     const events: any[] = [];
     const today = new Date().toISOString().slice(0, 10);
-    let totalAutoQueueRemaining = 0;
+    let autoPlannedToday = 0;
+    let autoCompletedToday = 0;
+    let autoProcessingToday = 0;
+    let autoStartedToday = 0;
 
     for (const project of projects) {
       const [items, tasks] = await Promise.all([
@@ -282,19 +285,28 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
 
       const itemById = new Map(items.map((item) => [item.id, item]));
       const autoDailyPositionByTaskId = buildAutoDailyPositionMap(tasks, project.dailyGenerationLimit);
-      const tasksToday = tasks.filter(
-        (task) => getDateKey(task.createdAt) === today && task.status !== 'failed'
-      ).length;
+      const autoTasksToday = tasks.filter(
+        (task) => isAutoGenerationTask(task) && getDateKey(task.createdAt) === today
+      );
+      const autoStartedForProjectToday = autoTasksToday.filter((task) => task.status !== 'failed').length;
+      const autoCompletedForProjectToday = autoTasksToday.filter((task) => task.status === 'completed').length;
+      const autoProcessingForProjectToday = autoTasksToday.filter((task) => task.status === 'processing' || task.status === 'pending').length;
       const reusableReferenceCount = items.filter((item) => {
         if (item.status !== 'analyzed' || !item.analysis) {
           return false;
         }
         return tasks.some((task) => task.referenceLibraryItemId === item.id && task.status === 'completed');
       }).length;
-      const projectQueueRemaining = project.isActive && project.automationEnabled && project.dailyGenerationLimit > 0 && reusableReferenceCount > 0
-        ? Math.max(0, project.dailyGenerationLimit - tasksToday)
+      const projectAutoPlannedToday = project.isActive && project.automationEnabled && project.dailyGenerationLimit > 0 && reusableReferenceCount > 0
+        ? project.dailyGenerationLimit
         : 0;
-      totalAutoQueueRemaining += projectQueueRemaining;
+      const projectQueueRemaining = projectAutoPlannedToday > 0
+        ? Math.max(0, projectAutoPlannedToday - autoStartedForProjectToday)
+        : 0;
+      autoPlannedToday += projectAutoPlannedToday;
+      autoCompletedToday += autoCompletedForProjectToday;
+      autoProcessingToday += autoProcessingForProjectToday;
+      autoStartedToday += autoStartedForProjectToday;
 
       for (const item of items) {
         events.push({
@@ -379,7 +391,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         completed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'completed').length,
         failed: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'failed').length,
         processing: hydratedEvents.filter((event) => event.type === 'generation' && event.status === 'processing').length,
-        autoQueueRemaining: totalAutoQueueRemaining,
+        autoPlannedToday,
+        autoCompletedToday,
+        autoProcessingToday,
+        autoStartedToday,
+        autoRemainingToday: Math.max(0, autoPlannedToday - autoStartedToday),
       },
     });
     return true;
