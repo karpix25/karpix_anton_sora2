@@ -1,5 +1,6 @@
 import { bot } from '../bot/bot.js';
 import { config } from '../config.js';
+import { projectStore } from '../storage/project-store.js';
 
 export class AdminNotifierService {
   private static getTrackingTokenFromDiskPath(diskPath: string): string {
@@ -109,6 +110,15 @@ export class AdminNotifierService {
   public static async sendVideoToProject(project: any, task: any): Promise<void> {
     if (!project.telegramChatId || !project.telegramTopicId) {
       console.warn(`[AdminNotifierService] Project ${project.id} not bound to Telegram. Notification skipped.`);
+      return;
+    }
+
+    const bindingOwner = await projectStore.findProjectByTelegramBinding(project.telegramChatId, project.telegramTopicId);
+    if (!bindingOwner || bindingOwner.id !== project.id) {
+      console.error(
+        `[AdminNotifierService] Telegram binding mismatch for project ${project.id} (${project.name || 'unnamed'}). ` +
+        `chat=${project.telegramChatId}, topic=${project.telegramTopicId}. Notification skipped to avoid cross-project posting.`
+      );
       return;
     }
 

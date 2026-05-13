@@ -89,7 +89,26 @@ async function getBoundProject(ctx: Context) {
   return projectStore.findProjectByTelegramBinding(String(ctx.chat.id), getMessageThreadId(ctx));
 }
 
-function getReplyParams(ctx: Context): { reply_parameters?: { message_id: number } } {
+type TelegramThreadReplyParams = {
+  message_thread_id?: number;
+  reply_parameters?: { message_id: number };
+};
+
+function getThreadReplyParams(ctx: Context): TelegramThreadReplyParams {
+  const params: TelegramThreadReplyParams = {};
+  const threadId = getMessageThreadId(ctx);
+  if (threadId !== 'main') {
+    const numericThreadId = Number(threadId);
+    if (Number.isFinite(numericThreadId)) {
+      params.message_thread_id = numericThreadId;
+    }
+  }
+
+  return params;
+}
+
+function getReplyParams(ctx: Context): TelegramThreadReplyParams {
+  const params = getThreadReplyParams(ctx);
   const message = 'message' in ctx ? (ctx.message as any) : undefined;
   const callbackMessage = getCallbackQueryMessage(ctx);
   const messageId =
@@ -97,9 +116,9 @@ function getReplyParams(ctx: Context): { reply_parameters?: { message_id: number
       ? message.message_id
       : callbackMessage?.message_id;
   if (typeof messageId === 'number') {
-    return { reply_parameters: { message_id: messageId } };
+    params.reply_parameters = { message_id: messageId };
   }
-  return {};
+  return params;
 }
 
 function getRepeatGenerationCallbackData(taskId: string): string {
@@ -134,7 +153,7 @@ async function sendGenerationResultVideo(
     generationProvider: string;
     referenceUrl: string;
     trackingToken?: string;
-    replyParams?: { reply_parameters?: { message_id: number } };
+    replyParams?: TelegramThreadReplyParams;
   }
 ): Promise<void> {
   const trackingLine = input.trackingToken ? `\n🏷 Тег: #${input.trackingToken}` : '';

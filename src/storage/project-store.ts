@@ -458,10 +458,18 @@ export const projectStore = {
         SELECT *
         FROM projects
         WHERE telegram_chat_id = $1 AND telegram_topic_id = $2
-        LIMIT 1
+        ORDER BY updated_at DESC, created_at DESC, id DESC
+        LIMIT 2
       `,
       [normalizeString(telegramChatId), normalizeString(telegramTopicId)]
     );
+
+    if (result.rows.length > 1) {
+      console.error(
+        `[ProjectStore] Duplicate Telegram binding detected for chat=${normalizeString(telegramChatId)}, topic=${normalizeString(telegramTopicId)}. Refusing to pick an arbitrary project.`
+      );
+      return null;
+    }
 
     return result.rows[0] ? mapRowToProject(result.rows[0]) : null;
   },
@@ -479,7 +487,15 @@ export const projectStore = {
       return null;
     }
 
-    const nextProject = sanitizeProjectInput(input, existing);
+    const nextProject = sanitizeProjectInput(
+      {
+        ...input,
+        telegramChatId: existing.telegramChatId,
+        telegramTopicId: existing.telegramTopicId,
+        telegramTopicName: existing.telegramTopicName,
+      },
+      existing
+    );
     return upsertProject(nextProject);
   },
 

@@ -193,6 +193,25 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM projects
+        WHERE telegram_chat_id <> '' AND telegram_topic_id <> ''
+        GROUP BY telegram_chat_id, telegram_topic_id
+        HAVING COUNT(*) > 1
+      ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_telegram_binding_unique
+          ON projects(telegram_chat_id, telegram_topic_id)
+          WHERE telegram_chat_id <> '' AND telegram_topic_id <> '';
+      ELSE
+        RAISE WARNING 'Duplicate Telegram project bindings found. Unique binding index was not created.';
+      END IF;
+    END $$;
+  `);
+
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_reference_library_project_created
       ON reference_library(project_id, created_at DESC);
   `);
