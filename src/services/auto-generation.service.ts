@@ -107,6 +107,21 @@ export class AutoGenerationService {
       return;
     }
 
+    const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
+    if (packageLimit) {
+      const packageUsage = await generationTaskStore.getPackageUsage(projectId);
+      if (packageUsage.billableTotal >= packageLimit) {
+        await projectStore.updateProject(projectId, {
+          automationEnabled: false,
+          isActive: false,
+        });
+        console.log(
+          `[AutoGenerationService] Project ${project.name}: package limit reached (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}). Project paused.`
+        );
+        return;
+      }
+    }
+
     console.log(
       `[AutoGenerationService] Project ${project.name}: limit not reached (${tasksToday}/${project.dailyGenerationLimit}). Processing auto queue...`
     );
@@ -171,6 +186,21 @@ export class AutoGenerationService {
         return;
       }
 
+      const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
+      if (packageLimit) {
+        const packageUsage = await generationTaskStore.getPackageUsage(projectId);
+        if (packageUsage.billableTotal >= packageLimit) {
+          await projectStore.updateProject(projectId, {
+            automationEnabled: false,
+            isActive: false,
+          });
+          console.log(
+            `[AutoGenerationService] Project ${project.name}: package limit reached (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}). Queue paused.`
+          );
+          return;
+        }
+      }
+
       if (attemptsThisTick >= maxAttemptsThisTick) {
         console.log(
           `[AutoGenerationService] Project ${project.name}: attempt limit reached for this tick (${attemptsThisTick}/${maxAttemptsThisTick}). Queue will continue on the next tick.`
@@ -205,6 +235,10 @@ export class AutoGenerationService {
           `[AutoGenerationService] Project ${project.name}: failed to auto-generate library item ${item.id}:`,
           err.message
         );
+
+        if (String(err?.message || '').includes('Project package limit reached')) {
+          return;
+        }
 
         if (isPromptModerationError(err)) {
           console.warn(

@@ -15,8 +15,10 @@ const defaultProject = () => ({
   mode: 'manual',
   automationEnabled: false,
   dailyGenerationLimit: 1,
+  packageVideoLimit: 0,
   viralReusePercentage: 0,
   minViewsToReuse: 1000,
+  maxViralAgeDays: 0,
   yandexDiskFolder: '',
   selectedModel: 'sora-2',
   isActive: true,
@@ -101,12 +103,14 @@ const elements = {
     projectLanguage: document.getElementById('projectLanguage'),
     automationEnabled: document.getElementById('automationEnabled'),
     dailyGenerationLimit: document.getElementById('dailyGenerationLimit'),
+    packageVideoLimit: document.getElementById('packageVideoLimit'),
     yandexDiskFolder: document.getElementById('yandexDiskFolder'),
     selectedModel: document.getElementById('selectedModel'),
     isActive: document.getElementById('isActive'),
     viralReusePercentage: document.getElementById('viralReusePercentage'),
     viralReusePercentageLabel: document.getElementById('viralReusePercentageLabel'),
     minViewsToReuse: document.getElementById('minViewsToReuse'),
+    maxViralAgeDays: document.getElementById('maxViralAgeDays'),
     textStyle: {
       fontFamily: document.getElementById('textStyle-fontFamily'),
       fontSize: document.getElementById('textStyle-fontSize'),
@@ -410,11 +414,13 @@ function snapshotFromForm() {
     mode: automationEnabled ? 'auto' : 'manual',
     automationEnabled,
     dailyGenerationLimit: Number(elements.fields.dailyGenerationLimit.value || 0),
+    packageVideoLimit: Number(elements.fields.packageVideoLimit.value || 0),
     yandexDiskFolder: elements.fields.yandexDiskFolder.value.trim(),
     selectedModel: elements.fields.selectedModel.value,
     isActive: elements.fields.isActive.checked,
     viralReusePercentage: Number(elements.fields.viralReusePercentage.value || 0),
     minViewsToReuse: Number(elements.fields.minViewsToReuse.value || 1000),
+    maxViralAgeDays: Number(elements.fields.maxViralAgeDays.value || 0),
     textStyle: {
       fontFamily: elements.fields.textStyle.fontFamily.value,
       fontSize: Number(elements.fields.textStyle.fontSize.value),
@@ -689,9 +695,15 @@ function renderProjectList() {
   elements.projectList.innerHTML = state.projects
     .map((project) => {
       const activeClass = project.id === state.currentProject.id ? 'active' : '';
+      const packageLimit = Number(project.packageVideoLimit || 0);
+      const packageUsage = project.packageUsage || {};
+      const packageText = packageLimit
+        ? `пакет ${Number(packageUsage.billableTotal || 0)}/${packageLimit}`
+        : 'пакет без лимита';
       const subtitle = [
         project.projectLanguage === 'en' ? 'EN' : 'RU',
         project.automationEnabled ? 'автоматизация включена' : 'автоматизация выключена',
+        packageText,
       ]
         .filter(Boolean)
         .join(' · ');
@@ -744,12 +756,14 @@ function applyProjectToForm(project) {
   elements.fields.projectLanguage.value = state.currentProject.projectLanguage === 'en' ? 'en' : 'ru';
   elements.fields.automationEnabled.checked = Boolean(state.currentProject.automationEnabled);
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
+  elements.fields.packageVideoLimit.value = String(state.currentProject.packageVideoLimit ?? 0);
   renderYandexFolderOptions(state.currentProject.yandexDiskFolder || '');
   elements.fields.selectedModel.value = state.currentProject.selectedModel || 'sora-2';
   elements.fields.isActive.checked = state.currentProject.isActive !== false;
   elements.fields.viralReusePercentage.value = String(state.currentProject.viralReusePercentage ?? 0);
   elements.fields.viralReusePercentageLabel.textContent = `${state.currentProject.viralReusePercentage ?? 0}%`;
   elements.fields.minViewsToReuse.value = String(state.currentProject.minViewsToReuse ?? 1000);
+  elements.fields.maxViralAgeDays.value = String(state.currentProject.maxViralAgeDays ?? 0);
 
   const style = {
     ...defaultProject().textStyle,

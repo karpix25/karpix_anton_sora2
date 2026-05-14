@@ -63,6 +63,7 @@ export async function initDatabase(): Promise<void> {
       mode TEXT NOT NULL DEFAULT 'manual',
       automation_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       daily_generation_limit INTEGER NOT NULL DEFAULT 1,
+      package_video_limit INTEGER NOT NULL DEFAULT 0,
       selected_model TEXT NOT NULL DEFAULT 'sora-2',
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       primary_reference_image_id TEXT NOT NULL DEFAULT '',
@@ -92,8 +93,10 @@ export async function initDatabase(): Promise<void> {
   
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS viral_reuse_percentage INTEGER DEFAULT 0`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS min_views_to_reuse INTEGER DEFAULT 1000`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS max_viral_age_days INTEGER DEFAULT 0`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS yandex_disk_folder TEXT NOT NULL DEFAULT ''`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_language TEXT NOT NULL DEFAULT 'ru'`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS package_video_limit INTEGER NOT NULL DEFAULT 0`);
   
   // Disable outline by default in all existing projects as requested (One-time, commented out for stability)
   // await db.query(`UPDATE projects SET text_style = text_style || '{"outlineEnabled": false}'::jsonb`);

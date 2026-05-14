@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'fs-extra';
-import type { ProjectInput } from '../domain/project.js';
+import type { Project, ProjectInput } from '../domain/project.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
@@ -82,6 +82,26 @@ function getDateKey(value: string): string {
     return String(value || '').slice(0, 10);
   }
   return date.toISOString().slice(0, 10);
+}
+
+async function enrichProjectWithUsage(project: Project): Promise<Project & {
+  packageUsage: {
+    completed: number;
+    reserved: number;
+    billableTotal: number;
+    remaining: number;
+  };
+}> {
+  const usage = await generationTaskStore.getPackageUsage(project.id);
+  const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
+
+  return {
+    ...project,
+    packageUsage: {
+      ...usage,
+      remaining: packageLimit ? Math.max(0, packageLimit - usage.billableTotal) : 0,
+    },
+  };
 }
 
 function isAutoGenerationTask(task: GenerationTask): boolean {
@@ -276,6 +296,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     let autoCompletedToday = 0;
     let autoProcessingToday = 0;
     let autoStartedToday = 0;
+    let packageLimitTotal = 0;
+    let packageCompletedTotal = 0;
+    let packageReservedTotal = 0;
 
     for (const project of projects) {
       const [items, tasks] = await Promise.all([
@@ -297,8 +320,19 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         }
         return tasks.some((task) => task.referenceLibraryItemId === item.id && task.status === 'completed');
       }).length;
-      const projectAutoPlannedToday = project.isActive && project.automationEnabled && project.dailyGenerationLimit > 0 && reusableReferenceCount > 0
-        ? project.dailyGenerationLimit
+      const packageUsage = await generationTaskStore.getPackageUsage(project.id);
+      const packageLimit = Math.max(0, project.packageVideoLimit || 0);
+      const packageRemaining = packageLimit ? Math.max(0, packageLimit - packageUsage.billableTotal) : 0;
+      if (packageLimit) {
+        packageLimitTotal += packageLimit;
+        packageCompletedTotal += packageUsage.completed;
+        packageReservedTotal += packageUsage.reserved;
+      }
+      const packageDailyCap = packageLimit
+        ? Math.min(project.dailyGenerationLimit, packageRemaining + autoStartedForProjectToday)
+        : project.dailyGenerationLimit;
+      const projectAutoPlannedToday = project.isActive && project.automationEnabled && packageDailyCap > 0 && reusableReferenceCount > 0
+        ? packageDailyCap
         : 0;
       const projectQueueRemaining = projectAutoPlannedToday > 0
         ? Math.max(0, projectAutoPlannedToday - autoStartedForProjectToday)
@@ -316,6 +350,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
           projectId: project.id,
           projectName: project.name,
           projectCode: project.projectCode,
+          projectPackageLimit: packageLimit,
+          projectPackageCompleted: packageUsage.completed,
+          projectPackageReserved: packageUsage.reserved,
+          projectPackageBillableTotal: packageUsage.billableTotal,
+          projectPackageRemaining: packageRemaining,
           title: 'Входящий референс',
           status: item.status,
           referenceLibraryItemId: item.id,
@@ -342,13 +381,18 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
           projectId: task.projectId,
           projectName: projectById.get(task.projectId)?.name || project.name,
           projectCode: projectById.get(task.projectId)?.projectCode || project.projectCode,
+          projectPackageLimit: packageLimit,
+          projectPackageCompleted: packageUsage.completed,
+          projectPackageReserved: packageUsage.reserved,
+          projectPackageBillableTotal: packageUsage.billableTotal,
+          projectPackageRemaining: packageRemaining,
           title: isRemix ? 'Ремикс' : isAuto ? 'Автогенерация' : 'Ручная генерация',
           status: task.status,
           triggerMode: task.triggerMode,
           targetModel: task.targetModel,
           provider: task.provider,
           autoDailyIndex: isAuto ? autoDailyPositionByTaskId.get(task.id) || 0 : 0,
-          autoDailyLimit: isAuto ? project.dailyGenerationLimit : 0,
+          autoDailyLimit: isAuto ? packageDailyCap : 0,
           projectQueueRemaining,
           taskId: task.id,
           referenceLibraryItemId: task.referenceLibraryItemId,
@@ -396,6 +440,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         autoProcessingToday,
         autoStartedToday,
         autoRemainingToday: Math.max(0, autoPlannedToday - autoStartedToday),
+        packageLimitTotal,
+        packageCompletedTotal,
+        packageReservedTotal,
+        packageBillableTotal: packageCompletedTotal + packageReservedTotal,
+        packageRemainingTotal: packageLimitTotal ? Math.max(0, packageLimitTotal - packageCompletedTotal - packageReservedTotal) : 0,
       },
     });
     return true;
@@ -430,7 +479,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   }
 
   if (pathname === '/api/projects' && req.method === 'GET') {
-    const projects = await projectStore.listProjects();
+    const projects = await Promise.all((await projectStore.listProjects()).map((project) => enrichProjectWithUsage(project)));
     sendJson(res, 200, { projects });
     return true;
   }
@@ -438,7 +487,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   if (pathname === '/api/projects' && req.method === 'POST') {
     const payload = await readJsonBody<ProjectInput>(req);
     const project = await projectStore.createProject(payload);
-    sendJson(res, 201, { project });
+    sendJson(res, 201, { project: await enrichProjectWithUsage(project) });
     return true;
   }
 
@@ -663,7 +712,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     }
 
     sendJson(res, 200, {
-      project: updatedProject,
+      project: await enrichProjectWithUsage(updatedProject),
       primaryImage: projectStore.getPrimaryReferenceImage(updatedProject.referenceImages),
     });
     return true;
@@ -686,7 +735,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     }
 
     sendJson(res, 200, {
-      project: result.project,
+      project: result.project ? await enrichProjectWithUsage(result.project) : result.project,
       removedImage: result.removedImage,
     });
     return true;
@@ -708,7 +757,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return true;
     }
 
-    sendJson(res, 200, { project });
+    sendJson(res, 200, { project: await enrichProjectWithUsage(project) });
     return true;
   }
 
@@ -718,13 +767,17 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     projectLibraryGenerationRoute.itemId &&
     req.method === 'POST'
   ) {
-    const task = await ManualGenerationService.runFromLibraryItem({
-      projectId: projectLibraryGenerationRoute.projectId,
-      referenceLibraryItemId: projectLibraryGenerationRoute.itemId,
-      triggerMode: 'web_manual',
-    });
+    try {
+      const task = await ManualGenerationService.runFromLibraryItem({
+        projectId: projectLibraryGenerationRoute.projectId,
+        referenceLibraryItemId: projectLibraryGenerationRoute.itemId,
+        triggerMode: 'web_manual',
+      });
 
-    sendJson(res, 200, { task });
+      sendJson(res, 200, { task });
+    } catch (error: any) {
+      sendJson(res, 400, { error: error.message });
+    }
     return true;
   }
 
@@ -751,7 +804,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return true;
     }
 
-    sendJson(res, 200, { project });
+    sendJson(res, 200, { project: await enrichProjectWithUsage(project) });
     return true;
   }
 
@@ -763,7 +816,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return true;
     }
 
-    sendJson(res, 200, { project });
+    sendJson(res, 200, { project: await enrichProjectWithUsage(project) });
     return true;
   }
 

@@ -59,6 +59,51 @@ function isTooShortGeneratedVideoError(error: unknown): boolean {
 }
 
 export class ManualGenerationService {
+  private static getPackageVideoLimit(project: Project): number {
+    return Math.max(0, Math.floor(project.packageVideoLimit || 0));
+  }
+
+  private static async assertPackageCapacity(project: Project): Promise<void> {
+    const packageLimit = this.getPackageVideoLimit(project);
+    if (!packageLimit) {
+      return;
+    }
+
+    const usage = await generationTaskStore.getPackageUsage(project.id);
+    if (usage.billableTotal < packageLimit) {
+      return;
+    }
+
+    await projectStore.updateProject(project.id, {
+      automationEnabled: false,
+      isActive: false,
+    });
+
+    throw new Error(
+      `Project package limit reached: ${usage.completed}/${packageLimit} completed, ${usage.reserved} in progress/reserved. Project was paused.`
+    );
+  }
+
+  private static async pauseProjectIfPackageExhausted(project: Project): Promise<void> {
+    const packageLimit = this.getPackageVideoLimit(project);
+    if (!packageLimit) {
+      return;
+    }
+
+    const usage = await generationTaskStore.getPackageUsage(project.id);
+    if (usage.billableTotal < packageLimit) {
+      return;
+    }
+
+    await projectStore.updateProject(project.id, {
+      automationEnabled: false,
+      isActive: false,
+    });
+    console.log(
+      `[ManualGenerationService] Project ${project.name}: package exhausted (${usage.completed}/${packageLimit}, reserved=${usage.reserved}). Project paused.`
+    );
+  }
+
   public static async runFromLibraryItem(input: {
     projectId: string;
     referenceLibraryItemId: string;
@@ -76,6 +121,8 @@ export class ManualGenerationService {
     if (!libraryItem || libraryItem.projectId !== project.id) {
       throw new Error('Reference library item not found for this project');
     }
+
+    await this.assertPackageCapacity(project);
 
     const task = await generationTaskStore.createTask({
       projectId: project.id,
@@ -455,6 +502,7 @@ export class ManualGenerationService {
         throw new Error(`Task disappeared while completing: ${task.id}`);
       }
       console.log(`[ManualGenerationService] Task ${task.id}: completed successfully.`);
+      await this.pauseProjectIfPackageExhausted(project);
       return completedTask;
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -501,10 +549,12 @@ export class ManualGenerationService {
 
     // 2. Fetch real-time view counts from Parser DB
     const urls = tasks.map(t => t.publicationUrl).filter((u): u is string => !!u);
-    const viralVideos = await ParserService.getViralVideos(urls, project.minViewsToReuse || 1000);
+    const maxAgeDays = Math.max(0, Math.floor(project.maxViralAgeDays || 0));
+    const viralVideos = await ParserService.getViralVideos(urls, project.minViewsToReuse || 1000, maxAgeDays);
     
     if (!viralVideos.length) {
-      throw new Error(`No viral videos found with >= ${project.minViewsToReuse} views`);
+      const ageText = maxAgeDays ? ` in the last ${maxAgeDays} days` : '';
+      throw new Error(`No viral videos found with >= ${project.minViewsToReuse} views${ageText}`);
     }
 
     // 3. Pick a random viral video from the successes
@@ -533,6 +583,7 @@ export class ManualGenerationService {
     if (!libraryItem) throw new Error('Original library item not found for viral task');
     const storedVideoUrl = getStoredTaskVideoUrl(originalTask);
     if (!storedVideoUrl) throw new Error('Original viral task has no stored video URL');
+    await this.assertPackageCapacity(project);
 
     // 4. Pick a NEW random audio from the project library
     const allLibraryItems = await referenceLibraryStore.listProjectItems(project.id);

@@ -54,6 +54,7 @@ export interface Project {
   mode: ProjectMode;
   automationEnabled: boolean;
   dailyGenerationLimit: number;
+  packageVideoLimit: number;
   selectedModel: VideoModel;
   isActive: boolean;
   primaryReferenceImageId: string;
@@ -65,6 +66,7 @@ export interface Project {
   endFrameXPercent: number;
   viralReusePercentage: number;
   minViewsToReuse: number;
+  maxViralAgeDays: number;
   yandexDiskFolder: string;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +87,7 @@ export interface ProjectInput {
   mode?: ProjectMode;
   automationEnabled?: boolean;
   dailyGenerationLimit?: number;
+  packageVideoLimit?: number;
   selectedModel?: VideoModel;
   isActive?: boolean;
   primaryReferenceImageId?: string;
@@ -96,5 +99,6 @@ export interface ProjectInput {
   endFrameXPercent?: number;
   viralReusePercentage?: number;
   minViewsToReuse?: number;
+  maxViralAgeDays?: number;
   yandexDiskFolder?: string;
 }

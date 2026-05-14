@@ -46,6 +46,7 @@ interface ProjectRow {
   mode: string;
   automation_enabled: boolean;
   daily_generation_limit: number;
+  package_video_limit: number;
   selected_model: string;
   is_active: boolean;
   primary_reference_image_id: string;
@@ -57,6 +58,7 @@ interface ProjectRow {
   end_frame_x_percent: number;
   viral_reuse_percentage: number;
   min_views_to_reuse: number;
+  max_viral_age_days: number;
   yandex_disk_folder: string;
   created_at: string;
   updated_at: Date | string;
@@ -282,6 +284,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     mode: mode === 'auto' ? 'auto' : 'manual',
     automationEnabled: normalizeBoolean(input.automationEnabled, existing?.automationEnabled ?? false),
     dailyGenerationLimit: normalizeNumber(input.dailyGenerationLimit, existing?.dailyGenerationLimit ?? 1),
+    packageVideoLimit: normalizeNumber(input.packageVideoLimit, existing?.packageVideoLimit ?? 0),
     selectedModel: (selectedModel === 'veo-3-1' || selectedModel === 'grok-imagine' || selectedModel === 'seedance-2') ? selectedModel : 'sora-2',
     isActive: normalizeBoolean(input.isActive, existing?.isActive ?? true),
     primaryReferenceImageId: resolvedPrimaryReferenceImageId,
@@ -293,6 +296,7 @@ function sanitizeProjectInput(input: ProjectInput, existing?: Project): Project 
     endFrameXPercent: normalizeNumber(input.endFrameXPercent ?? existing?.endFrameXPercent, 50),
     viralReusePercentage: normalizeNumber(input.viralReusePercentage ?? existing?.viralReusePercentage, 0),
     minViewsToReuse: normalizeNumber(input.minViewsToReuse ?? existing?.minViewsToReuse, 1000),
+    maxViralAgeDays: normalizeNumber(input.maxViralAgeDays ?? existing?.maxViralAgeDays, 0),
     yandexDiskFolder: normalizeYandexDiskFolder(input.yandexDiskFolder ?? existing?.yandexDiskFolder),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
@@ -317,6 +321,7 @@ function mapRowToProject(row: ProjectRow): Project {
     mode: row.mode === 'auto' ? 'auto' : 'manual',
     automationEnabled: Boolean(row.automation_enabled),
     dailyGenerationLimit: normalizeNumber(row.daily_generation_limit, 1),
+    packageVideoLimit: normalizeNumber(row.package_video_limit, 0),
     selectedModel: (row.selected_model === 'veo-3-1' || row.selected_model === 'grok-imagine' || row.selected_model === 'seedance-2') ? row.selected_model : 'sora-2',
     isActive: Boolean(row.is_active),
     primaryReferenceImageId: normalizeString(row.primary_reference_image_id),
@@ -328,6 +333,7 @@ function mapRowToProject(row: ProjectRow): Project {
     endFrameXPercent: row.end_frame_x_percent,
     viralReusePercentage: row.viral_reuse_percentage,
     minViewsToReuse: row.min_views_to_reuse,
+    maxViralAgeDays: normalizeNumber(row.max_viral_age_days, 0),
     yandexDiskFolder: normalizeYandexDiskFolder(row.yandex_disk_folder),
     createdAt: row.created_at,
     updatedAt: toIsoString(row.updated_at),
@@ -360,16 +366,16 @@ async function upsertProject(project: Project): Promise<Project> {
     INSERT INTO projects (
       id, project_code, name, telegram_chat_id, telegram_topic_id, telegram_topic_name,
       product_name, product_description, extra_prompting_rules, target_audience, cta, project_language,
-      mode, automation_enabled, daily_generation_limit, selected_model, is_active,
+      mode, automation_enabled, daily_generation_limit, package_video_limit, selected_model, is_active,
       primary_reference_image_id, reference_images, text_style,
       end_frame_text, end_frame_vertical_margin, end_frame_width_percent, end_frame_x_percent,
-      viral_reuse_percentage, min_views_to_reuse, yandex_disk_folder,
+      viral_reuse_percentage, min_views_to_reuse, max_viral_age_days, yandex_disk_folder,
       created_at, updated_at
     )
     VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-      $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb,
-      $21, $22, $23, $24, $25, $26, $27, $28::timestamptz, $29::timestamptz
+      $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb,
+      $22, $23, $24, $25, $26, $27, $28, $29, $30::timestamptz, $31::timestamptz
     )
     ON CONFLICT (id) DO UPDATE SET
       project_code = EXCLUDED.project_code,
@@ -386,6 +392,7 @@ async function upsertProject(project: Project): Promise<Project> {
       mode = EXCLUDED.mode,
       automation_enabled = EXCLUDED.automation_enabled,
       daily_generation_limit = EXCLUDED.daily_generation_limit,
+      package_video_limit = EXCLUDED.package_video_limit,
       selected_model = EXCLUDED.selected_model,
       is_active = EXCLUDED.is_active,
       primary_reference_image_id = EXCLUDED.primary_reference_image_id,
@@ -397,6 +404,7 @@ async function upsertProject(project: Project): Promise<Project> {
       end_frame_x_percent = EXCLUDED.end_frame_x_percent,
       viral_reuse_percentage = EXCLUDED.viral_reuse_percentage,
       min_views_to_reuse = EXCLUDED.min_views_to_reuse,
+      max_viral_age_days = EXCLUDED.max_viral_age_days,
       yandex_disk_folder = EXCLUDED.yandex_disk_folder,
       updated_at = EXCLUDED.updated_at
     RETURNING *
@@ -418,6 +426,7 @@ async function upsertProject(project: Project): Promise<Project> {
     project.mode,
     project.automationEnabled,
     project.dailyGenerationLimit,
+    project.packageVideoLimit,
     project.selectedModel,
     project.isActive,
     project.primaryReferenceImageId,
@@ -429,6 +438,7 @@ async function upsertProject(project: Project): Promise<Project> {
     project.endFrameXPercent ?? 50,
     project.viralReusePercentage ?? 0,
     project.minViewsToReuse ?? 1000,
+    project.maxViralAgeDays ?? 0,
     project.yandexDiskFolder || '',
     project.createdAt,
     project.updatedAt,

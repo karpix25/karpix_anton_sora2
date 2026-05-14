@@ -436,6 +436,40 @@ export const generationTaskStore = {
     }
   },
 
+  async getPackageUsage(projectId: string): Promise<{
+    completed: number;
+    reserved: number;
+    billableTotal: number;
+  }> {
+    const result = await query<{ status: string; count: string }>(
+      `
+        SELECT status, COUNT(*) AS count
+        FROM generation_tasks
+        WHERE project_id = $1
+          AND status IN ('pending', 'processing', 'completed')
+        GROUP BY status
+      `,
+      [normalizeString(projectId)]
+    );
+
+    let completed = 0;
+    let reserved = 0;
+    for (const row of result.rows) {
+      const count = parseInt(row.count || '0', 10) || 0;
+      if (row.status === 'completed') {
+        completed += count;
+      } else {
+        reserved += count;
+      }
+    }
+
+    return {
+      completed,
+      reserved,
+      billableTotal: completed + reserved,
+    };
+  },
+
   async deleteProjectTasks(projectId: string): Promise<void> {
     await query('DELETE FROM generation_tasks WHERE project_id = $1', [normalizeString(projectId)]);
   },

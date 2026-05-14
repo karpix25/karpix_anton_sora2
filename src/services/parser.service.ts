@@ -37,7 +37,8 @@ export class ParserService {
   private static async getViralVideosFromVideoStats(
     pool: Pool,
     urls: string[],
-    minViews: number
+    minViews: number,
+    maxAgeDays = 0
   ): Promise<ViralVideoInfo[]> {
     const result = await pool.query<{ url: string; views: number }>(
       `
@@ -51,12 +52,13 @@ export class ParserService {
           ) AS rn
         FROM video_stats
         WHERE video_url = ANY($1)
+          AND ($3::integer <= 0 OR publish_date >= CURRENT_DATE - make_interval(days => $3::integer))
       )
       SELECT url, views
       FROM latest_stats
       WHERE rn = 1 AND views >= $2
       `,
-      [urls, minViews]
+      [urls, minViews, Math.max(0, Math.floor(maxAgeDays || 0))]
     );
 
     return result.rows;
@@ -96,7 +98,8 @@ export class ParserService {
   private static async getViralVideosFromLegacyHistory(
     pool: Pool,
     urls: string[],
-    minViews: number
+    minViews: number,
+    maxAgeDays = 0
   ): Promise<ViralVideoInfo[]> {
     const result = await pool.query<{ url: string; views: number }>(
       `
@@ -107,12 +110,13 @@ export class ParserService {
           ROW_NUMBER() OVER (PARTITION BY reel_url ORDER BY created_at DESC) as rn
         FROM reels_views_history
         WHERE reel_url = ANY($1)
+          AND ($3::integer <= 0 OR created_at >= NOW() - make_interval(days => $3::integer))
       )
       SELECT url, views
       FROM latest_stats
       WHERE rn = 1 AND views >= $2
       `,
-      [urls, minViews]
+      [urls, minViews, Math.max(0, Math.floor(maxAgeDays || 0))]
     );
 
     return result.rows;
@@ -151,17 +155,17 @@ export class ParserService {
    * Primary source: "Video Stats" table, matching by "Video URL".
    * Legacy fallback: reels_views_history.reel_url.
    */
-  public static async getViralVideos(urls: string[], minViews: number): Promise<ViralVideoInfo[]> {
+  public static async getViralVideos(urls: string[], minViews: number, maxAgeDays = 0): Promise<ViralVideoInfo[]> {
     if (!urls.length) return [];
 
     const pool = this.getPool();
     try {
-      return await this.getViralVideosFromVideoStats(pool, urls, minViews);
+      return await this.getViralVideosFromVideoStats(pool, urls, minViews, maxAgeDays);
     } catch (error: any) {
       if (this.isMissingStatsSchemaError(error)) {
         console.warn('[ParserService] "Video Stats" table is unavailable, falling back to reels_views_history.');
         try {
-          return await this.getViralVideosFromLegacyHistory(pool, urls, minViews);
+          return await this.getViralVideosFromLegacyHistory(pool, urls, minViews, maxAgeDays);
         } catch (legacyError: any) {
           if (this.isMissingStatsSchemaError(legacyError)) {
             console.warn('[ParserService] Legacy views history schema is unavailable. Viral remix will skip stats for now.');
