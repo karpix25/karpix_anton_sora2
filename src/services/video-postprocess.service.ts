@@ -50,6 +50,13 @@ const ffmpegThreads = (() => {
   }
   return '2';
 })();
+const minGeneratedEffectiveVideoSeconds = (() => {
+  const parsed = Number(process.env.MIN_GENERATED_EFFECTIVE_VIDEO_SECONDS);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return 5;
+})();
 const frameWidthPx = 720;
 const frameHeightPx = 1280;
 const trimStartFrames = 6;
@@ -1130,6 +1137,33 @@ async function renderOverlayFramesWithCanvas(taskId: string, overlays: PreparedO
 }
 
 export class VideoPostprocessService {
+  public static async validateGeneratedVideoDuration(videoUrl: string): Promise<{
+    rawDuration: number;
+    frameRate: number;
+    trimStartSeconds: number;
+    effectiveDuration: number;
+  }> {
+    const [rawDuration, frameRate] = await Promise.all([
+      getVideoDuration(videoUrl),
+      getVideoFrameRate(videoUrl),
+    ]);
+    const trimStartSeconds = frameRate > 0 ? (trimStartFrames / frameRate) : 0;
+    const effectiveDuration = rawDuration > 0 ? Math.max(0, rawDuration - trimStartSeconds) : 0;
+
+    if (effectiveDuration > 0 && effectiveDuration < minGeneratedEffectiveVideoSeconds) {
+      throw new Error(
+        `Generated video is too short (${effectiveDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s).`
+      );
+    }
+
+    return {
+      rawDuration,
+      frameRate,
+      trimStartSeconds,
+      effectiveDuration,
+    };
+  }
+
   public static async applyAudioTrack(input: {
     taskId: string;
     generatedVideoUrl: string;
@@ -1168,6 +1202,11 @@ export class VideoPostprocessService {
       const effectiveVideoDuration = probedVideoDuration > 0
         ? Math.max(0, probedVideoDuration - trimStartSeconds)
         : 0;
+      if (effectiveVideoDuration > 0 && effectiveVideoDuration < minGeneratedEffectiveVideoSeconds) {
+        throw new Error(
+          `Generated video is too short (${effectiveVideoDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s).`
+        );
+      }
       const shortestMediaDuration = effectiveVideoDuration > 0
         ? (probedAudioDuration > 0 ? Math.min(effectiveVideoDuration, probedAudioDuration) : effectiveVideoDuration)
         : 0;

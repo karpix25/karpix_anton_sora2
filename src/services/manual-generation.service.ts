@@ -53,6 +53,11 @@ function isExpiredDirectUrlError(error: any): boolean {
     message.includes('server returned 403');
 }
 
+function isTooShortGeneratedVideoError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return message.includes('generated video is too short');
+}
+
 export class ManualGenerationService {
   public static async runFromLibraryItem(input: {
     projectId: string;
@@ -341,8 +346,23 @@ export class ManualGenerationService {
           generationResult = await generateVideo(promptText);
         }
 
+        let durationCheck;
+        try {
+          durationCheck = await VideoPostprocessService.validateGeneratedVideoDuration(generationResult.resultVideoUrl);
+        } catch (error: any) {
+          if (!isTooShortGeneratedVideoError(error)) {
+            throw error;
+          }
+
+          console.warn(
+            `[ManualGenerationService] Task ${task.id}: generated video too short (${error.message}). Retrying once with a fresh generation...`
+          );
+          generationResult = await generateVideo(promptText);
+          durationCheck = await VideoPostprocessService.validateGeneratedVideoDuration(generationResult.resultVideoUrl);
+        }
+
         console.log(
-          `[ManualGenerationService] Task ${task.id}: generation completed by ${generationResult.provider} (providerTaskId=${generationResult.providerTaskId})`
+          `[ManualGenerationService] Task ${task.id}: generation completed by ${generationResult.provider} (providerTaskId=${generationResult.providerTaskId}, effectiveDuration=${durationCheck?.effectiveDuration?.toFixed(2)}s)`
         );
         resultVideoUrl = generationResult.resultVideoUrl;
         await generationTaskStore.updateTask(task.id, {
