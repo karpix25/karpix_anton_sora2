@@ -18,7 +18,7 @@ const defaultProject = () => ({
   packageVideoLimit: 0,
   viralReusePercentage: 0,
   minViewsToReuse: 1000,
-  maxViralAgeDays: 0,
+  maxViralAgeDays: 30,
   yandexDiskFolder: '',
   selectedModel: 'sora-2',
   isActive: true,
@@ -421,7 +421,7 @@ function snapshotFromForm() {
     isActive: elements.fields.isActive.checked,
     viralReusePercentage: Number(elements.fields.viralReusePercentage.value || 0),
     minViewsToReuse: Number(elements.fields.minViewsToReuse.value || 1000),
-    maxViralAgeDays: Number(elements.fields.maxViralAgeDays.value || 0),
+    maxViralAgeDays: Number(elements.fields.maxViralAgeDays.value || 30),
     textStyle: {
       fontFamily: elements.fields.textStyle.fontFamily.value,
       fontSize: Number(elements.fields.textStyle.fontSize.value),
@@ -824,7 +824,7 @@ function applyProjectToForm(project) {
   elements.fields.viralReusePercentage.value = String(state.currentProject.viralReusePercentage ?? 0);
   elements.fields.viralReusePercentageLabel.textContent = `${state.currentProject.viralReusePercentage ?? 0}%`;
   elements.fields.minViewsToReuse.value = String(state.currentProject.minViewsToReuse ?? 1000);
-  elements.fields.maxViralAgeDays.value = String(state.currentProject.maxViralAgeDays ?? 0);
+  elements.fields.maxViralAgeDays.value = String(state.currentProject.maxViralAgeDays ?? 30);
 
   const style = {
     ...defaultProject().textStyle,

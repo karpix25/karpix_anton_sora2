@@ -93,7 +93,8 @@ export async function initDatabase(): Promise<void> {
   
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS viral_reuse_percentage INTEGER DEFAULT 0`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS min_views_to_reuse INTEGER DEFAULT 1000`);
-  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS max_viral_age_days INTEGER DEFAULT 0`);
+  await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS max_viral_age_days INTEGER DEFAULT 30`);
+  await db.query(`ALTER TABLE projects ALTER COLUMN max_viral_age_days SET DEFAULT 30`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS yandex_disk_folder TEXT NOT NULL DEFAULT ''`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_language TEXT NOT NULL DEFAULT 'ru'`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS package_video_limit INTEGER NOT NULL DEFAULT 0`);
