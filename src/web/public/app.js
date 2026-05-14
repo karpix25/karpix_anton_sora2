@@ -59,7 +59,7 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.3.8-language-overlays';
+const DEBUG_VERSION = '1.4.1-project-plan';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
 
 // Diagnostic check for the user
@@ -89,6 +89,7 @@ const elements = {
   referenceImages: document.getElementById('reference-images'),
   referenceLibrary: document.getElementById('reference-library'),
   generationTasks: document.getElementById('generation-tasks'),
+  projectPlanSummary: document.getElementById('project-plan-summary'),
   primaryImageStatus: document.getElementById('primary-image-status'),
   libraryItemModal: document.getElementById('library-item-modal'),
   libraryItemModalContent: document.getElementById('library-item-modal-content'),
@@ -730,11 +731,71 @@ function renderProjectList() {
   });
 }
 
+function getDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value || '').slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function isAutoTask(task) {
+  return task?.triggerMode === 'auto' || task?.triggerMode === 'auto_remix';
+}
+
+function renderProjectPlanSummary() {
+  if (!elements.projectPlanSummary) {
+    return;
+  }
+
+  const project = state.currentProject || defaultProject();
+  const tasks = Array.isArray(state.generationTasks) ? state.generationTasks : [];
+  const today = new Date().toISOString().slice(0, 10);
+  const packageLimit = Number(project.packageVideoLimit || 0);
+  const usage = project.packageUsage || {};
+  const completedFromTasks = tasks.filter((task) => task.status === 'completed').length;
+  const reservedFromTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'processing').length;
+  const completed = tasks.length ? completedFromTasks : Number(usage.completed || 0);
+  const reserved = tasks.length ? reservedFromTasks : Number(usage.reserved || 0);
+  const billableTotal = completed + reserved;
+  const remaining = packageLimit ? Math.max(0, packageLimit - billableTotal) : 0;
+  const dailyLimit = Number(project.dailyGenerationLimit || 0);
+  const autoTasksToday = tasks.filter((task) => isAutoTask(task) && getDateKey(task.createdAt) === today);
+  const autoStartedToday = autoTasksToday.filter((task) => task.status !== 'failed').length;
+  const autoCompletedToday = autoTasksToday.filter((task) => task.status === 'completed').length;
+  const autoInProgressToday = autoTasksToday.filter((task) => task.status === 'pending' || task.status === 'processing').length;
+  const dailyPlan = packageLimit ? Math.min(dailyLimit, remaining + autoStartedToday) : dailyLimit;
+
+  const packageLabel = packageLimit ? `${billableTotal}/${packageLimit}` : 'без лимита';
+  const remainingLabel = packageLimit ? String(remaining) : '—';
+  const todayLabel = `${autoCompletedToday}/${dailyPlan}`;
+
+  elements.projectPlanSummary.innerHTML = `
+    <div class="project-plan-stat">
+      <span>Пакет</span>
+      <strong>${escapeHtml(packageLabel)}</strong>
+    </div>
+    <div class="project-plan-stat">
+      <span>Осталось</span>
+      <strong>${escapeHtml(remainingLabel)}</strong>
+    </div>
+    <div class="project-plan-stat">
+      <span>Авто сегодня</span>
+      <strong>${escapeHtml(todayLabel)}</strong>
+    </div>
+    <div class="project-plan-stat">
+      <span>В работе</span>
+      <strong>${escapeHtml(autoInProgressToday)}</strong>
+    </div>
+  `;
+}
+
 const workflow = createProjectWorkflow({
   state,
   elements,
   api,
   renderProjectList,
+  renderProjectPlanSummary,
   setStatus,
   escapeHtml,
   readFileAsBase64,
@@ -803,12 +864,15 @@ function applyProjectToForm(project) {
   workflow.renderReferenceImages();
   workflow.renderLibraryItems();
   workflow.renderGenerationTasks();
+  renderProjectPlanSummary();
   renderProjectList();
   startTelegramBindingPolling();
 
   Promise.all([workflow.loadLibrary(), workflow.loadGenerations()]).catch((error) => {
     console.error(error);
     setStatus(error.message);
+  }).finally(() => {
+    renderProjectPlanSummary();
   });
 }
 

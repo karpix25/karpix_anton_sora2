@@ -1,5 +1,6 @@
 export function createProjectWorkflow(context) {
   const { state, elements, api, renderProjectList, setStatus } = context;
+  const renderProjectPlanSummary = context.renderProjectPlanSummary || (() => {});
 
   function renderReferenceImages() {
     const images = state.currentProject.referenceImages || [];
@@ -449,6 +450,7 @@ export function createProjectWorkflow(context) {
     if (!state.currentProject.id) {
       state.generationTasks = [];
       renderGenerationTasks();
+      renderProjectPlanSummary();
       renderLibraryItems();
       return;
     }
@@ -456,6 +458,7 @@ export function createProjectWorkflow(context) {
     const data = await api(`/api/projects/${state.currentProject.id}/generations`);
     state.generationTasks = data.tasks || [];
     renderGenerationTasks();
+    renderProjectPlanSummary();
     renderLibraryItems();
   }
 
