@@ -1,4 +1,4 @@
-import { initDatabase, closeDatabase } from './src/storage/db.js';
+import { initDatabase, closeDatabase } from '../src/storage/db.js';
 
 async function run() {
   try {

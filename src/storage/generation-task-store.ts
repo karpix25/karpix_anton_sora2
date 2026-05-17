@@ -64,6 +64,22 @@ function toIsoString(value: unknown, fallback = nowIso()): string {
   return normalized || fallback;
 }
 
+function getUtcDateRange(dateIso: string): { start: string; end: string } {
+  const normalized = normalizeString(dateIso).slice(0, 10);
+  const startDate = new Date(`${normalized}T00:00:00.000Z`);
+  if (Number.isNaN(startDate.getTime())) {
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  }
+
+  const endDate = new Date(startDate);
+  endDate.setUTCDate(endDate.getUTCDate() + 1);
+
+  return {
+    start: startDate.toISOString(),
+    end: endDate.toISOString(),
+  };
+}
+
 function normalizeStatus(value: unknown): GenerationTaskStatus {
   return value === 'processing' || value === 'completed' || value === 'failed' ? value : 'pending';
 }
@@ -184,12 +200,23 @@ export const generationTaskStore = {
 
     const result = await query<GenerationTaskRow>(
       `
-        SELECT *
-        FROM generation_tasks
-        WHERE
-          (status = 'pending' AND updated_at < NOW() - make_interval(secs => $1::int))
-          OR
-          (status = 'processing' AND updated_at < NOW() - make_interval(secs => $2::int))
+        (
+          SELECT *
+          FROM generation_tasks
+          WHERE status = 'pending'
+            AND updated_at < NOW() - make_interval(secs => $1::int)
+          ORDER BY created_at ASC
+          LIMIT $3
+        )
+        UNION ALL
+        (
+          SELECT *
+          FROM generation_tasks
+          WHERE status = 'processing'
+            AND updated_at < NOW() - make_interval(secs => $2::int)
+          ORDER BY created_at ASC
+          LIMIT $3
+        )
         ORDER BY created_at ASC
         LIMIT $3
       `,
@@ -199,15 +226,17 @@ export const generationTaskStore = {
     return result.rows.map((row) => mapRowToTask(row));
   },
 
-  async listProjectTasks(projectId: string): Promise<GenerationTask[]> {
+  async listProjectTasks(projectId: string, options?: { limit?: number }): Promise<GenerationTask[]> {
+    const limit = options?.limit ? Math.max(1, Math.min(2_000, Math.floor(options.limit))) : 0;
     const result = await query<GenerationTaskRow>(
       `
         SELECT *
         FROM generation_tasks
         WHERE project_id = $1
         ORDER BY created_at DESC
+        ${limit ? 'LIMIT $2' : ''}
       `,
-      [normalizeString(projectId)]
+      limit ? [normalizeString(projectId), limit] : [normalizeString(projectId)]
     );
 
     return result.rows.map((row) => mapRowToTask(row));
@@ -319,6 +348,62 @@ export const generationTaskStore = {
     }
   },
 
+  async countAutoRemixTasksForDate(projectId: string, dateIso: string): Promise<number> {
+    const range = getUtcDateRange(dateIso);
+    const result = await query<{ count: string }>(
+      `
+        SELECT COUNT(*) AS count
+        FROM generation_tasks
+        WHERE project_id = $1
+          AND trigger_mode = 'auto_remix'
+          AND status <> 'failed'
+          AND created_at >= $2::timestamptz
+          AND created_at < $3::timestamptz
+      `,
+      [normalizeString(projectId), range.start, range.end]
+    );
+
+    return parseInt(result.rows[0]?.count || '0', 10);
+  },
+
+  async countAutoTasksForDate(projectId: string, dateIso: string): Promise<{
+    started: number;
+    completed: number;
+    active: number;
+  }> {
+    const range = getUtcDateRange(dateIso);
+    const result = await query<{ status: string; count: string }>(
+      `
+        SELECT status, COUNT(*) AS count
+        FROM generation_tasks
+        WHERE project_id = $1
+          AND trigger_mode IN ('auto', 'auto_remix')
+          AND created_at >= $2::timestamptz
+          AND created_at < $3::timestamptz
+        GROUP BY status
+      `,
+      [normalizeString(projectId), range.start, range.end]
+    );
+
+    let started = 0;
+    let completed = 0;
+    let active = 0;
+    for (const row of result.rows) {
+      const count = parseInt(row.count || '0', 10) || 0;
+      if (row.status !== 'failed') {
+        started += count;
+      }
+      if (row.status === 'completed') {
+        completed += count;
+      }
+      if (row.status === 'pending' || row.status === 'processing') {
+        active += count;
+      }
+    }
+
+    return { started, completed, active };
+  },
+
   async updateTask(taskId: string, update: GenerationTaskUpdate): Promise<GenerationTask | null> {
     const existingResult = await query<GenerationTaskRow>(
       'SELECT * FROM generation_tasks WHERE id = $1 LIMIT 1',
@@ -422,12 +507,14 @@ export const generationTaskStore = {
 
   async countTasksForDate(projectId: string, dateIso: string): Promise<number> {
     try {
+      const range = getUtcDateRange(dateIso);
       const result = await query<{ count: string }>(
         `SELECT COUNT(*) FROM generation_tasks 
          WHERE project_id = $1 
-         AND created_at::text LIKE $2
+         AND created_at >= $2::timestamptz
+         AND created_at < $3::timestamptz
          AND status != 'failed'`,
-        [projectId, `${dateIso}%`]
+        [projectId, range.start, range.end]
       );
       return parseInt(result.rows[0]?.count || '0', 10);
     } catch (error: any) {

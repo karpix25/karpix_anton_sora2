@@ -22,14 +22,6 @@ function toPositiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function getDateKey(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value || '').slice(0, 10);
-  }
-  return date.toISOString().slice(0, 10);
-}
-
 function calculateDailyRemixLimit(dailyLimit: number, remixPercentage: number): number {
   const normalizedDailyLimit = Math.max(0, Math.floor(dailyLimit));
   const normalizedPercentage = Math.max(0, Math.min(100, Math.floor(remixPercentage)));
@@ -126,13 +118,8 @@ export class AutoGenerationService {
       `[AutoGenerationService] Project ${project.name}: limit not reached (${tasksToday}/${project.dailyGenerationLimit}). Processing auto queue...`
     );
 
-    const projectTasks = await generationTaskStore.listProjectTasks(projectId);
     const remixDailyLimit = calculateDailyRemixLimit(project.dailyGenerationLimit, project.viralReusePercentage);
-    const remixTasksToday = projectTasks.filter((task) =>
-      task.triggerMode === 'auto_remix' &&
-      task.status !== 'failed' &&
-      getDateKey(task.createdAt) === today
-    ).length;
+    const remixTasksToday = await generationTaskStore.countAutoRemixTasksForDate(projectId, today);
     const shouldRemix = remixTasksToday < remixDailyLimit;
 
     if (shouldRemix) {

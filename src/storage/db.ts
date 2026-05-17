@@ -1,4 +1,4 @@
-import { Pool, type QueryResult, type QueryResultRow } from 'pg';
+import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from 'pg';
 
 let pool: Pool | null = null;
 let initialized = false;
@@ -21,12 +21,25 @@ function getDatabaseUrl(): string {
   return databaseUrl;
 }
 
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
 function getPool(): Pool {
   if (!pool) {
-    pool = new Pool({
+    const poolConfig: PoolConfig = {
       connectionString: getDatabaseUrl(),
       ssl: shouldUseSsl() ? { rejectUnauthorized: false } : undefined,
-    });
+      max: parsePositiveInteger(process.env.DB_POOL_MAX, 10),
+      idleTimeoutMillis: parsePositiveInteger(process.env.DB_IDLE_TIMEOUT_MS, 30_000),
+      connectionTimeoutMillis: parsePositiveInteger(process.env.DB_CONNECTION_TIMEOUT_MS, 10_000),
+      statement_timeout: parsePositiveInteger(process.env.DB_STATEMENT_TIMEOUT_MS, 120_000),
+      query_timeout: parsePositiveInteger(process.env.DB_QUERY_TIMEOUT_MS, 120_000),
+      application_name: normalizeString(process.env.DB_APPLICATION_NAME) || 'sora2',
+    };
+
+    pool = new Pool(poolConfig);
   }
 
   return pool;
@@ -83,8 +96,6 @@ export async function initDatabase(): Promise<void> {
     SET project_code = UPPER(SUBSTRING(MD5(id) FROM 1 FOR 8))
     WHERE COALESCE(project_code, '') = '';
   `);
-
-  await db.query(`ALTER TABLE projects DROP COLUMN IF EXISTS trim_video_to_audio`);
 
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_text TEXT DEFAULT ''`);
   await db.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_frame_vertical_margin INTEGER DEFAULT 320`);
@@ -197,6 +208,14 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_projects_active_automation
+      ON projects(updated_at DESC)
+      WHERE is_active = TRUE
+        AND automation_enabled = TRUE
+        AND daily_generation_limit > 0;
+  `);
+
+  await db.query(`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -221,7 +240,8 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
-    DROP INDEX IF EXISTS idx_reference_library_project_source;
+    CREATE INDEX IF NOT EXISTS idx_reference_library_project_status_created
+      ON reference_library(project_id, status, created_at DESC);
   `);
 
   await db.query(`
@@ -257,18 +277,43 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_status
+      ON generation_tasks(project_id, status);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_billable_created
+      ON generation_tasks(project_id, created_at DESC)
+      WHERE status <> 'failed';
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_auto_created
+      ON generation_tasks(project_id, trigger_mode, created_at DESC)
+      WHERE trigger_mode IN ('auto', 'auto_remix');
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_recoverable
+      ON generation_tasks(status, updated_at, created_at)
+      WHERE status IN ('pending', 'processing');
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_reference_created
+      ON generation_tasks(reference_library_item_id, created_at DESC);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_publication_created
+      ON generation_tasks(project_id, created_at DESC)
+      WHERE publication_url <> '';
+  `);
+
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_generation_tasks_s3_object_key
       ON generation_tasks(s3_object_key);
   `);
-
-  // Check if sora_system_config table exists and has proper 'id' column.
-  // If not, it might be a stale version from failed previous attempts.
-  try {
-    await db.query(`SELECT id FROM sora_system_config LIMIT 1`);
-  } catch (err) {
-    console.warn('[DB] sora_system_config seems missing "id" column. Dropping and recreating...');
-    await db.query(`DROP TABLE IF EXISTS sora_system_config`);
-  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS sora_system_config (
@@ -278,11 +323,24 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
+  await db.query(`ALTER TABLE sora_system_config ADD COLUMN IF NOT EXISTS id TEXT`);
+  await db.query(`ALTER TABLE sora_system_config ADD COLUMN IF NOT EXISTS config JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await db.query(`ALTER TABLE sora_system_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await db.query(`
+    UPDATE sora_system_config
+    SET id = 'global'
+    WHERE COALESCE(id, '') = '';
+  `);
+
   // Ensure global config exists
   await db.query(`
     INSERT INTO sora_system_config (id, config)
-    VALUES ('global', '{"forceGrokImagine": false, "grokMode": "normal", "grokResolution": "720p"}'::jsonb)
-    ON CONFLICT (id) DO NOTHING;
+    SELECT 'global', '{"forceGrokImagine": false, "grokMode": "normal", "grokResolution": "720p"}'::jsonb
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM sora_system_config
+      WHERE id = 'global'
+    );
   `);
 
   initialized = true;

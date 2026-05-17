@@ -18,6 +18,10 @@ import type { GenerationTask } from '../domain/generation-task.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
+const dashboardProjectHistoryLimit = parsePositiveInteger(
+  process.env.DASHBOARD_PROJECT_HISTORY_LIMIT,
+  500
+);
 
 const contentTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -43,6 +47,11 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown): vo
 
 function sendNotFound(res: ServerResponse): void {
   sendJson(res, 404, { error: 'Not found' });
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
 async function readJsonBody<T>(req: IncomingMessage): Promise<T> {
@@ -302,18 +311,16 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
 
     for (const project of projects) {
       const [items, tasks] = await Promise.all([
-        referenceLibraryStore.listProjectItems(project.id),
-        generationTaskStore.listProjectTasks(project.id),
+        referenceLibraryStore.listProjectItems(project.id, { limit: dashboardProjectHistoryLimit }),
+        generationTaskStore.listProjectTasks(project.id, { limit: dashboardProjectHistoryLimit }),
       ]);
 
       const itemById = new Map(items.map((item) => [item.id, item]));
       const autoDailyPositionByTaskId = buildAutoDailyPositionMap(tasks, project.dailyGenerationLimit);
-      const autoTasksToday = tasks.filter(
-        (task) => isAutoGenerationTask(task) && getDateKey(task.createdAt) === today
-      );
-      const autoStartedForProjectToday = autoTasksToday.filter((task) => task.status !== 'failed').length;
-      const autoCompletedForProjectToday = autoTasksToday.filter((task) => task.status === 'completed').length;
-      const autoProcessingForProjectToday = autoTasksToday.filter((task) => task.status === 'processing' || task.status === 'pending').length;
+      const autoStatsToday = await generationTaskStore.countAutoTasksForDate(project.id, today);
+      const autoStartedForProjectToday = autoStatsToday.started;
+      const autoCompletedForProjectToday = autoStatsToday.completed;
+      const autoProcessingForProjectToday = autoStatsToday.active;
       const reusableReferenceCount = items.filter((item) => {
         if (item.status !== 'analyzed' || !item.analysis) {
           return false;

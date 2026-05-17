@@ -207,15 +207,17 @@ export const referenceLibraryStore = {
     return result.rows[0] ? mapRowToItem(result.rows[0]) : null;
   },
 
-  async listProjectItems(projectId: string): Promise<ReferenceLibraryItem[]> {
+  async listProjectItems(projectId: string, options?: { limit?: number }): Promise<ReferenceLibraryItem[]> {
+    const limit = options?.limit ? Math.max(1, Math.min(2_000, Math.floor(options.limit))) : 0;
     const result = await query<ReferenceLibraryRow>(
       `
         SELECT *
         FROM reference_library
         WHERE project_id = $1
         ORDER BY created_at DESC
+        ${limit ? 'LIMIT $2' : ''}
       `,
-      [normalizeString(projectId)]
+      limit ? [normalizeString(projectId), limit] : [normalizeString(projectId)]
     );
 
     return result.rows.map((row) => mapRowToItem(row));
