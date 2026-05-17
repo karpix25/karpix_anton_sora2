@@ -105,6 +105,15 @@ function parseCommaSeparated(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parseTelegramAdminIds(): string[] {
+  return parseCommaSeparated(
+    process.env.TELEGRAM_ADMIN_IDS ||
+      process.env.TELEGRAM_ADMIN_ID ||
+      process.env.ADMIN_TELEGRAM_IDS ||
+      process.env.ADMIN_TELEGRAM_ID
+  );
+}
+
 function normalizeS3Endpoint(value: string | undefined): string {
   const normalized = (value || '').trim();
   if (!normalized) {
@@ -119,7 +128,7 @@ export const config = {
     token: process.env.TELEGRAM_BOT_TOKEN || '',
     isConfigured: isConfiguredSecret(process.env.TELEGRAM_BOT_TOKEN || ''),
     handlerTimeoutMs: parsePositiveInt(process.env.TELEGRAM_HANDLER_TIMEOUT_MS, 20 * 60 * 1000),
-    adminIds: parseCommaSeparated(process.env.TELEGRAM_ADMIN_IDS),
+    adminIds: parseTelegramAdminIds(),
     webhook: {
       enabled: parseBoolean(process.env.TELEGRAM_USE_WEBHOOK, false),
       url: process.env.TELEGRAM_WEBHOOK_URL || '',

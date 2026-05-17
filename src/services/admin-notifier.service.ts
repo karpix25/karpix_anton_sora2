@@ -2,7 +2,27 @@ import { bot } from '../bot/bot.js';
 import { config } from '../config.js';
 import { projectStore } from '../storage/project-store.js';
 
+function parsePositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export class AdminNotifierService {
+  private static readonly balanceAlertCooldownMs = parsePositiveNumber(
+    process.env.ADMIN_BALANCE_ALERT_COOLDOWN_MINUTES,
+    60
+  ) * 60 * 1000;
+  private static readonly lastBalanceAlertByProvider = new Map<string, number>();
+
+  private static redactTelegramId(id: string): string {
+    const normalized = String(id || '').trim();
+    if (normalized.length <= 4) {
+      return '***';
+    }
+
+    return `${normalized.slice(0, 2)}***${normalized.slice(-2)}`;
+  }
+
   private static getTrackingTokenFromDiskPath(diskPath: string): string {
     const normalized = String(diskPath || '').trim();
     if (!normalized) {
@@ -13,13 +33,32 @@ export class AdminNotifierService {
     return fileName.replace(/\.[A-Za-z0-9]+$/, '');
   }
 
+  private static shouldSendBalanceAlert(providerName: string): boolean {
+    const key = String(providerName || 'unknown').trim().toLowerCase();
+    const now = Date.now();
+    const lastSentAt = this.lastBalanceAlertByProvider.get(key) || 0;
+    const elapsedMs = now - lastSentAt;
+
+    if (elapsedMs < this.balanceAlertCooldownMs) {
+      const remainingMinutes = Math.ceil((this.balanceAlertCooldownMs - elapsedMs) / 60_000);
+      console.warn(
+        `[AdminNotifierService] Balance alert for ${providerName} suppressed by cooldown. ` +
+        `Next alert can be sent in ~${remainingMinutes} min.`
+      );
+      return false;
+    }
+
+    this.lastBalanceAlertByProvider.set(key, now);
+    return true;
+  }
+
   /**
    * Sends an alert to all configured administrators.
    */
   public static async sendAlert(message: string): Promise<void> {
     const adminIds = config.telegram.adminIds;
     if (!adminIds.length) {
-      console.warn('[AdminNotifierService] No admin IDs configured. Alert was not sent:', message);
+      console.warn('[AdminNotifierService] No admin IDs configured. Alert was not sent.');
       return;
     }
 
@@ -31,7 +70,10 @@ export class AdminNotifierService {
           parse_mode: 'HTML',
         });
       } catch (error: any) {
-        console.error(`[AdminNotifierService] Failed to send alert to ${id}:`, error.message);
+        console.error(
+          `[AdminNotifierService] Failed to send alert to admin ${this.redactTelegramId(id)}:`,
+          error.message
+        );
       }
     });
 
@@ -93,6 +135,10 @@ export class AdminNotifierService {
    * Specifically handles balance/credit exhaustion errors.
    */
   public static async notifyBalanceError(providerName: string, errorDetails: string): Promise<void> {
+    if (!this.shouldSendBalanceAlert(providerName)) {
+      return;
+    }
+
     const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
     const message = 
       `🚨 <b>КРИТИЧЕСКАЯ ОШИБКА БАЛАНСА</b>\n\n` +

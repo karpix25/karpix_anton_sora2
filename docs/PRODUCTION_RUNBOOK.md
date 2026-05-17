@@ -55,9 +55,13 @@ DB_STATEMENT_TIMEOUT_MS=120000
 DB_QUERY_TIMEOUT_MS=120000
 DB_APPLICATION_NAME=sora2
 DASHBOARD_PROJECT_HISTORY_LIMIT=500
+TELEGRAM_ADMIN_IDS=123456789
+ADMIN_BALANCE_ALERT_COOLDOWN_MINUTES=60
 ```
 
 Tune `DB_POOL_MAX` against the database connection limit and number of app replicas.
+Set `TELEGRAM_ADMIN_IDS` to comma-separated Telegram user IDs for balance/provider alerts. Each admin must open the bot and send `/start` at least once.
+Set `ADMIN_BALANCE_ALERT_COOLDOWN_MINUTES` to control repeated balance alerts per provider.
 
 ## 4. Build Indexes Safely
 
