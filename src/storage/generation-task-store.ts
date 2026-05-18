@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { GenerationProvider, GenerationTask, GenerationTaskInput, GenerationTaskStatus, GenerationTaskUpdate, GenerationTriggerMode } from '../domain/generation-task.js';
+import type { VideoModel } from '../domain/project.js';
 import type { ReferenceTextOverlay } from '../domain/reference-library.js';
 import { query } from './db.js';
 
@@ -100,6 +101,14 @@ function normalizeTriggerMode(value: unknown): GenerationTriggerMode {
   return 'web_manual';
 }
 
+function normalizeVideoModel(value: unknown): VideoModel {
+  const models: VideoModel[] = ['sora-2', 'seedance-2', 'veo-3-1', 'grok-imagine'];
+  if (typeof value === 'string' && (models as string[]).includes(value)) {
+    return value as VideoModel;
+  }
+  return 'sora-2';
+}
+
 function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): GenerationTask {
   const timestamp = nowIso();
 
@@ -111,7 +120,7 @@ function sanitizeTask(input: GenerationTaskInput, existing?: GenerationTask): Ge
     remixSourceUrl: normalizeString(input.remixSourceUrl ?? existing?.remixSourceUrl),
     triggerMode: normalizeTriggerMode(input.triggerMode ?? existing?.triggerMode),
     status: normalizeStatus(input.status ?? existing?.status),
-    targetModel: input.targetModel ?? existing?.targetModel ?? 'sora-2',
+    targetModel: normalizeVideoModel(input.targetModel ?? existing?.targetModel),
     provider: normalizeProvider(input.provider ?? existing?.provider),
     providerTaskId: normalizeString(input.providerTaskId ?? existing?.providerTaskId),
     promptText: normalizeString(input.promptText ?? existing?.promptText),
@@ -146,7 +155,7 @@ function mapRowToTask(row: GenerationTaskRow): GenerationTask {
     remixSourceUrl: normalizeString(row.remix_source_url),
     triggerMode: normalizeTriggerMode(row.trigger_mode),
     status: normalizeStatus(row.status),
-    targetModel: row.target_model === 'veo-3-1' ? 'veo-3-1' : 'sora-2',
+    targetModel: normalizeVideoModel(row.target_model),
     provider: normalizeProvider(row.provider),
     providerTaskId: normalizeString(row.provider_task_id),
     promptText: normalizeString(row.prompt_text),
