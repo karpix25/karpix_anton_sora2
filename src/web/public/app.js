@@ -739,6 +739,15 @@ function renderProjectList() {
   });
 }
 
+function sortProjectsByName() {
+  state.projects.sort((a, b) => {
+    const nameA = String(a?.name || '').trim();
+    const nameB = String(b?.name || '').trim();
+    const result = nameA.localeCompare(nameB, 'ru', { sensitivity: 'base', numeric: true });
+    return result || String(a?.id || '').localeCompare(String(b?.id || ''));
+  });
+}
+
 function getDateKey(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -888,6 +897,7 @@ async function loadProjects() {
   setStatus('Загрузка проектов...');
   const data = await api('/api/projects');
   state.projects = data.projects || [];
+  sortProjectsByName();
 
   if (state.projects.length) {
     const projectIdFromUrl = getProjectIdFromUrl();
@@ -921,6 +931,7 @@ async function saveProject() {
   } else {
     state.projects[index] = savedProject;
   }
+  sortProjectsByName();
 
   applyProjectToForm(savedProject);
   if (workflow.hasUnsyncedYandexImages(savedProject)) {
@@ -959,6 +970,7 @@ async function createProject() {
 
   const createdProject = response.project;
   state.projects.unshift(createdProject);
+  sortProjectsByName();
   applyProjectToForm(createdProject);
   setStatus('Проект создан');
 }

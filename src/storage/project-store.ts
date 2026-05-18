@@ -451,7 +451,11 @@ async function upsertProject(project: Project): Promise<Project> {
 export const projectStore = {
   async listProjects(): Promise<Project[]> {
     await ensureStorage();
-    const result = await query<ProjectRow>('SELECT * FROM projects ORDER BY updated_at DESC');
+    const result = await query<ProjectRow>(`
+      SELECT *
+      FROM projects
+      ORDER BY LOWER(NULLIF(name, '')) ASC NULLS LAST, created_at ASC, id ASC
+    `);
     return result.rows.map((row) => mapRowToProject(row));
   },
 
