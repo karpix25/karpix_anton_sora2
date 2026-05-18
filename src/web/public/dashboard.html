@@ -14,6 +14,12 @@
           <h1>История генераций</h1>
         </div>
         <div class="dashboard-actions">
+          <label class="dashboard-date-filter">
+            <span>День</span>
+            <input id="dashboard-date-filter" type="date" />
+          </label>
+          <button id="today-dashboard-button" class="secondary-button" type="button">Сегодня</button>
+          <button id="clear-dashboard-date-button" class="secondary-button" type="button">Последние</button>
           <select id="dashboard-type-filter" aria-label="Фильтр событий">
             <option value="all">Все события</option>
             <option value="reference">Только референсы</option>
@@ -43,6 +49,6 @@
       </main>
     </div>
 
-    <script type="module" src="/dashboard.js?v=1.4.3-package-limit"></script>
+    <script type="module" src="/dashboard.js?v=1.4.4-calendar-history"></script>
   </body>
 </html>

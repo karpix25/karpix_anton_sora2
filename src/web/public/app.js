@@ -52,6 +52,7 @@ const state = {
   currentProject: defaultProject(),
   libraryItems: [],
   generationTasks: [],
+  generationDateFilter: '',
   googleCyrillicFonts: [],
   yandexFolders: [],
 };
@@ -59,8 +60,12 @@ const state = {
 const TELEGRAM_BINDING_POLL_INTERVAL_MS = 5000;
 let telegramBindingPollTimer = null;
 
-const DEBUG_VERSION = '1.4.1-project-plan';
+const DEBUG_VERSION = '1.4.2-calendar-history';
 console.log(`🚀 SOra2 Web Admin Loading (Version: ${DEBUG_VERSION})`);
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 // Diagnostic check for the user
 window.addEventListener('DOMContentLoaded', () => {
@@ -89,6 +94,9 @@ const elements = {
   referenceImages: document.getElementById('reference-images'),
   referenceLibrary: document.getElementById('reference-library'),
   generationTasks: document.getElementById('generation-tasks'),
+  generationDateFilter: document.getElementById('generation-date-filter'),
+  generationTodayButton: document.getElementById('generation-today-button'),
+  generationClearDateButton: document.getElementById('generation-clear-date-button'),
   projectPlanSummary: document.getElementById('project-plan-summary'),
   primaryImageStatus: document.getElementById('primary-image-status'),
   libraryItemModal: document.getElementById('library-item-modal'),
@@ -1013,6 +1021,48 @@ function bindEvents() {
       await refreshTelegramBindingStatus();
       await Promise.all([workflow.loadLibrary(), workflow.loadGenerations()]);
       setStatus('Данные проекта обновлены');
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  });
+
+  elements.generationDateFilter?.addEventListener('change', async () => {
+    try {
+      state.generationDateFilter = elements.generationDateFilter.value || '';
+      setStatus(state.generationDateFilter ? `Загрузка генераций за ${state.generationDateFilter}...` : 'Загрузка последних генераций...');
+      await workflow.loadGenerations();
+      setStatus(state.generationDateFilter ? `Генерации за ${state.generationDateFilter}` : 'Последние генерации');
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  });
+
+  elements.generationTodayButton?.addEventListener('click', async () => {
+    try {
+      state.generationDateFilter = getTodayKey();
+      if (elements.generationDateFilter) {
+        elements.generationDateFilter.value = state.generationDateFilter;
+      }
+      setStatus(`Загрузка генераций за ${state.generationDateFilter}...`);
+      await workflow.loadGenerations();
+      setStatus(`Генерации за ${state.generationDateFilter}`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  });
+
+  elements.generationClearDateButton?.addEventListener('click', async () => {
+    try {
+      state.generationDateFilter = '';
+      if (elements.generationDateFilter) {
+        elements.generationDateFilter.value = '';
+      }
+      setStatus('Загрузка последних генераций...');
+      await workflow.loadGenerations();
+      setStatus('Последние генерации');
     } catch (error) {
       console.error(error);
       setStatus(error.message);

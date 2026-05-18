@@ -1153,10 +1153,39 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.dashboard-actions select {
+.dashboard-actions select,
+.dashboard-actions input,
+.generation-history-actions input {
   min-width: 180px;
+}
+
+.dashboard-date-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dashboard-date-filter input {
+  border: 1px solid rgba(76, 54, 39, 0.16);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+}
+
+.generation-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .dashboard-summary {

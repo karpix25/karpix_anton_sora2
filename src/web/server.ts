@@ -22,6 +22,10 @@ const dashboardProjectHistoryLimit = parsePositiveInteger(
   process.env.DASHBOARD_PROJECT_HISTORY_LIMIT,
   500
 );
+const dashboardDayHistoryLimit = parsePositiveInteger(
+  process.env.DASHBOARD_DAY_HISTORY_LIMIT,
+  2000
+);
 
 const contentTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -52,6 +56,42 @@ function sendNotFound(res: ServerResponse): void {
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseIsoDate(value: string | null | undefined): string | null {
+  const normalized = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+}
+
+function parseTimezoneOffsetMinutes(value: string | null | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.max(-14 * 60, Math.min(14 * 60, Math.trunc(parsed)));
+}
+
+function getUtcDateWindow(dateIso: string, timezoneOffsetMinutes = 0): { createdFrom: string; createdTo: string } | null {
+  const normalized = parseIsoDate(dateIso);
+  if (!normalized) {
+    return null;
+  }
+
+  const [year = 0, month = 0, day = 0] = normalized.split('-').map((part) => Number(part));
+  const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) + timezoneOffsetMinutes * 60_000);
+  if (Number.isNaN(start.getTime())) {
+    return null;
+  }
+
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  return { createdFrom: start.toISOString(), createdTo: end.toISOString() };
+}
+
+function getRequestUrl(req: IncomingMessage): URL {
+  return new URL(req.url || '/', 'http://localhost');
 }
 
 async function readJsonBody<T>(req: IncomingMessage): Promise<T> {
@@ -297,6 +337,15 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   }
 
   if (pathname === '/api/dashboard/history' && req.method === 'GET') {
+    const requestUrl = getRequestUrl(req);
+    const selectedDate = parseIsoDate(requestUrl.searchParams.get('date'));
+    const timezoneOffsetMinutes = parseTimezoneOffsetMinutes(requestUrl.searchParams.get('tzOffsetMinutes'));
+    const dateWindow = selectedDate ? getUtcDateWindow(selectedDate, timezoneOffsetMinutes) : null;
+    if (requestUrl.searchParams.get('date') && !dateWindow) {
+      sendJson(res, 400, { error: 'Invalid date. Use YYYY-MM-DD.' });
+      return true;
+    }
+
     const projects = await projectStore.listProjects();
     const projectById = new Map(projects.map((project) => [project.id, project]));
     const events: any[] = [];
@@ -310,9 +359,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     let packageReservedTotal = 0;
 
     for (const project of projects) {
+      const historyOptions = dateWindow
+        ? { limit: dashboardDayHistoryLimit, ...dateWindow }
+        : { limit: dashboardProjectHistoryLimit };
       const [items, tasks] = await Promise.all([
-        referenceLibraryStore.listProjectItems(project.id, { limit: dashboardProjectHistoryLimit }),
-        generationTaskStore.listProjectTasks(project.id, { limit: dashboardProjectHistoryLimit }),
+        referenceLibraryStore.listProjectItems(project.id, historyOptions),
+        generationTaskStore.listProjectTasks(project.id, historyOptions),
       ]);
 
       const itemById = new Map(items.map((item) => [item.id, item]));
@@ -431,11 +483,13 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       ? { ...event, views: viewsMap[event.publicationUrl] || 0 }
       : event
     );
+    const resultLimit = dateWindow ? dashboardDayHistoryLimit : 500;
 
     hydratedEvents.sort((a, b) => Date.parse(b.eventAt || b.createdAt || '') - Date.parse(a.eventAt || a.createdAt || ''));
     sendJson(res, 200, {
-      events: hydratedEvents.slice(0, 500),
+      events: hydratedEvents.slice(0, resultLimit),
       totals: {
+        selectedDate,
         projects: projects.length,
         references: hydratedEvents.filter((event) => event.type === 'reference').length,
         generations: hydratedEvents.filter((event) => event.type === 'generation').length,
@@ -572,7 +626,19 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
 
   const generationsRoute = getProjectGenerationsRouteParams(pathname);
   if (generationsRoute.projectId && req.method === 'GET') {
-    const tasks = await generationTaskStore.listProjectTasks(generationsRoute.projectId);
+    const requestUrl = getRequestUrl(req);
+    const selectedDate = parseIsoDate(requestUrl.searchParams.get('date'));
+    const timezoneOffsetMinutes = parseTimezoneOffsetMinutes(requestUrl.searchParams.get('tzOffsetMinutes'));
+    const dateWindow = selectedDate ? getUtcDateWindow(selectedDate, timezoneOffsetMinutes) : null;
+    if (requestUrl.searchParams.get('date') && !dateWindow) {
+      sendJson(res, 400, { error: 'Invalid date. Use YYYY-MM-DD.' });
+      return true;
+    }
+
+    const tasks = await generationTaskStore.listProjectTasks(
+      generationsRoute.projectId,
+      dateWindow ? { limit: dashboardDayHistoryLimit, ...dateWindow } : undefined
+    );
 
     // Fetch view counts for tasks with publication URLs
     const publicationUrls = tasks

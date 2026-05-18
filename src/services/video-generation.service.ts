@@ -24,8 +24,31 @@ export class ProviderRateLimitError extends Error {
   }
 }
 
+export class VideoGenerationFallbackError extends Error {
+  public readonly primaryErrorMessage: string;
+  public readonly fallbackErrorMessage: string;
+
+  constructor(input: {
+    primaryErrorMessage: string;
+    fallbackErrorMessage: string;
+  }) {
+    super(input.primaryErrorMessage);
+    this.name = 'VideoGenerationFallbackError';
+    this.primaryErrorMessage = input.primaryErrorMessage;
+    this.fallbackErrorMessage = input.fallbackErrorMessage;
+  }
+}
+
 export function isPromptModerationError(error: unknown): error is PromptModerationError {
   return error instanceof PromptModerationError || isModerationError(error);
+}
+
+export function getPrimaryGenerationErrorMessage(error: unknown): string {
+  if (error instanceof VideoGenerationFallbackError) {
+    return error.primaryErrorMessage;
+  }
+
+  return (error as any)?.message || String(error);
 }
 
 function isModerationError(error: unknown): boolean {
@@ -105,6 +128,7 @@ export class VideoGenerationService {
     }
 
     // 1. Comet API (Primary for Sora 2 & Seedance 2)
+    let primaryProviderErrorMessage = '';
     if (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') {
       try {
         const taskId = await this.startCometWithRateLimitRetry({
@@ -122,6 +146,7 @@ export class VideoGenerationService {
         if (error instanceof ProviderRateLimitError || isProviderRateLimitError(error)) {
           throw new ProviderRateLimitError(`Comet API is rate limited or saturated after retries: ${errorMsg}`);
         }
+        primaryProviderErrorMessage = `Video generation failed (Comet API): ${errorMsg}`;
         console.warn(`Comet API generation failed, falling back to Kie: ${errorMsg}`);
       }
     }
@@ -142,11 +167,18 @@ export class VideoGenerationService {
       const url = await KieService.pollStatus(taskId, effectiveModel);
       return { provider: 'kie', providerTaskId: taskId, resultVideoUrl: url };
     } catch (error) {
+      const fallbackErrorMessage = `Video generation failed (Kie.ai): ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error('Kie.ai generation failed:', error instanceof Error ? error.message : error);
       if (isModerationError(error)) {
         throw new PromptModerationError(`Kie.ai blocked prompt by moderation: ${error instanceof Error ? error.message : 'Unknown moderation error'}`);
       }
-      throw new Error(`Video generation failed (Kie.ai): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (primaryProviderErrorMessage) {
+        throw new VideoGenerationFallbackError({
+          primaryErrorMessage: primaryProviderErrorMessage,
+          fallbackErrorMessage,
+        });
+      }
+      throw new Error(fallbackErrorMessage);
     }
   }
 

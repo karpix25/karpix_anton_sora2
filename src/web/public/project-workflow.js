@@ -455,7 +455,13 @@ export function createProjectWorkflow(context) {
       return;
     }
 
-    const data = await api(`/api/projects/${state.currentProject.id}/generations`);
+    const params = new URLSearchParams();
+    if (state.generationDateFilter) {
+      params.set('date', state.generationDateFilter);
+      params.set('tzOffsetMinutes', String(new Date().getTimezoneOffset()));
+    }
+    const query = params.toString();
+    const data = await api(`/api/projects/${state.currentProject.id}/generations${query ? `?${query}` : ''}`);
     state.generationTasks = data.tasks || [];
     renderGenerationTasks();
     renderProjectPlanSummary();

@@ -383,6 +383,14 @@
                   <p class="card-eyebrow">Генерации</p>
                   <h3>История генераций</h3>
                 </div>
+                <div class="generation-history-actions">
+                  <label class="dashboard-date-filter">
+                    <span>День</span>
+                    <input id="generation-date-filter" type="date" />
+                  </label>
+                  <button id="generation-today-button" class="secondary-button" type="button">Сегодня</button>
+                  <button id="generation-clear-date-button" class="secondary-button" type="button">Последние</button>
+                </div>
               </div>
               <div id="generation-tasks" class="library-list empty-state">
                 Генераций пока нет.
@@ -409,6 +417,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=1.4.1-project-plan"></script>
+    <script type="module" src="/app.js?v=1.4.2-calendar-history"></script>
   </body>
 </html>

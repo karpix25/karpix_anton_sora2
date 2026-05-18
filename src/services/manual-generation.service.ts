@@ -3,7 +3,7 @@ import { ProjectReferenceService } from './project-reference.service.js';
 import { ReferenceAudioService } from './reference-audio.service.js';
 import { TextOverlayService } from './text-overlay.service.js';
 import { VideoPostprocessService } from './video-postprocess.service.js';
-import { VideoGenerationService, isPromptModerationError } from './video-generation.service.js';
+import { VideoGenerationService, getPrimaryGenerationErrorMessage, isPromptModerationError } from './video-generation.service.js';
 import { YandexDiskService } from './yandex-disk.service.js';
 import { S3StorageService } from './s3-storage.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
@@ -505,7 +505,7 @@ export class ManualGenerationService {
       await this.pauseProjectIfPackageExhausted(project);
       return completedTask;
     } catch (error: any) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = getPrimaryGenerationErrorMessage(error);
       console.error(`[ManualGenerationService] Task ${task.id}: failed:`, errorMsg);
       await generationTaskStore.updateTask(task.id, {
         status: 'failed',

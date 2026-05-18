@@ -1,6 +1,7 @@
 const state = {
   events: [],
   totals: {},
+  selectedDate: '',
 };
 
 const elements = {
@@ -8,6 +9,9 @@ const elements = {
   history: document.getElementById('dashboard-history'),
   summary: document.getElementById('dashboard-summary'),
   typeFilter: document.getElementById('dashboard-type-filter'),
+  dateFilter: document.getElementById('dashboard-date-filter'),
+  todayButton: document.getElementById('today-dashboard-button'),
+  clearDateButton: document.getElementById('clear-dashboard-date-button'),
   refreshButton: document.getElementById('refresh-dashboard-button'),
 };
 
@@ -60,6 +64,20 @@ function shorten(value, maxLength = 90) {
   return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }
 
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getHistoryUrl() {
+  const params = new URLSearchParams();
+  if (state.selectedDate) {
+    params.set('date', state.selectedDate);
+    params.set('tzOffsetMinutes', String(new Date().getTimezoneOffset()));
+  }
+  const query = params.toString();
+  return query ? `/api/dashboard/history?${query}` : '/api/dashboard/history';
+}
+
 function renderSummary() {
   const totals = state.totals || {};
   const autoTodayValue = `${totals.autoCompletedToday || 0}/${totals.autoPlannedToday || 0}`;
@@ -67,6 +85,7 @@ function renderSummary() {
     ? `${totals.packageBillableTotal || 0}/${totals.packageLimitTotal || 0}`
     : 'без лимитов';
   const cards = [
+    ['День', state.selectedDate || 'последние'],
     ['Проекты', totals.projects || 0],
     ['Референсы', totals.references || 0],
     ['Генерации', totals.generations || 0],
@@ -186,12 +205,12 @@ function renderHistory() {
 async function loadHistory() {
   elements.history.classList.add('empty-state');
   elements.history.innerHTML = 'Загрузка истории...';
-  setStatus('Загрузка...');
-  const data = await api('/api/dashboard/history');
+  setStatus(state.selectedDate ? `Загрузка за ${state.selectedDate}...` : 'Загрузка последних событий...');
+  const data = await api(getHistoryUrl());
   state.events = Array.isArray(data?.events) ? data.events : [];
   state.totals = data?.totals || {};
   renderHistory();
-  setStatus('Готово');
+  setStatus(state.selectedDate ? `Готово: ${state.selectedDate}` : 'Готово: последние события');
 }
 
 elements.refreshButton?.addEventListener('click', () => {
@@ -202,6 +221,33 @@ elements.refreshButton?.addEventListener('click', () => {
 });
 
 elements.typeFilter?.addEventListener('change', renderHistory);
+elements.dateFilter?.addEventListener('change', () => {
+  state.selectedDate = elements.dateFilter.value || '';
+  loadHistory().catch((error) => {
+    console.error(error);
+    setStatus(error.message);
+  });
+});
+elements.todayButton?.addEventListener('click', () => {
+  state.selectedDate = getTodayKey();
+  if (elements.dateFilter) {
+    elements.dateFilter.value = state.selectedDate;
+  }
+  loadHistory().catch((error) => {
+    console.error(error);
+    setStatus(error.message);
+  });
+});
+elements.clearDateButton?.addEventListener('click', () => {
+  state.selectedDate = '';
+  if (elements.dateFilter) {
+    elements.dateFilter.value = '';
+  }
+  loadHistory().catch((error) => {
+    console.error(error);
+    setStatus(error.message);
+  });
+});
 
 loadHistory().catch((error) => {
   console.error(error);

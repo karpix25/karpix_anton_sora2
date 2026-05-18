@@ -226,17 +226,38 @@ export const generationTaskStore = {
     return result.rows.map((row) => mapRowToTask(row));
   },
 
-  async listProjectTasks(projectId: string, options?: { limit?: number }): Promise<GenerationTask[]> {
+  async listProjectTasks(projectId: string, options?: {
+    limit?: number;
+    createdFrom?: string;
+    createdTo?: string;
+  }): Promise<GenerationTask[]> {
     const limit = options?.limit ? Math.max(1, Math.min(2_000, Math.floor(options.limit))) : 0;
+    const params: unknown[] = [normalizeString(projectId)];
+    const conditions = ['project_id = $1'];
+
+    if (options?.createdFrom) {
+      params.push(options.createdFrom);
+      conditions.push(`created_at >= $${params.length}::timestamptz`);
+    }
+
+    if (options?.createdTo) {
+      params.push(options.createdTo);
+      conditions.push(`created_at < $${params.length}::timestamptz`);
+    }
+
+    if (limit) {
+      params.push(limit);
+    }
+
     const result = await query<GenerationTaskRow>(
       `
         SELECT *
         FROM generation_tasks
-        WHERE project_id = $1
+        WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC
-        ${limit ? 'LIMIT $2' : ''}
+        ${limit ? `LIMIT $${params.length}` : ''}
       `,
-      limit ? [normalizeString(projectId), limit] : [normalizeString(projectId)]
+      params
     );
 
     return result.rows.map((row) => mapRowToTask(row));
