@@ -418,7 +418,7 @@ function snapshotFromForm() {
     productDescription: elements.fields.productDescription.value.trim(),
     extraPromptingRules: elements.fields.extraPromptingRules.value.trim(),
     targetAudience: elements.fields.targetAudience.value.trim(),
-    cta: elements.fields.cta.value.trim(),
+    cta: elements.fields.cta?.value?.trim() ?? state.currentProject.cta ?? '',
     projectLanguage: elements.fields.projectLanguage.value === 'en' ? 'en' : 'ru',
     mode: automationEnabled ? 'auto' : 'manual',
     automationEnabled,
@@ -830,7 +830,9 @@ function applyProjectToForm(project) {
   elements.fields.productDescription.value = state.currentProject.productDescription || '';
   elements.fields.extraPromptingRules.value = state.currentProject.extraPromptingRules || '';
   elements.fields.targetAudience.value = state.currentProject.targetAudience || '';
-  elements.fields.cta.value = state.currentProject.cta || '';
+  if (elements.fields.cta) {
+    elements.fields.cta.value = state.currentProject.cta || '';
+  }
   elements.fields.projectLanguage.value = state.currentProject.projectLanguage === 'en' ? 'en' : 'ru';
   elements.fields.automationEnabled.checked = Boolean(state.currentProject.automationEnabled);
   elements.fields.dailyGenerationLimit.value = String(state.currentProject.dailyGenerationLimit ?? 1);
