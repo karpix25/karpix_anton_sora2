@@ -24,7 +24,9 @@ export function createProjectWorkflow(context) {
     elements.referenceImages.className = 'reference-grid';
     elements.referenceImages.innerHTML = images
       .map(
-        (image) => `
+        (image) => {
+          const yandexDiskUrl = getYandexDiskFileUrl(image.yandexDiskPath, image.yandexDownloadUrl || '');
+          return `
           <article class="reference-card">
             <div class="reference-image-frame">
               ${image.url
@@ -43,10 +45,14 @@ export function createProjectWorkflow(context) {
               <button type="button" data-set-primary-image="${image.id}">
                 ${image.id === state.currentProject.primaryReferenceImageId ? 'Основное' : 'Сделать основным'}
               </button>
+              ${yandexDiskUrl
+                ? `<a class="reference-disk-button" href="${context.escapeHtml(yandexDiskUrl)}" target="_blank" rel="noreferrer">Яндекс.Диск</a>`
+                : '<span class="reference-disk-button is-disabled">Нет на Диске</span>'}
               <button type="button" data-remove-image="${image.id}">Удалить</button>
             </div>
           </article>
-        `
+        `;
+        }
       )
       .join('');
 

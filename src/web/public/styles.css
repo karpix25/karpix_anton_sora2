@@ -543,13 +543,20 @@ textarea {
   gap: 6px;
 }
 
-.reference-card button {
+.reference-card button,
+.reference-card .reference-disk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid rgba(142, 44, 36, 0.2);
   color: var(--danger);
   border-radius: 999px;
   padding: 8px 12px;
   cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  text-decoration: none;
 }
 
 .reference-card-actions {
@@ -561,6 +568,17 @@ textarea {
 .reference-card-actions [data-set-primary-image] {
   border-color: rgba(182, 87, 42, 0.2);
   color: var(--accent-dark);
+}
+
+.reference-card-actions .reference-disk-button {
+  border-color: rgba(45, 105, 176, 0.22);
+  color: #2d69b0;
+}
+
+.reference-card-actions .reference-disk-button.is-disabled {
+  border-color: rgba(76, 54, 39, 0.12);
+  color: var(--muted);
+  cursor: default;
 }
 
 .library-list {
