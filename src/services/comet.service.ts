@@ -206,7 +206,7 @@ export class CometService {
         console.log(`[CometService] Requesting video: model=${model}, keyLength=${key.length}, key=${maskedKey}`);
 
         const effectiveApiModel = model === 'seedance-2' ? 'doubao-seedance-2-0' : model;
-        const size = model === 'seedance-2' ? '480x854' : (options.aspect_ratio === '9:16' ? '720x1280' : '1280x720');
+        const size = model === 'seedance-2' ? '496x864' : (options.aspect_ratio === '9:16' ? '720x1280' : '1280x720');
         
         console.log(`[CometService] Target size: ${size}, API model: ${effectiveApiModel}`);
         
