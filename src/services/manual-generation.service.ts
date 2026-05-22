@@ -256,11 +256,9 @@ export class ManualGenerationService {
         ? task.overlayTexts 
         : (libraryItem.textOverlays || []);
 
-      if ((!analysis || !textOverlays.length || !libraryItem.audioFilePath) && libraryItem.sourceUrl) {
-        libraryItem = await this.refreshReferenceDirectVideoUrl(
-          libraryItem,
-          !analysis || !textOverlays.length ? 'missing analysis/text overlays' : 'missing stored audio'
-        );
+      if (libraryItem.sourceUrl) {
+        // Always refresh direct URL via RapidAPI because Instagram scontent links expire quickly.
+        libraryItem = await this.refreshReferenceDirectVideoUrl(libraryItem, 'always refresh direct URL before processing');
       }
       
       // Force processing if missing components
