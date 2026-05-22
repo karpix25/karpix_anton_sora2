@@ -58,6 +58,29 @@ function isTooShortGeneratedVideoError(error: unknown): boolean {
   return message.includes('generated video is too short');
 }
 
+function isLikelyLocalVideoReference(value: string): boolean {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (normalized.startsWith('http://') || normalized.startsWith('https://')) return false;
+  return normalized.startsWith('/') ||
+    normalized.startsWith('./') ||
+    normalized.startsWith('../') ||
+    normalized.startsWith('file://');
+}
+
+function toLocalPath(value: string): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (normalized.startsWith('file://')) {
+    try {
+      return decodeURIComponent(new URL(normalized).pathname);
+    } catch {
+      return normalized.replace(/^file:\/\//, '');
+    }
+  }
+  return normalized;
+}
+
 export class ManualGenerationService {
   private static getPackageVideoLimit(project: Project): number {
     return Math.max(0, Math.floor(project.packageVideoLimit || 0));
@@ -341,7 +364,24 @@ export class ManualGenerationService {
       libraryItem = audioResult.libraryItem;
       const audio = audioResult.audio;
 
-      if (task.resultVideoUrl) {
+      let shouldReuseGeneratedVideo = Boolean(task.resultVideoUrl);
+      if (task.resultVideoUrl && isLikelyLocalVideoReference(task.resultVideoUrl)) {
+        const localVideoPath = toLocalPath(task.resultVideoUrl);
+        if (localVideoPath && !(await fs.pathExists(localVideoPath))) {
+          console.warn(
+            `[ManualGenerationService] Task ${task.id}: generated local video is missing (${localVideoPath}). Re-running parser and generation.`
+          );
+          if (libraryItem.sourceUrl) {
+            libraryItem = await this.refreshReferenceDirectVideoUrl(
+              libraryItem,
+              'missing local generated video, re-run parser before regeneration'
+            );
+          }
+          shouldReuseGeneratedVideo = false;
+        }
+      }
+
+      if (shouldReuseGeneratedVideo && task.resultVideoUrl) {
         resultVideoUrl = task.resultVideoUrl;
         console.log(
           `[ManualGenerationService] Task ${task.id}: reusing existing generated video URL and continuing from postprocess.`
