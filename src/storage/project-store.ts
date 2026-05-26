@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'fs-extra';
 import type { Project, ProjectInput, ReferenceImage } from '../domain/project.js';
 import { query } from './db.js';
+import { SafeFileService } from '../services/safe-file.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -564,14 +565,15 @@ export const projectStore = {
       return false;
     }
 
+    const imagePaths = existing.referenceImages.map((image: ReferenceImage) =>
+      SafeFileService.assertUserFilePath(path.join(uploadsDir, image.storedName), uploadsDir)
+    );
+
     await query('DELETE FROM projects WHERE id = $1', [normalizeString(projectId)]);
 
     await Promise.all(
-      existing.referenceImages.map(async (image: ReferenceImage) => {
-        const imagePath = path.join(uploadsDir, image.storedName);
-        if (await fs.pathExists(imagePath)) {
-          await fs.remove(imagePath);
-        }
+      imagePaths.map(async (imagePath) => {
+        await SafeFileService.moveUserFileToTrash(imagePath, uploadsDir);
       })
     );
 
@@ -725,15 +727,13 @@ export const projectStore = {
     }
 
     const referenceImages = project.referenceImages.filter((image) => image.id !== imageId);
+    const imagePath = SafeFileService.assertUserFilePath(this.getReferenceImageAbsolutePath(removedImage), uploadsDir);
     const updatedProject = await this.updateProject(projectId, {
       ...project,
       referenceImages,
     });
 
-    const imagePath = this.getReferenceImageAbsolutePath(removedImage);
-    if (await fs.pathExists(imagePath)) {
-      await fs.remove(imagePath);
-    }
+    await SafeFileService.moveUserFileToTrash(imagePath, uploadsDir);
 
     return {
       project: updatedProject,
@@ -764,12 +764,12 @@ export const projectStore = {
       return false;
     }
 
-    const imagePath = path.join(uploadsDir, normalizedStoredName);
+    const imagePath = SafeFileService.assertUserFilePath(path.join(uploadsDir, normalizedStoredName), uploadsDir);
     if (!(await fs.pathExists(imagePath))) {
       return false;
     }
 
-    await fs.remove(imagePath);
+    await SafeFileService.moveUserFileToTrash(imagePath, uploadsDir);
     return true;
   },
 

@@ -233,11 +233,11 @@ function activateTab(tabName) {
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),
     },
-    ...options,
   });
 
   if (response.status === 204) {
@@ -952,12 +952,24 @@ async function deleteProject() {
     return;
   }
 
-  if (!window.confirm(`Удалить проект "${state.currentProject.name || 'Без названия'}"?`)) {
+  const projectName = state.currentProject.name || 'Без названия';
+  if (!window.confirm(`Удалить проект "${projectName}"?`)) {
+    return;
+  }
+
+  const confirmation = window.prompt(`Для подтверждения удаления введите название проекта:\n${projectName}`);
+  if (confirmation !== projectName) {
+    setStatus('Удаление отменено: название проекта не совпало');
     return;
   }
 
   setStatus('Удаление...');
-  await api(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
+  await api(`/api/projects/${state.currentProject.id}`, {
+    method: 'DELETE',
+    headers: {
+      'x-confirm-project-name': confirmation,
+    },
+  });
   state.projects = state.projects.filter((project) => project.id !== state.currentProject.id);
   applyProjectToForm(state.projects[0] || defaultProject());
   setStatus('Удалено');

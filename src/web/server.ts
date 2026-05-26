@@ -12,6 +12,7 @@ import { YandexDiskService } from '../services/yandex-disk.service.js';
 import { ManualGenerationService } from '../services/manual-generation.service.js';
 import { ParserService } from '../services/parser.service.js';
 import { ReferenceAudioService } from '../services/reference-audio.service.js';
+import { SafeFileService } from '../services/safe-file.service.js';
 import { bot } from '../bot/bot.js';
 import type { GenerationTask } from '../domain/generation-task.js';
 
@@ -120,6 +121,19 @@ function readSecretHeader(req: IncomingMessage): string {
 
   if (Array.isArray(value)) {
     return value[0] || '';
+  }
+
+  return '';
+}
+
+function readSingleHeader(req: IncomingMessage, headerName: string): string {
+  const value = req.headers[headerName.toLowerCase()];
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return (value[0] || '').trim();
   }
 
   return '';
@@ -602,6 +616,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return true;
     }
 
+    const audioPath = item.audioFilePath
+      ? SafeFileService.assertUserFilePath(
+          ReferenceAudioService.getAudioAbsolutePath(item.audioFilePath),
+          path.join(SafeFileService.getDataDir(), 'reference-audio')
+        )
+      : '';
     const referenceTasks = await generationTaskStore.listReferenceTasks(item.id);
     for (const task of referenceTasks) {
       if (task.yandexDiskPath) {
@@ -609,11 +629,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       }
     }
 
-    if (item.audioFilePath) {
-      const audioPath = ReferenceAudioService.getAudioAbsolutePath(item.audioFilePath);
-      if (await fs.pathExists(audioPath)) {
-        await fs.remove(audioPath);
-      }
+    if (audioPath) {
+      await SafeFileService.moveUserFileToTrash(audioPath, path.join(SafeFileService.getDataDir(), 'reference-audio'));
     }
 
     await generationTaskStore.deleteReferenceTasks(item.id);
@@ -895,14 +912,35 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
 
   if (req.method === 'DELETE') {
     const project = await projectStore.getProject(projectId);
-    if (project && YandexDiskService.isConfigured()) {
+    if (!project) {
+      sendNotFound(res);
+      return true;
+    }
+
+    const confirmName = readSingleHeader(req, 'x-confirm-project-name');
+    if (confirmName !== project.name) {
+      sendJson(res, 400, { error: 'Project deletion requires exact project name confirmation' });
+      return true;
+    }
+
+    const tasks = await generationTaskStore.listProjectTasks(projectId);
+    const activeTask = tasks.find((task) => task.status === 'pending' || task.status === 'processing');
+    if (activeTask) {
+      sendJson(res, 409, {
+        error: 'Project has active generation tasks and cannot be deleted',
+        taskId: activeTask.id,
+        status: activeTask.status,
+      });
+      return true;
+    }
+
+    if (YandexDiskService.isConfigured()) {
       for (const image of project.referenceImages) {
         if (image.yandexDiskPath) {
           await YandexDiskService.deleteResource(image.yandexDiskPath);
         }
       }
 
-      const tasks = await generationTaskStore.listProjectTasks(projectId);
       for (const task of tasks) {
         if (task.yandexDiskPath) {
           await YandexDiskService.deleteResource(task.yandexDiskPath);
