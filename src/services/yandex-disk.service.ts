@@ -40,7 +40,15 @@ export interface YandexFolderOption {
 export class YandexDiskService {
   private static readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk';
   private static readonly rootFolder = 'disk:/references sora 2';
+  private static readonly generatedVideosParentFolder = 'disk:/ВИДЕО';
   private static readonly generatedVideosRootFolder = 'disk:/ВИДЕО/SORA2';
+  private static readonly protectedDeletePaths = new Set([
+    'disk:',
+    'disk:/',
+    'disk:/ВИДЕО',
+    'disk:/ВИДЕО/SORA2',
+    'disk:/references sora 2',
+  ]);
 
   public static isConfigured(): boolean {
     return config.yandexDisk.isConfigured;
@@ -136,13 +144,16 @@ export class YandexDiskService {
       return;
     }
 
+    const safeDiskPath = this.assertSafeDeletePath(diskPath);
+    console.log(`[YandexDiskService] Deleting resource: ${safeDiskPath}`);
+
     try {
       await axios.delete(`${this.baseUrl}/resources`, {
         headers: getHeaders(),
         ...requestOptions,
         params: {
-          path: diskPath,
-          permanently: true,
+          path: safeDiskPath,
+          permanently: false,
         },
       });
     } catch (error: any) {
@@ -284,7 +295,7 @@ export class YandexDiskService {
   }
 
   private static async ensureGeneratedVideosFolder(folderPath: string): Promise<void> {
-    await this.ensureFolder('disk:/ВИДЕО');
+    await this.ensureFolder(this.generatedVideosParentFolder);
     await this.ensureFolder(this.generatedVideosRootFolder);
 
     const relativePath = folderPath
@@ -419,5 +430,32 @@ export class YandexDiskService {
       .map((segment) => this.sanitizeDiskPathSegment(segment))
       .filter(Boolean)
       .join('/');
+  }
+
+  private static assertSafeDeletePath(diskPath: string): string {
+    const normalizedPath = this.normalizeDiskPath(diskPath);
+
+    if (this.protectedDeletePaths.has(normalizedPath)) {
+      throw new Error(`Refusing to delete protected Yandex Disk path: ${normalizedPath}`);
+    }
+
+    const isReferenceResource = normalizedPath.startsWith(`${this.rootFolder}/`);
+    const isGeneratedVideoResource = normalizedPath.startsWith(`${this.generatedVideosRootFolder}/`);
+    if (!isReferenceResource && !isGeneratedVideoResource) {
+      throw new Error(`Refusing to delete Yandex Disk path outside managed roots: ${normalizedPath}`);
+    }
+
+    return normalizedPath;
+  }
+
+  private static normalizeDiskPath(diskPath: string): string {
+    const normalizedPath = String(diskPath || '')
+      .trim()
+      .replace(/\\/g, '/')
+      .replace(/\/{2,}/g, '/')
+      .replace(/^disk:\//, 'disk:/')
+      .replace(/\/+$/g, '');
+
+    return normalizedPath || 'disk:/';
   }
 }

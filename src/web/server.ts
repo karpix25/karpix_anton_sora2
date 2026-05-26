@@ -913,8 +913,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         project.name,
         project.yandexDiskFolder
       );
+      console.log(
+        `[WebServer] Deleting project Yandex resources projectId=${project.id} projectName=${project.name} generatedVideosFolder=${generatedVideosFolder}`
+      );
       await YandexDiskService.deleteResource(generatedVideosFolder);
-      await YandexDiskService.deleteResource(path.posix.dirname(generatedVideosFolder));
     }
 
     await referenceLibraryStore.deleteProjectItems(projectId);
