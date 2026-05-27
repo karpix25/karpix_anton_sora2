@@ -167,7 +167,7 @@ export class KieService {
    * Triggers video generation on Kie.ai.
    * @param prompt The generated prompt from Gemini Pro.
    * @param imageUrl The product photo URL as a reference.
-   * @param model The target model ('sora-2' or 'veo-3-1').
+   * @param model The target model (e.g. 'sora-2', 'veo-3-1', 'wan-2-7').
    */
   public static async generateVideo(
     prompt: string,
@@ -175,7 +175,8 @@ export class KieService {
     model: string,
     options: {
       mode?: 'fun' | 'normal' | 'spicy';
-      resolution?: '480p' | '720p';
+      resolution?: '480p' | '720p' | '1080p';
+      duration?: number;
       aspect_ratio?: string;
     } = {}
   ): Promise<string> {
@@ -187,6 +188,7 @@ export class KieService {
         try {
           const isGrok = model.includes('grok');
           const isVeo = model.includes('veo');
+          const isWan27 = model === 'wan-2-7';
           
           let endpoint = `${config.kieAi.baseUrl}/jobs/createTask`;
           let targetModel = model;
@@ -196,6 +198,7 @@ export class KieService {
             'sora-2': 'sora-2-image-to-video-stable',
             'veo-3-1': 'veo3_fast', // Using veo3_fast as requested
             'grok-imagine': 'grok-imagine/image-to-video',
+            'wan-2-7': 'wan/2-7-image-to-video',
           };
 
           targetModel = modelMapping[model] || model;
@@ -212,6 +215,12 @@ export class KieService {
             input.resolution = options.resolution || '720p';
             // Use REFERENCE_2_VIDEO for "Reference" mode where image is used for consistency but not forced as first frame
             input.generationType = 'REFERENCE_2_VIDEO';
+          } else if (isWan27) {
+            input.first_frame_url = imageUrl;
+            input.resolution = options.resolution || '720p';
+            input.duration = Math.max(2, Math.min(15, Math.round(options.duration || 8)));
+            input.prompt_extend = true;
+            input.watermark = false;
           } else {
             input.image_urls = [imageUrl];
             if (isGrok) {

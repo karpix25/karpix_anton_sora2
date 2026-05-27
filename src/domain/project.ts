@@ -1,5 +1,5 @@
 export type ProjectMode = 'manual' | 'auto';
-export type VideoModel = 'sora-2' | 'seedance-2' | 'veo-3-1' | 'grok-imagine';
+export type VideoModel = 'sora-2' | 'seedance-2' | 'veo-3-1' | 'grok-imagine' | 'wan-2-7';
 export type ProjectLanguage = 'ru' | 'en';
 
 export interface ReferenceImage {

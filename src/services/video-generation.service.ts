@@ -92,16 +92,18 @@ export class VideoGenerationService {
   }): Promise<VideoGenerationResult> {
     const sysConfig = await systemConfigStore.getConfig();
     const effectiveModel = input.model || sysConfig.defaultVideoModel || 'seedance-2';
+    const isCometPrimaryModel = effectiveModel === 'sora-2' || effectiveModel === 'seedance-2';
+    const isWan27Model = effectiveModel === 'wan-2-7';
 
     console.log(
       `[VideoGenerationService] Starting generation: model=${effectiveModel} (original=${input.model}), imageUrl=${input.imageUrl ? 'provided' : 'missing'}`
     );
 
-    // Calculate effective duration (5-30s range per user requirements)
-    // For Sora 2 we force 8 seconds as requested.
-    let finalDuration = (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') ? 8 : (sysConfig.grokDuration || 10);
+    // Calculate effective duration (5-30s range per user requirements).
+    // For Comet primary models and Wan 2.7 we force 8 seconds as requested.
+    let finalDuration = (isCometPrimaryModel || isWan27Model) ? 8 : (sysConfig.grokDuration || 10);
     
-    if (effectiveModel !== 'sora-2' && effectiveModel !== 'seedance-2' && sysConfig.useReferenceDuration && input.referenceDurationSeconds) {
+    if (!isCometPrimaryModel && !isWan27Model && sysConfig.useReferenceDuration && input.referenceDurationSeconds) {
       finalDuration = Math.max(5, Math.min(30, Math.ceil(input.referenceDurationSeconds)));
       console.log(`[VideoGenerationService] Syncing duration with reference: ${input.referenceDurationSeconds}s -> ${finalDuration}s`);
     }
@@ -129,7 +131,7 @@ export class VideoGenerationService {
 
     // 1. Comet API (Primary for Sora 2 & Seedance 2)
     let primaryProviderErrorMessage = '';
-    if (effectiveModel === 'sora-2' || effectiveModel === 'seedance-2') {
+    if (isCometPrimaryModel) {
       try {
         const taskId = await this.startCometWithRateLimitRetry({
           prompt: promptWithFormat,
@@ -160,7 +162,10 @@ export class VideoGenerationService {
         effectiveModel,
         {
           mode: sysConfig.grokMode,
-          resolution: sysConfig.grokResolution === '1080p' ? '720p' : sysConfig.grokResolution as '480p' | '720p',
+          resolution: isWan27Model
+            ? '720p'
+            : (sysConfig.grokResolution === '1080p' ? '720p' : sysConfig.grokResolution as '480p' | '720p'),
+          duration: isWan27Model ? 8 : finalDuration,
           aspect_ratio: '9:16'
         }
       );

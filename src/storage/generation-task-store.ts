@@ -102,7 +102,7 @@ function normalizeTriggerMode(value: unknown): GenerationTriggerMode {
 }
 
 function normalizeVideoModel(value: unknown): VideoModel {
-  const models: VideoModel[] = ['sora-2', 'seedance-2', 'veo-3-1', 'grok-imagine'];
+  const models: VideoModel[] = ['sora-2', 'seedance-2', 'veo-3-1', 'grok-imagine', 'wan-2-7'];
   if (typeof value === 'string' && (models as string[]).includes(value)) {
     return value as VideoModel;
   }

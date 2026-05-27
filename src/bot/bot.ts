@@ -131,6 +131,7 @@ function formatModelName(model: string): string {
   if (m === 'sora-2') return 'Sora 2';
   if (m === 'seedance-2') return 'Seedance 2';
   if (m === 'grok-imagine') return 'Grok';
+  if (m === 'wan-2-7') return 'Wan 2.7 I2V';
   return model.toUpperCase();
 }
 
