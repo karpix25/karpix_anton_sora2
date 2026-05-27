@@ -292,7 +292,7 @@ export class CometService {
    * @param videoId The ID of the video to poll.
    */
   public static async pollStatus(videoId: string): Promise<string> {
-    const maxRetries = 300; // up to ~50 minutes
+    const maxRetries = 600; // up to ~100 minutes
     let resolvedVideoId = videoId;
     
     for (let i = 0; i < maxRetries; i++) {
