@@ -13,6 +13,7 @@ interface RestoreArgs {
   dryRun: boolean;
   onlyNotPublished: boolean;
   withOverlays: boolean;
+  createdBefore: string;
   limit: number;
   yes: boolean;
 }
@@ -36,6 +37,7 @@ interface RestoreCandidateRow {
   audio_s3_object_key: string;
   overlay_texts: unknown;
   publication_url: string;
+  created_at: string;
 }
 
 interface RestoreSummary {
@@ -73,6 +75,7 @@ function parseArgs(argv: string[]): RestoreArgs {
     dryRun: argv.includes('--dry-run'),
     onlyNotPublished: argv.includes('--only-not-published'),
     withOverlays: argv.includes('--with-overlays'),
+    createdBefore: readFlagValue(argv, '--created-before'),
     limit: parsePositiveInteger(readFlagValue(argv, '--limit'), 20),
     yes: argv.includes('--yes'),
   };
@@ -148,6 +151,7 @@ async function markRestoreResult(
 }
 
 async function fetchCandidates(args: RestoreArgs): Promise<RestoreCandidateRow[]> {
+  const params: unknown[] = [args.limit];
   const where: string[] = [
     `t.status = 'completed'`,
     sqlTextNotEmpty('t.s3_object_key'),
@@ -162,6 +166,11 @@ async function fetchCandidates(args: RestoreArgs): Promise<RestoreCandidateRow[]
     where.push(`t.overlay_texts IS NOT NULL`);
     where.push(`t.overlay_texts::text <> '[]'`);
     where.push(`t.overlay_texts::text <> ''`);
+  }
+
+  if (args.createdBefore) {
+    params.push(args.createdBefore);
+    where.push(`t.created_at < $${params.length}::timestamptz`);
   }
 
   if (!args.dryRun && await restoreTableExists()) {
@@ -194,7 +203,8 @@ async function fetchCandidates(args: RestoreArgs): Promise<RestoreCandidateRow[]
         r.audio_s3_bucket,
         r.audio_s3_object_key,
         t.overlay_texts,
-        t.publication_url
+        t.publication_url,
+        t.created_at
       FROM generation_tasks t
       JOIN projects p ON p.id = t.project_id
       JOIN reference_library r ON r.id = t.reference_library_item_id
@@ -202,7 +212,7 @@ async function fetchCandidates(args: RestoreArgs): Promise<RestoreCandidateRow[]
       ORDER BY t.created_at ASC, t.id ASC
       LIMIT $1
     `,
-    [args.limit]
+    params
   );
 
   return result.rows;
@@ -331,7 +341,7 @@ async function main(): Promise<void> {
   if (args.dryRun) {
     for (const candidate of candidates) {
       console.log(
-        `[restore:dry-run] task=${candidate.task_id} project="${candidate.project_name}" video=${candidate.video_s3_object_key} audio=${candidate.audio_s3_object_key} overlays=${normalizeOverlays(candidate.overlay_texts).length} published=${Boolean(candidate.publication_url)}`
+        `[restore:dry-run] task=${candidate.task_id} createdAt=${candidate.created_at} project="${candidate.project_name}" video=${candidate.video_s3_object_key} audio=${candidate.audio_s3_object_key} overlays=${normalizeOverlays(candidate.overlay_texts).length} published=${Boolean(candidate.publication_url)}`
       );
     }
     return;
