@@ -48,7 +48,21 @@ function getStoredTaskVideoUrl(task: GenerationTask): string {
 function isExpiredDirectUrlError(error: any): boolean {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('403') ||
+    message.includes('404') ||
+    message.includes('410') ||
+    message.includes('429') ||
+    message.includes('500') ||
+    message.includes('502') ||
+    message.includes('503') ||
+    message.includes('504') ||
     message.includes('forbidden') ||
+    message.includes('not found') ||
+    message.includes('gone') ||
+    message.includes('too many requests') ||
+    message.includes('internal server error') ||
+    message.includes('bad gateway') ||
+    message.includes('service unavailable') ||
+    message.includes('gateway timeout') ||
     message.includes('access denied') ||
     message.includes('server returned 403');
 }
@@ -229,6 +243,42 @@ export class ManualGenerationService {
     }
   }
 
+  private static async downloadReferenceVideoWithFreshDirectUrl(
+    libraryItem: ReferenceLibraryItem
+  ): Promise<{ videoLocalPath: string; libraryItem: ReferenceLibraryItem }> {
+    if (!libraryItem.directVideoUrl) {
+      throw new Error('Reference item has no direct video URL');
+    }
+
+    try {
+      return {
+        videoLocalPath: await InstagramService.downloadVideo(libraryItem.directVideoUrl),
+        libraryItem,
+      };
+    } catch (error: any) {
+      if (!libraryItem.sourceUrl || !isExpiredDirectUrlError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        `[ManualGenerationService] Reference ${libraryItem.id}: direct Instagram CDN URL failed (${error.message}). Refreshing from source URL and retrying download once...`
+      );
+      const refreshedLibraryItem = await this.refreshReferenceDirectVideoUrl(
+        libraryItem,
+        'direct CDN URL failed during video download'
+      );
+
+      if (!refreshedLibraryItem.directVideoUrl) {
+        throw error;
+      }
+
+      return {
+        videoLocalPath: await InstagramService.downloadVideo(refreshedLibraryItem.directVideoUrl),
+        libraryItem: refreshedLibraryItem,
+      };
+    }
+  }
+
   private static async processTask(
     task: GenerationTask,
     project: Project,
@@ -274,7 +324,9 @@ export class ManualGenerationService {
           // Download for stability if something is missing
           if (!analysis || !textOverlays.length) {
             console.log(`[ManualGenerationService] Downloading video for ${!analysis ? 'analysis' : ''} ${!textOverlays.length ? 'and text extraction' : ''}...`);
-            videoLocalPath = await InstagramService.downloadVideo(libraryItem.directVideoUrl);
+            const downloadResult = await this.downloadReferenceVideoWithFreshDirectUrl(libraryItem);
+            videoLocalPath = downloadResult.videoLocalPath;
+            libraryItem = downloadResult.libraryItem;
           }
 
           // 1. Parallelize Video Analysis and Audio Extraction
