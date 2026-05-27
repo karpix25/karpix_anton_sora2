@@ -239,13 +239,18 @@ async function restoreCandidate(candidate: RestoreCandidateRow): Promise<void> {
       endFrameXPercent: candidate.end_frame_x_percent,
     });
 
-    const upload = await YandexDiskService.uploadGeneratedVideoFile({
+    const uploadInput: Parameters<typeof YandexDiskService.uploadGeneratedVideoFile>[0] = {
       projectName: candidate.project_name,
       projectCode: candidate.project_code,
       projectFolder: candidate.yandex_disk_folder,
       taskId: candidate.task_id,
       filePath: outputPath,
-    });
+    };
+    if (candidate.video_file_name) {
+      uploadInput.fileName = candidate.video_file_name;
+    }
+
+    const upload = await YandexDiskService.uploadGeneratedVideoFile(uploadInput);
 
     await query(
       `
