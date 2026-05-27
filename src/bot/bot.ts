@@ -13,6 +13,9 @@ import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 
 const repeatGenerationCallbackPrefix = 'repeat_generation:';
+const TG_BUTTON_CREATE_PROJECT = '🆕 Создать проект';
+const TG_BUTTON_PROJECT_STATUS = '📌 Статус проекта';
+const TG_BUTTON_SETTINGS = '⚙️ Настройки';
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -125,6 +128,12 @@ function getRepeatGenerationCallbackData(taskId: string): string {
   return `${repeatGenerationCallbackPrefix}${taskId}`;
 }
 
+function getMainKeyboard() {
+  return Markup.keyboard(
+    [[TG_BUTTON_CREATE_PROJECT, TG_BUTTON_PROJECT_STATUS], [TG_BUTTON_SETTINGS]]
+  ).resize();
+}
+
 function formatModelName(model: string): string {
   const m = String(model).toLowerCase();
   if (m === 'veo-3-1') return 'Veo 3.1';
@@ -197,12 +206,11 @@ bot.start((ctx) => {
     '2. Откройте проект в вебе и заполните фото/настройки.\n' +
     '3. В эту же тему отправляйте ссылку на Instagram Reel.\n\n' +
     `Веб-интерфейс: ${webUrl}`,
-    Markup.keyboard([['/create_project', '/project_status'], ['/settings']]).resize()
+    getMainKeyboard()
   );
 });
 
-// Settings
-bot.command('settings', async (ctx) => {
+async function handleSettingsCommand(ctx: Context): Promise<void> {
   if (!ctx.chat) {
     return;
   }
@@ -215,7 +223,11 @@ bot.command('settings', async (ctx) => {
       ? `Настройки проекта "${boundProject.name}" изменяются только в веб-интерфейсе:\n${webUrl}`
       : `Настройки и фото проекта изменяются только в веб-интерфейсе:\n${webUrl}`
   );
-});
+}
+
+// Settings
+bot.command('settings', handleSettingsCommand);
+bot.hears(TG_BUTTON_SETTINGS, handleSettingsCommand);
 
 bot.command('bind_project', async (ctx) => {
   if (!ctx.chat || !('text' in ctx.message)) {
@@ -359,12 +371,14 @@ bot.command('bind_topic', async (ctx) => {
   );
 });
 
-bot.command('create_project', async (ctx) => {
-  if (!ctx.chat || !('text' in ctx.message)) {
+async function handleCreateProjectCommand(ctx: Context): Promise<void> {
+  const message = 'message' in ctx ? (ctx.message as any) : undefined;
+  if (!ctx.chat || typeof message?.text !== 'string') {
     return;
   }
 
-  const text = ctx.message.text.trim();
+  const incomingText = message.text.trim();
+  const text = incomingText === TG_BUTTON_CREATE_PROJECT ? '/create_project' : incomingText;
   const match = text.match(/^\/create_project(?:@\w+)?(?:\s+([\s\S]+))?$/);
   const rawArgs = normalizeString(match?.[1]);
   const messageThreadId = getMessageThreadId(ctx);
@@ -430,9 +444,12 @@ bot.command('create_project', async (ctx) => {
     `Topic ID: ${bound.telegramTopicId}\n\n` +
     `Дальше заполните фото и настройки в веб-интерфейсе:\n${getWebInterfaceUrl(bound.id)}`
   );
-});
+}
 
-bot.command('project_status', async (ctx) => {
+bot.command('create_project', handleCreateProjectCommand);
+bot.hears(TG_BUTTON_CREATE_PROJECT, handleCreateProjectCommand);
+
+async function handleProjectStatusCommand(ctx: Context): Promise<void> {
   if (!ctx.chat) {
     return;
   }
@@ -462,7 +479,10 @@ bot.command('project_status', async (ctx) => {
     `Режим: ${project.mode === 'auto' ? 'авто' : 'ручной'}\n\n` +
     `Веб: ${getWebInterfaceUrl(project.id)}`
   );
-});
+}
+
+bot.command('project_status', handleProjectStatusCommand);
+bot.hears(TG_BUTTON_PROJECT_STATUS, handleProjectStatusCommand);
 
 bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
   const taskId = normalizeString((ctx as any).match?.[1]);
