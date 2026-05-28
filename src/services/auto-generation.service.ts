@@ -48,6 +48,10 @@ export class AutoGenerationService {
     1,
     toPositiveNumber(process.env.AUTO_GENERATION_RECENT_REFERENCE_WINDOW, 2)
   );
+  private static readonly concurrencyPerProject = Math.max(
+    1,
+    Math.floor(toPositiveNumber(process.env.AUTO_GENERATION_CONCURRENCY_PER_PROJECT, 1))
+  );
 
   public static start(intervalMs: number = 30 * 60 * 1000) {
     if (this.interval) return;
@@ -163,86 +167,123 @@ export class AutoGenerationService {
         toPositiveNumber(process.env.AUTO_GENERATION_MAX_ATTEMPTS_PER_PROJECT_TICK, project.dailyGenerationLimit)
       )
     );
+    const maxConcurrentTasks = Math.max(
+      1,
+      Math.min(project.dailyGenerationLimit, this.concurrencyPerProject)
+    );
+    const inFlight: Promise<void>[] = [];
+    let shouldStopLaunching = false;
 
-    while (candidates.length) {
-      tasksToday = await generationTaskStore.countTasksForDate(projectId, today);
-      if (tasksToday >= project.dailyGenerationLimit) {
-        console.log(
-          `[AutoGenerationService] Project ${project.name}: daily limit reached (${tasksToday}/${project.dailyGenerationLimit}). Queue paused.`
-        );
-        return;
+    const waitForRunningTasks = async () => {
+      if (inFlight.length) {
+        await Promise.allSettled([...inFlight]);
       }
+    };
 
-      const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
-      if (packageLimit) {
-        const packageUsage = await generationTaskStore.getPackageUsage(projectId);
-        if (packageUsage.billableTotal >= packageLimit) {
-          await projectStore.updateProject(projectId, {
-            automationEnabled: false,
-            isActive: false,
-          });
+    while (candidates.length || inFlight.length) {
+      while (!shouldStopLaunching && candidates.length && inFlight.length < maxConcurrentTasks) {
+        tasksToday = await generationTaskStore.countTasksForDate(projectId, today);
+        if (tasksToday + inFlight.length >= project.dailyGenerationLimit) {
           console.log(
-            `[AutoGenerationService] Project ${project.name}: package limit reached (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}). Queue paused.`
+            `[AutoGenerationService] Project ${project.name}: daily limit reached/reserved (${tasksToday}+${inFlight.length}/${project.dailyGenerationLimit}). Queue paused.`
           );
+          shouldStopLaunching = true;
+          await waitForRunningTasks();
           return;
         }
-      }
 
-      if (attemptsThisTick >= maxAttemptsThisTick) {
+        const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
+        if (packageLimit) {
+          const packageUsage = await generationTaskStore.getPackageUsage(projectId);
+          if (packageUsage.billableTotal + inFlight.length >= packageLimit) {
+            await projectStore.updateProject(projectId, {
+              automationEnabled: false,
+              isActive: false,
+            });
+            console.log(
+              `[AutoGenerationService] Project ${project.name}: package limit reached/reserved (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}+${inFlight.length}). Queue paused.`
+            );
+            shouldStopLaunching = true;
+            await waitForRunningTasks();
+            return;
+          }
+        }
+
+        if (attemptsThisTick >= maxAttemptsThisTick) {
+          console.log(
+            `[AutoGenerationService] Project ${project.name}: attempt limit reached for this tick (${attemptsThisTick}/${maxAttemptsThisTick}). Queue will continue on the next tick.`
+          );
+          shouldStopLaunching = true;
+          break;
+        }
+
+        const candidateIndex = this.pickCandidateIndex(candidates, recentReferenceIds);
+        const [entry] = candidates.splice(candidateIndex, 1);
+        if (!entry) {
+          break;
+        }
+        const item = entry.item;
+
         console.log(
-          `[AutoGenerationService] Project ${project.name}: attempt limit reached for this tick (${attemptsThisTick}/${maxAttemptsThisTick}). Queue will continue on the next tick.`
-        );
-        return;
-      }
-
-      const candidateIndex = this.pickCandidateIndex(candidates, recentReferenceIds);
-      const entry = candidates[candidateIndex];
-      if (!entry) {
-        return;
-      }
-      const item = entry.item;
-
-      try {
-        console.log(
-          `[AutoGenerationService] Project ${project.name}: auto-generating library item ${item.id} (${tasksToday}/${project.dailyGenerationLimit}).`
+          `[AutoGenerationService] Project ${project.name}: auto-generating library item ${item.id} (${tasksToday}/${project.dailyGenerationLimit}, concurrency=${inFlight.length + 1}/${maxConcurrentTasks}).`
         );
         attemptsThisTick += 1;
-        await ManualGenerationService.runFromLibraryItem({
-          projectId: project.id,
-          referenceLibraryItemId: item.id,
-          triggerMode: 'auto',
-          skipProviderModerationRewrite: true,
+
+        let taskPromise: Promise<void>;
+        taskPromise = (async () => {
+          try {
+            await ManualGenerationService.runFromLibraryItem({
+              projectId: project.id,
+              referenceLibraryItemId: item.id,
+              triggerMode: 'auto',
+              skipProviderModerationRewrite: true,
+            });
+            recentReferenceIds.push(item.id);
+            while (recentReferenceIds.length > this.recentReferenceWindow) {
+              recentReferenceIds.shift();
+            }
+          } catch (err: any) {
+            console.error(
+              `[AutoGenerationService] Project ${project.name}: failed to auto-generate library item ${item.id}:`,
+              err.message
+            );
+
+            if (String(err?.message || '').includes('Project package limit reached')) {
+              shouldStopLaunching = true;
+              return;
+            }
+
+            if (isPromptModerationError(err)) {
+              console.warn(
+                `[AutoGenerationService] Project ${project.name}: reference ${item.id} is blocked by moderation. Skipping it for this tick and trying another project reference.`
+              );
+              return;
+            }
+
+            if (this.shouldPauseProjectAfterFailure(err)) {
+              console.warn(
+                `[AutoGenerationService] Project ${project.name}: provider looks unstable. Pausing this project until the next scheduler tick.`
+              );
+              shouldStopLaunching = true;
+            }
+          }
+        })().finally(() => {
+          const index = inFlight.indexOf(taskPromise);
+          if (index >= 0) {
+            inFlight.splice(index, 1);
+          }
         });
-        recentReferenceIds.push(item.id);
-        while (recentReferenceIds.length > this.recentReferenceWindow) {
-          recentReferenceIds.shift();
-        }
-      } catch (err: any) {
-        console.error(
-          `[AutoGenerationService] Project ${project.name}: failed to auto-generate library item ${item.id}:`,
-          err.message
-        );
 
-        if (String(err?.message || '').includes('Project package limit reached')) {
-          return;
-        }
+        inFlight.push(taskPromise);
+      }
 
-        if (isPromptModerationError(err)) {
-          console.warn(
-            `[AutoGenerationService] Project ${project.name}: reference ${item.id} is blocked by moderation. Skipping it for this tick and trying another project reference.`
-          );
-          candidates.splice(candidateIndex, 1);
-          continue;
-        }
+      if (inFlight.length) {
+        await Promise.race([...inFlight]);
+        continue;
+      }
 
-        if (this.shouldPauseProjectAfterFailure(err)) {
-          console.warn(
-            `[AutoGenerationService] Project ${project.name}: provider looks unstable. Pausing this project until the next scheduler tick.`
-          );
-          return;
-        }
-
-        candidates.splice(candidateIndex, 1);
+      if (shouldStopLaunching) {
+        return;
       }
     }
   }
