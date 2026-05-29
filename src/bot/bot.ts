@@ -154,6 +154,15 @@ function getTrackingTokenFromDiskPath(diskPath: string): string {
   return fileName.replace(/\.[A-Za-z0-9]+$/, '');
 }
 
+function shortTaskId(taskId: string): string {
+  return normalizeString(taskId).slice(0, 8) || 'unknown';
+}
+
+async function getLatestReferenceTaskId(referenceLibraryItemId: string): Promise<string> {
+  const tasks = await generationTaskStore.listReferenceTasks(referenceLibraryItemId);
+  return tasks[0]?.id || '';
+}
+
 async function sendGenerationResultVideo(
   ctx: Context,
   input: {
@@ -170,6 +179,7 @@ async function sendGenerationResultVideo(
   await ctx.replyWithVideo(input.videoUrl, {
     caption:
       `🎬 Видео готово!\n\n` +
+      `🆔 Task: ${shortTaskId(input.taskId)}\n` +
       `✨ Сгенерировано через ${formatModelName(input.targetModel)} (${input.generationProvider})\n` +
       `🔗 Референс: ${input.referenceUrl}` +
       trackingLine,
@@ -494,9 +504,10 @@ bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
 
   const replyParams = getReplyParams(ctx);
   let statusMsg: any = null;
+  let sourceTask = null as Awaited<ReturnType<typeof generationTaskStore.getTask>> | null;
 
   try {
-    const sourceTask = await generationTaskStore.getTask(taskId);
+    sourceTask = await generationTaskStore.getTask(taskId);
     if (!sourceTask) {
       await ctx.answerCbQuery('Исходная генерация не найдена.', { show_alert: true }).catch(() => {});
       return;
@@ -552,7 +563,11 @@ bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
     });
   } catch (error: any) {
     const localizedMsg = AdminNotifierService.translateError(error?.message || String(error));
-    const errorText = `❌ Ошибка повторной генерации: ${localizedMsg}`;
+    const latestTaskId = sourceTask
+      ? await getLatestReferenceTaskId(sourceTask.referenceLibraryItemId).catch(() => '')
+      : '';
+    const taskLine = latestTaskId ? `\n🆔 Task: ${shortTaskId(latestTaskId)}` : '';
+    const errorText = `❌ Ошибка повторной генерации:${taskLine}\n\n${localizedMsg}`;
     if (statusMsg) {
       await ctx.telegram
         .editMessageText(ctx.chat.id, statusMsg.message_id, undefined, errorText)
@@ -686,7 +701,9 @@ bot.on(message('text'), async (ctx) => {
         const localizedMsg = AdminNotifierService.translateError(errorMsg);
         console.error('Background Process Error:', error);
         
-        const errorText = `❌ Ошибка генерации для ${reelUrl}:\n\n${localizedMsg}`;
+        const latestTaskId = await getLatestReferenceTaskId(libraryItem.id).catch(() => '');
+        const taskLine = latestTaskId ? `\n🆔 Task: ${shortTaskId(latestTaskId)}` : '';
+        const errorText = `❌ Ошибка генерации для ${reelUrl}:${taskLine}\n\n${localizedMsg}`;
         await ctx.telegram.editMessageText(chatId, initialStatusMsg.message_id, undefined, errorText).catch(() => {
           ctx.reply(errorText, replyParams).catch(() => {});
         });
