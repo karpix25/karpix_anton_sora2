@@ -11,6 +11,7 @@ import { TextOverlayService } from '../services/text-overlay.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
+import { telegramFileDeliveryStore } from '../storage/telegram-file-delivery-store.js';
 
 const repeatGenerationCallbackPrefix = 'repeat_generation:';
 const TG_BUTTON_CREATE_PROJECT = '🆕 Создать проект';
@@ -158,6 +159,21 @@ function shortTaskId(taskId: string): string {
   return normalizeString(taskId).slice(0, 8) || 'unknown';
 }
 
+function getTelegramDisplayName(user: any): string {
+  return [normalizeString(user?.first_name), normalizeString(user?.last_name)].filter(Boolean).join(' ');
+}
+
+function getFileNameFromUrl(value: string): string {
+  const normalized = normalizeString(value);
+  if (!normalized) return '';
+  try {
+    const url = new URL(normalized);
+    return url.pathname.split('/').filter(Boolean).pop() || '';
+  } catch {
+    return normalized.split('/').filter(Boolean).pop() || '';
+  }
+}
+
 async function getLatestReferenceTaskId(referenceLibraryItemId: string): Promise<string> {
   const tasks = await generationTaskStore.listReferenceTasks(referenceLibraryItemId);
   return tasks[0]?.id || '';
@@ -167,6 +183,9 @@ async function sendGenerationResultVideo(
   ctx: Context,
   input: {
     taskId: string;
+    projectId?: string;
+    projectName?: string;
+    referenceLibraryItemId?: string;
     videoUrl: string;
     targetModel: string;
     generationProvider: string;
@@ -176,7 +195,7 @@ async function sendGenerationResultVideo(
   }
 ): Promise<void> {
   const trackingLine = input.trackingToken ? `\n🏷 Тег: #${input.trackingToken}` : '';
-  await ctx.replyWithVideo(input.videoUrl, {
+  const message: any = await ctx.replyWithVideo(input.videoUrl, {
     caption:
       `🎬 Видео готово!\n\n` +
       `🆔 Task: ${shortTaskId(input.taskId)}\n` +
@@ -187,6 +206,27 @@ async function sendGenerationResultVideo(
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🔁 Повторить', getRepeatGenerationCallbackData(input.taskId))],
     ]),
+  });
+
+  await telegramFileDeliveryStore.createDelivery({
+    projectId: input.projectId || '',
+    projectName: input.projectName || '',
+    taskId: input.taskId,
+    referenceLibraryItemId: input.referenceLibraryItemId || '',
+    fileKind: 'generated_video',
+    fileName: input.trackingToken || getFileNameFromUrl(input.videoUrl),
+    fileUrl: input.videoUrl,
+    telegramFileId: message?.video?.file_id || '',
+    telegramMessageId: message?.message_id ? String(message.message_id) : '',
+    telegramChatId: ctx.chat?.id ? String(ctx.chat.id) : '',
+    telegramChatTitle: normalizeString((ctx.chat as any)?.title) || normalizeString((ctx.chat as any)?.username),
+    telegramTopicId: getMessageThreadId(ctx),
+    recipientUserId: (ctx.from as any)?.id ? String((ctx.from as any).id) : '',
+    recipientUsername: normalizeString((ctx.from as any)?.username),
+    recipientName: getTelegramDisplayName(ctx.from),
+    deliverySource: 'telegram_bot',
+  }).catch((error) => {
+    console.error('[Bot] Failed to record Telegram file delivery:', error.message);
   });
 }
 
@@ -554,6 +594,9 @@ bot.action(/^repeat_generation:(.+)$/, async (ctx) => {
 
     await sendGenerationResultVideo(ctx, {
       taskId: repeatedTask.id,
+      projectId: sourceProject.id,
+      projectName: sourceProject.name,
+      referenceLibraryItemId: repeatedTask.referenceLibraryItemId,
       videoUrl: finalVideoUrl,
       targetModel: repeatedTask.targetModel,
       generationProvider,
@@ -689,6 +732,9 @@ bot.on(message('text'), async (ctx) => {
         await ctx.telegram.deleteMessage(chatId, initialStatusMsg.message_id).catch(() => {});
         await sendGenerationResultVideo(ctx, {
           taskId: generationTask.id,
+          projectId: boundProject.id,
+          projectName: boundProject.name,
+          referenceLibraryItemId: generationTask.referenceLibraryItemId,
           videoUrl: finalVideoUrl,
           targetModel,
           generationProvider,

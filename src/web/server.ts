@@ -6,6 +6,7 @@ import type { Project, ProjectInput } from '../domain/project.js';
 import { projectStore } from '../storage/project-store.js';
 import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
+import { telegramFileDeliveryStore } from '../storage/telegram-file-delivery-store.js';
 import { config } from '../config.js';
 import { TelegramMediaService } from '../services/telegram-media.service.js';
 import { YandexDiskService } from '../services/yandex-disk.service.js';
@@ -750,6 +751,22 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       telegramFileId: upload.fileId,
       telegramMessageId: upload.messageId,
       telegramSyncedAt: upload.syncedAt,
+    });
+
+    await telegramFileDeliveryStore.createDelivery({
+      projectId: project.id,
+      projectName: project.name,
+      fileKind: 'reference_image',
+      fileName: primaryImage.originalName || primaryImage.storedName,
+      fileUrl: upload.fileUrl,
+      telegramFileId: upload.fileId,
+      telegramMessageId: upload.messageId,
+      telegramChatId: project.telegramChatId,
+      telegramTopicId: project.telegramTopicId,
+      telegramTopicName: project.telegramTopicName,
+      deliverySource: 'web_reference_sync',
+    }).catch((error) => {
+      console.error('[WebServer] Failed to record Telegram file delivery:', error.message);
     });
 
     const updatedPrimaryImage = updatedProject

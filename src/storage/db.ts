@@ -183,6 +183,40 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await db.query(`
+    CREATE TABLE IF NOT EXISTS telegram_file_deliveries (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL DEFAULT '',
+      project_name TEXT NOT NULL DEFAULT '',
+      task_id TEXT NOT NULL DEFAULT '',
+      reference_library_item_id TEXT NOT NULL DEFAULT '',
+      file_kind TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL DEFAULT '',
+      file_url TEXT NOT NULL DEFAULT '',
+      telegram_file_id TEXT NOT NULL DEFAULT '',
+      telegram_message_id TEXT NOT NULL DEFAULT '',
+      telegram_chat_id TEXT NOT NULL DEFAULT '',
+      telegram_chat_title TEXT NOT NULL DEFAULT '',
+      telegram_topic_id TEXT NOT NULL DEFAULT '',
+      telegram_topic_name TEXT NOT NULL DEFAULT '',
+      recipient_user_id TEXT NOT NULL DEFAULT '',
+      recipient_username TEXT NOT NULL DEFAULT '',
+      recipient_name TEXT NOT NULL DEFAULT '',
+      delivery_source TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_telegram_file_deliveries_project_created
+      ON telegram_file_deliveries(project_id, created_at DESC);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_telegram_file_deliveries_task_created
+      ON telegram_file_deliveries(task_id, created_at DESC);
+  `);
+
+  await db.query(`
     ALTER TABLE generation_tasks ADD COLUMN IF NOT EXISTS publication_url TEXT NOT NULL DEFAULT '';
   `);
   await db.query(`
