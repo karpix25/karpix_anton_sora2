@@ -21,6 +21,13 @@ const cometDebugHeaders = [
   'content-type',
   'date',
 ];
+const cometPollIntervalMs = 10000;
+const cometNearCompleteProgress = 95;
+
+function toPositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export class CometService {
   /**
@@ -292,7 +299,13 @@ export class CometService {
    * @param videoId The ID of the video to poll.
    */
   public static async pollStatus(videoId: string): Promise<string> {
-    const maxRetries = 600; // up to ~100 minutes
+    const maxWaitMinutes = toPositiveNumber(process.env.COMET_MAX_WAIT_MINUTES, 100);
+    const queuedFallbackMs = toPositiveNumber(process.env.COMET_QUEUED_FALLBACK_MINUTES, 20) * 60 * 1000;
+    const staleProgressMs = toPositiveNumber(process.env.COMET_STALE_PROGRESS_MINUTES, 25) * 60 * 1000;
+    const maxRetries = Math.max(1, Math.ceil((maxWaitMinutes * 60 * 1000) / cometPollIntervalMs));
+    const startedAt = Date.now();
+    let lastProgressAt = startedAt;
+    let lastProgressValue: number | null = null;
     let resolvedVideoId = videoId;
     
     for (let i = 0; i < maxRetries; i++) {
@@ -314,6 +327,8 @@ export class CometService {
 
         const progressValue = this.parseProgress(data?.progress);
         const status = data?.status;
+        const normalizedStatus = this.normalizeStatus(status);
+        const now = Date.now();
 
         if (this.isFailureStatus(status)) {
           const rawError = data?.error || data?.msg || data?.message || data?.failMsg || 'Unknown error';
@@ -326,10 +341,34 @@ export class CometService {
           return await this.downloadVideo(resolvedVideoId);
         }
 
-        console.log(`Comet Video ${resolvedVideoId} status=${status || 'unknown'} progress=${progressValue ?? 'n/a'}%. Waiting... (${i + 1}/${maxRetries})`);
-        await this.sleep(10000);
+        if (progressValue !== null && progressValue !== lastProgressValue) {
+          lastProgressValue = progressValue;
+          lastProgressAt = now;
+        }
+
+        const elapsedMs = now - startedAt;
+        const stalledMs = now - lastProgressAt;
+        const isQueued = normalizedStatus === 'queued' || normalizedStatus === 'pending';
+        if (isQueued && elapsedMs >= queuedFallbackMs) {
+          throw new Error(
+            `Comet video generation stalled in queue after ${Math.round(elapsedMs / 60000)} minutes (status=${status || 'unknown'}, progress=${progressValue ?? 'n/a'}%).`
+          );
+        }
+
+        const canTreatAsStale = progressValue === null || progressValue < cometNearCompleteProgress;
+        if (!isQueued && canTreatAsStale && stalledMs >= staleProgressMs) {
+          throw new Error(
+            `Comet video generation stalled after ${Math.round(stalledMs / 60000)} minutes without progress change (status=${status || 'unknown'}, progress=${progressValue ?? 'n/a'}%).`
+          );
+        }
+
+        console.log(
+          `Comet Video ${resolvedVideoId} status=${status || 'unknown'} progress=${progressValue ?? 'n/a'}%. Waiting... (${i + 1}/${maxRetries}, stalled=${Math.round(stalledMs / 60000)}m)`
+        );
+        await this.sleep(cometPollIntervalMs);
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
+        if (error.message.includes('Comet video generation stalled')) throw error;
 
         const isDownloadError = error.message.includes('Failed to download video');
         const statusCode = Number(error?.response?.status || 0);
