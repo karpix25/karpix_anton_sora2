@@ -3,7 +3,12 @@ import { ProjectReferenceService } from './project-reference.service.js';
 import { ReferenceAudioService } from './reference-audio.service.js';
 import { TextOverlayService } from './text-overlay.service.js';
 import { VideoPostprocessService } from './video-postprocess.service.js';
-import { VideoGenerationService, getPrimaryGenerationErrorMessage, isPromptModerationError } from './video-generation.service.js';
+import {
+  VideoGenerationService,
+  getPrimaryGenerationErrorMessage,
+  isCometDownloadPendingError,
+  isPromptModerationError,
+} from './video-generation.service.js';
 import { YandexDiskService } from './yandex-disk.service.js';
 import { S3StorageService } from './s3-storage.service.js';
 import { generationTaskStore } from '../storage/generation-task-store.js';
@@ -12,6 +17,7 @@ import { referenceLibraryStore } from '../storage/reference-library-store.js';
 import { InstagramService } from './instagram.service.js';
 import type { GenerationTask, GenerationTriggerMode } from '../domain/generation-task.js';
 import { ParserService } from './parser.service.js';
+import { CometDownloadPendingError, CometService } from './comet.service.js';
 import type { Project } from '../domain/project.js';
 import type { ReferenceLibraryItem } from '../domain/reference-library.js';
 import fs from 'fs-extra';
@@ -288,6 +294,12 @@ export class ManualGenerationService {
     console.log(
       `[ManualGenerationService] Task ${task.id}: starting processing (project=${project.id}, libraryItem=${initialLibraryItem.id})`
     );
+    const wasPendingCometDownload =
+      task.status === 'pending_download' &&
+      task.provider === 'comet' &&
+      Boolean(task.providerTaskId) &&
+      !task.resultVideoUrl;
+
     await generationTaskStore.updateTask(task.id, {
       status: 'processing',
       startedAt: task.startedAt || nowIso(),
@@ -449,38 +461,54 @@ export class ManualGenerationService {
         };
 
         let generationResult;
-        try {
-          generationResult = await generateVideo(promptText);
-        } catch (error: any) {
-          if (!isPromptModerationError(error)) {
-            throw error;
-          }
-
-          if (options.skipProviderModerationRewrite) {
-            console.warn(
-              `[ManualGenerationService] Task ${task.id}: provider moderation blocked prompt. Auto mode will try another project reference instead of rewriting this one.`
-            );
-            throw error;
-          }
-
-          console.warn(
-            `[ManualGenerationService] Task ${task.id}: provider moderation blocked prompt. Rewriting prompt and retrying once...`
+        if (wasPendingCometDownload) {
+          console.log(
+            `[ManualGenerationService] Task ${task.id}: retrying deferred Comet download (providerTaskId=${task.providerTaskId})...`
           );
-          const rewrittenPrompt = await GeminiService.rewritePromptForModerationFallback({
-            originalPrompt: promptText,
-            videoAnalysis: analysis,
-            targetModel: project.selectedModel,
-            project,
-            projectReferenceImageUrls,
-          });
+          try {
+            resultVideoUrl = await CometService.downloadGeneratedVideo(task.providerTaskId);
+          } catch (error: any) {
+            throw new CometDownloadPendingError(
+              task.providerTaskId,
+              `Deferred Comet content download is still unavailable: ${error.message || error}`
+            );
+          }
+          generationResult = {
+            provider: 'comet' as const,
+            providerTaskId: task.providerTaskId,
+            resultVideoUrl,
+          };
+        } else {
+          try {
+            generationResult = await generateVideo(promptText);
+          } catch (error: any) {
+            if (!isPromptModerationError(error)) {
+              throw error;
+            }
 
-          promptText = rewrittenPrompt;
-          await generationTaskStore.updateTask(task.id, {
-            promptText,
-            errorMessage: 'Original prompt was blocked by moderation; regenerated safer prompt.',
-          });
+            console.warn(
+              `[ManualGenerationService] Task ${task.id}: provider moderation blocked prompt.${options.skipProviderModerationRewrite ? ' Auto mode will try another project reference instead of rewriting this one.' : ' Rewriting prompt and retrying once...'}`
+            );
+            if (options.skipProviderModerationRewrite) {
+              throw error;
+            }
 
-          generationResult = await generateVideo(promptText);
+            const rewrittenPrompt = await GeminiService.rewritePromptForModerationFallback({
+              originalPrompt: promptText,
+              videoAnalysis: analysis,
+              targetModel: project.selectedModel,
+              project,
+              projectReferenceImageUrls,
+            });
+
+            promptText = rewrittenPrompt;
+            await generationTaskStore.updateTask(task.id, {
+              promptText,
+              errorMessage: 'Original prompt was blocked by moderation; regenerated safer prompt.',
+            });
+
+            generationResult = await generateVideo(promptText);
+          }
         }
 
         let durationCheck;
@@ -596,6 +624,18 @@ export class ManualGenerationService {
       return completedTask;
     } catch (error: any) {
       const errorMsg = getPrimaryGenerationErrorMessage(error);
+      if (isCometDownloadPendingError(error)) {
+        console.warn(`[ManualGenerationService] Task ${task.id}: deferring Comet download retry:`, errorMsg);
+        await generationTaskStore.updateTask(task.id, {
+          status: 'pending_download',
+          provider: 'comet',
+          providerTaskId: error.providerTaskId,
+          errorMessage: errorMsg,
+          finishedAt: '',
+        });
+        throw error;
+      }
+
       console.error(`[ManualGenerationService] Task ${task.id}: failed:`, errorMsg);
       await generationTaskStore.updateTask(task.id, {
         status: 'failed',

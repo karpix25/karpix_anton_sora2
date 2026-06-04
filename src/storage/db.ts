@@ -330,7 +330,7 @@ export async function initDatabase(): Promise<void> {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_generation_tasks_recoverable
       ON generation_tasks(status, updated_at, created_at)
-      WHERE status IN ('pending', 'processing');
+      WHERE status IN ('pending', 'processing', 'pending_download');
   `);
 
   await db.query(`

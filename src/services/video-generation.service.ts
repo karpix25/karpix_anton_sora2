@@ -1,5 +1,5 @@
 import { KieService } from './kie.service.js';
-import { CometService } from './comet.service.js';
+import { CometDownloadPendingError, CometService } from './comet.service.js';
 import { systemConfigStore } from '../storage/system-config-store.js';
 import type { GenerationProvider } from '../domain/generation-task.js';
 import type { VideoModel } from '../domain/project.js';
@@ -41,6 +41,10 @@ export class VideoGenerationFallbackError extends Error {
 
 export function isPromptModerationError(error: unknown): error is PromptModerationError {
   return error instanceof PromptModerationError || isModerationError(error);
+}
+
+export function isCometDownloadPendingError(error: unknown): error is CometDownloadPendingError {
+  return error instanceof CometDownloadPendingError;
 }
 
 export function getPrimaryGenerationErrorMessage(error: unknown): string {
@@ -144,6 +148,9 @@ export class VideoGenerationService {
         const errorMsg = error instanceof Error ? error.message : String(error);
         if (isModerationError(error)) {
           throw new PromptModerationError(`Comet blocked prompt by moderation: ${errorMsg}`);
+        }
+        if (error instanceof CometDownloadPendingError) {
+          throw error;
         }
         if (error instanceof ProviderRateLimitError || isProviderRateLimitError(error)) {
           throw new ProviderRateLimitError(`Comet API is rate limited or saturated after retries: ${errorMsg}`);

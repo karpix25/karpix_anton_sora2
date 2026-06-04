@@ -349,7 +349,7 @@ export class AutoGenerationService {
         }
 
         const latestTask = state?.latestTask;
-        if (latestTask?.status === 'pending' || latestTask?.status === 'processing') {
+        if (latestTask?.status === 'pending' || latestTask?.status === 'processing' || latestTask?.status === 'pending_download') {
           return null;
         }
 
@@ -377,6 +377,10 @@ export class AutoGenerationService {
 
   private static shouldPauseProjectAfterFailure(error: unknown): boolean {
     if (isPromptModerationError(error)) {
+      return false;
+    }
+
+    if ((error as any)?.name === 'CometDownloadPendingError') {
       return false;
     }
 

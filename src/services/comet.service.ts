@@ -29,6 +29,16 @@ function toPositiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export class CometDownloadPendingError extends Error {
+  public readonly providerTaskId: string;
+
+  constructor(providerTaskId: string, message: string) {
+    super(message);
+    this.name = 'CometDownloadPendingError';
+    this.providerTaskId = providerTaskId;
+  }
+}
+
 export class CometService {
   /**
    * Limit: 10 generation requests per 10 seconds.
@@ -338,7 +348,14 @@ export class CometService {
 
         if (this.isCompletedStatus(status) || progressValue === 100) {
           console.log(`[CometService] Video ${resolvedVideoId} is ready (status=${status}, progress=${progressValue}%). Starting download...`);
-          return await this.downloadVideo(resolvedVideoId);
+          try {
+            return await this.downloadGeneratedVideo(resolvedVideoId);
+          } catch (error: any) {
+            throw new CometDownloadPendingError(
+              resolvedVideoId,
+              `Comet video is ready but content download is temporarily unavailable: ${error.message || error}`
+            );
+          }
         }
 
         if (progressValue !== null && progressValue !== lastProgressValue) {
@@ -369,6 +386,7 @@ export class CometService {
       } catch (error: any) {
         if (error.message.includes('Comet video generation failed')) throw error;
         if (error.message.includes('Comet video generation stalled')) throw error;
+        if (error instanceof CometDownloadPendingError) throw error;
 
         const isDownloadError = error.message.includes('Failed to download video');
         const statusCode = Number(error?.response?.status || 0);
@@ -392,7 +410,7 @@ export class CometService {
    * Downloads the video from Comet API to a local file.
    * @param videoId The ID of the video to download.
    */
-  private static async downloadVideo(videoId: string): Promise<string> {
+  public static async downloadGeneratedVideo(videoId: string): Promise<string> {
     await fs.ensureDir(downloadsDir);
     const outputPath = path.join(downloadsDir, `${videoId}.mp4`);
 

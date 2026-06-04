@@ -82,7 +82,8 @@ function getUtcDateRange(dateIso: string): { start: string; end: string } {
 }
 
 function normalizeStatus(value: unknown): GenerationTaskStatus {
-  return value === 'processing' || value === 'completed' || value === 'failed' ? value : 'pending';
+  const statuses: GenerationTaskStatus[] = ['pending', 'processing', 'pending_download', 'completed', 'failed'];
+  return typeof value === 'string' && (statuses as string[]).includes(value) ? value as GenerationTaskStatus : 'pending';
 }
 
 function normalizeProvider(value: unknown): GenerationProvider {
@@ -202,10 +203,12 @@ export const generationTaskStore = {
     limit?: number;
     pendingOlderThanSeconds?: number;
     processingOlderThanSeconds?: number;
+    pendingDownloadOlderThanSeconds?: number;
   }): Promise<GenerationTask[]> {
     const limit = Math.max(1, Math.min(200, input?.limit ?? 50));
     const pendingOlderThanSeconds = Math.max(0, input?.pendingOlderThanSeconds ?? 20);
     const processingOlderThanSeconds = Math.max(0, input?.processingOlderThanSeconds ?? 120);
+    const pendingDownloadOlderThanSeconds = Math.max(0, input?.pendingDownloadOlderThanSeconds ?? 3600);
 
     const result = await query<GenerationTaskRow>(
       `
@@ -215,7 +218,7 @@ export const generationTaskStore = {
           WHERE status = 'pending'
             AND updated_at < NOW() - make_interval(secs => $1::int)
           ORDER BY created_at ASC
-          LIMIT $3
+          LIMIT $4
         )
         UNION ALL
         (
@@ -224,12 +227,21 @@ export const generationTaskStore = {
           WHERE status = 'processing'
             AND updated_at < NOW() - make_interval(secs => $2::int)
           ORDER BY created_at ASC
-          LIMIT $3
+          LIMIT $4
+        )
+        UNION ALL
+        (
+          SELECT *
+          FROM generation_tasks
+          WHERE status = 'pending_download'
+            AND updated_at < NOW() - make_interval(secs => $3::int)
+          ORDER BY created_at ASC
+          LIMIT $4
         )
         ORDER BY created_at ASC
-        LIMIT $3
+        LIMIT $4
       `,
-      [pendingOlderThanSeconds, processingOlderThanSeconds, limit]
+      [pendingOlderThanSeconds, processingOlderThanSeconds, pendingDownloadOlderThanSeconds, limit]
     );
 
     return result.rows.map((row) => mapRowToTask(row));
@@ -426,7 +438,7 @@ export const generationTaskStore = {
       if (row.status === 'completed') {
         completed += count;
       }
-      if (row.status === 'pending' || row.status === 'processing') {
+      if (row.status === 'pending' || row.status === 'processing' || row.status === 'pending_download') {
         active += count;
       }
     }
@@ -563,7 +575,7 @@ export const generationTaskStore = {
         SELECT status, COUNT(*) AS count
         FROM generation_tasks
         WHERE project_id = $1
-          AND status IN ('pending', 'processing', 'completed')
+          AND status IN ('pending', 'processing', 'pending_download', 'completed')
         GROUP BY status
       `,
       [normalizeString(projectId)]

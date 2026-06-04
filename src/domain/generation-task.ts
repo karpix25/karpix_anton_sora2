@@ -1,7 +1,7 @@
 import type { VideoModel } from './project.js';
 import type { ReferenceTextOverlay } from './reference-library.js';
 
-export type GenerationTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type GenerationTaskStatus = 'pending' | 'processing' | 'pending_download' | 'completed' | 'failed';
 export type GenerationTriggerMode =
   | 'telegram_manual'
   | 'web_manual'

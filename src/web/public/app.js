@@ -771,7 +771,7 @@ function renderProjectPlanSummary() {
   const packageLimit = Number(project.packageVideoLimit || 0);
   const usage = project.packageUsage || {};
   const completedFromTasks = tasks.filter((task) => task.status === 'completed').length;
-  const reservedFromTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'processing').length;
+  const reservedFromTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'processing' || task.status === 'pending_download').length;
   const completed = tasks.length ? completedFromTasks : Number(usage.completed || 0);
   const reserved = tasks.length ? reservedFromTasks : Number(usage.reserved || 0);
   const billableTotal = completed + reserved;
@@ -780,7 +780,7 @@ function renderProjectPlanSummary() {
   const autoTasksToday = tasks.filter((task) => isAutoTask(task) && getDateKey(task.createdAt) === today);
   const autoStartedToday = autoTasksToday.filter((task) => task.status !== 'failed').length;
   const autoCompletedToday = autoTasksToday.filter((task) => task.status === 'completed').length;
-  const autoInProgressToday = autoTasksToday.filter((task) => task.status === 'pending' || task.status === 'processing').length;
+  const autoInProgressToday = autoTasksToday.filter((task) => task.status === 'pending' || task.status === 'processing' || task.status === 'pending_download').length;
   const dailyPlan = packageLimit ? Math.min(dailyLimit, remaining + autoStartedToday) : dailyLimit;
 
   const packageLabel = packageLimit ? `${billableTotal}/${packageLimit}` : 'без лимита';

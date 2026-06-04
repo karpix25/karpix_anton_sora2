@@ -941,7 +941,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     }
 
     const tasks = await generationTaskStore.listProjectTasks(projectId);
-    const activeTask = tasks.find((task) => task.status === 'pending' || task.status === 'processing');
+    const activeTask = tasks.find(
+      (task) => task.status === 'pending' || task.status === 'processing' || task.status === 'pending_download'
+    );
     if (activeTask) {
       sendJson(res, 409, {
         error: 'Project has active generation tasks and cannot be deleted',
