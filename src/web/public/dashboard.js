@@ -78,6 +78,19 @@ function getHistoryUrl() {
   return query ? `/api/dashboard/history?${query}` : '/api/dashboard/history';
 }
 
+function getProjectUrl(projectId) {
+  const normalizedProjectId = String(projectId || '').trim();
+  if (!normalizedProjectId) {
+    return '';
+  }
+
+  const params = new URLSearchParams({
+    projectId: normalizedProjectId,
+    returnTo: '/dashboard.html',
+  });
+  return `/?${params.toString()}`;
+}
+
 function renderSummary() {
   const totals = state.totals || {};
   const autoTodayValue = `${totals.autoCompletedToday || 0}/${totals.autoPlannedToday || 0}`;
@@ -139,6 +152,7 @@ function renderHistory() {
         const sourceUrl = event.sourceUrl || event.referenceSourceUrl || '';
         const fullPrompt = isGeneration ? String(event.promptText || '').trim() : '';
         const promptPreview = fullPrompt ? shorten(fullPrompt, 130) : '';
+        const projectUrl = getProjectUrl(event.projectId);
         const autoProgress = isGeneration && event.autoDailyIndex && event.autoDailyLimit
           ? `${event.autoDailyIndex}/${event.autoDailyLimit}`
           : '';
@@ -163,6 +177,7 @@ function renderHistory() {
                 </p>
               </div>
               <div class="dashboard-links">
+                ${projectUrl ? `<a href="${escapeHtml(projectUrl)}">Проект</a>` : ''}
                 ${finalUrl ? `<a href="${escapeHtml(finalUrl)}" target="_blank" rel="noreferrer">Финал ffmpeg</a>` : ''}
                 ${originalUrl ? `<a href="${escapeHtml(originalUrl)}" target="_blank" rel="noreferrer">Оригинал</a>` : ''}
                 ${!finalUrl && !originalUrl && primaryUrl ? `<a href="${escapeHtml(primaryUrl)}" target="_blank" rel="noreferrer">Видео</a>` : ''}

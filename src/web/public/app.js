@@ -82,6 +82,7 @@ const elements = {
   tabPanels: Array.from(document.querySelectorAll('[data-tab-panel]')),
   projectList: document.getElementById('project-list'),
   statusText: document.getElementById('status-text'),
+  dashboardReturnLink: document.getElementById('dashboard-return-link'),
   createProjectButton: document.getElementById('create-project-button'),
   saveProjectButton: document.getElementById('save-project-button'),
   deleteProjectButton: document.getElementById('delete-project-button'),
@@ -315,6 +316,28 @@ function getProjectIdFromUrl() {
   } catch {
     return '';
   }
+}
+
+function getDashboardReturnUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const returnTo = url.searchParams.get('returnTo') || '/dashboard.html';
+    const returnUrl = new URL(returnTo, window.location.origin);
+    if (returnUrl.origin !== window.location.origin || returnUrl.pathname !== '/dashboard.html') {
+      return '/dashboard.html';
+    }
+    return `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
+  } catch {
+    return '/dashboard.html';
+  }
+}
+
+function renderDashboardReturnLink() {
+  if (!elements.dashboardReturnLink) {
+    return;
+  }
+
+  elements.dashboardReturnLink.href = getDashboardReturnUrl();
 }
 
 function syncProjectIdToUrl(projectId) {
@@ -1197,6 +1220,7 @@ function bindEvents() {
 console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
+  renderDashboardReturnLink();
   loadGlobalConfig();
   Promise.all([
     loadGoogleCyrillicFonts(),
