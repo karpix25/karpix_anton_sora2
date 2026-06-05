@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { config } from '../config.js';
 import { AdminNotifierService } from './admin-notifier.service.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
+import { VideoNormalizeService } from './video-normalize.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -447,18 +448,18 @@ export class CometService {
 
       await fs.writeFile(outputPath, response.data);
 
-      // Upscale to 1080x1920 if needed
-      const upscaledPath = path.join(downloadsDir, `upscaled_${videoId}.mp4`);
-      console.log(`[CometService] Upscaling video ${videoId} to 1080x1920...`);
-      
-      const execAsync = promisify(exec);
+      const normalizedPath = path.join(downloadsDir, `normalized_${videoId}.mp4`);
+      console.log(`[CometService] Normalizing video ${videoId} to 720x1280 without aspect distortion...`);
+
       try {
-        await execAsync(`ffmpeg -i "${outputPath}" -vf "scale=1080:1920" -c:v libx264 -crf 18 -preset fast "${upscaledPath}"`);
-        // Replace original with upscaled version
+        await VideoNormalizeService.normalizePortraitVideo({
+          inputPath: outputPath,
+          outputPath: normalizedPath,
+        });
         await fs.remove(outputPath);
-        return upscaledPath;
-      } catch (upscaleErr: any) {
-        console.error(`[CometService] Upscale failed, using original:`, upscaleErr.message);
+        return normalizedPath;
+      } catch (normalizeErr: any) {
+        console.error(`[CometService] Video normalization failed, using original:`, normalizeErr.message);
         return outputPath;
       }
     } catch (error: any) {
