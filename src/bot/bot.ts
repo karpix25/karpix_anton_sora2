@@ -17,6 +17,7 @@ const repeatGenerationCallbackPrefix = 'repeat_generation:';
 const TG_BUTTON_CREATE_PROJECT = '🆕 Создать проект';
 const TG_BUTTON_PROJECT_STATUS = '📌 Статус проекта';
 const TG_BUTTON_SETTINGS = '⚙️ Настройки';
+const TG_BUTTON_HELP = 'ℹ️ Инструкция';
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -131,8 +132,28 @@ function getRepeatGenerationCallbackData(taskId: string): string {
 
 function getMainKeyboard() {
   return Markup.keyboard(
-    [[TG_BUTTON_CREATE_PROJECT, TG_BUTTON_PROJECT_STATUS], [TG_BUTTON_SETTINGS]]
+    [[TG_BUTTON_CREATE_PROJECT, TG_BUTTON_PROJECT_STATUS], [TG_BUTTON_SETTINGS, TG_BUTTON_HELP]]
   ).resize();
+}
+
+function buildBotInstructionMessage(webUrl: string): string {
+  return (
+    'Привет. Этот бот генерирует видео по Instagram Reel для проектов, привязанных к Telegram-темам.\n\n' +
+    'Полная схема запуска проекта:\n\n' +
+    '1. Создайте папку на Яндекс.Диске\n' +
+    'Сначала вручную создайте папку, куда должны попадать готовые видео проекта.\n\n' +
+    '2. Создайте проект в нужной Telegram-теме\n' +
+    'В теме напишите:\n' +
+    '/create_project Название проекта\n\n' +
+    '3. Откройте проект в веб-интерфейсе\n' +
+    'Бот пришлет ссылку на созданный проект.\n\n' +
+    '4. Заполните настройки проекта\n' +
+    'Добавьте фото товара, выберите модель, лимиты, правила генерации и папку Яндекс.Диска.\n\n' +
+    '5. Отправляйте Instagram Reel в эту же тему\n' +
+    'Бот примет Reel как референс, запустит генерацию и отправит готовое видео обратно в тему.\n\n' +
+    'Готовые видео будут сохраняться в выбранную папку Яндекс.Диска.\n\n' +
+    `Веб-интерфейс: ${webUrl}`
+  );
 }
 
 function formatModelName(model: string): string {
@@ -248,16 +269,15 @@ bot.catch((error: unknown, ctx) => {
 
 // Welcome
 bot.start((ctx) => {
-  const webUrl = getWebInterfaceUrl();
-  ctx.reply(
-    'Привет. Этот бот работает с проектами, привязанными к Telegram-темам.\n\n' +
-    'Быстрый старт:\n' +
-    '1. В нужной теме: /create_project <название>\n' +
-    '2. Откройте проект в вебе и заполните фото/настройки.\n' +
-    '3. В эту же тему отправляйте ссылку на Instagram Reel.\n\n' +
-    `Веб-интерфейс: ${webUrl}`,
-    getMainKeyboard()
-  );
+  ctx.reply(buildBotInstructionMessage(getWebInterfaceUrl()), getMainKeyboard());
+});
+
+bot.command('help', (ctx) => {
+  ctx.reply(buildBotInstructionMessage(getWebInterfaceUrl()), getMainKeyboard());
+});
+
+bot.hears(TG_BUTTON_HELP, (ctx) => {
+  ctx.reply(buildBotInstructionMessage(getWebInterfaceUrl()), getMainKeyboard());
 });
 
 async function handleSettingsCommand(ctx: Context): Promise<void> {
