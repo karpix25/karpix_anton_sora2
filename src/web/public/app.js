@@ -1221,11 +1221,10 @@ console.log('🔄 Initializing app (v2)...');
 try {
   bindEvents();
   renderDashboardReturnLink();
-  loadGlobalConfig();
-  Promise.all([
-    loadGoogleCyrillicFonts(),
-    loadYandexFolders(),
-  ]).then(() => loadProjects()).then(() => {
+  void loadGlobalConfig();
+  void loadGoogleCyrillicFonts();
+  void loadYandexFolders();
+  loadProjects().then(() => {
     console.log('✅ Projects loaded');
   }).catch((error) => {
     console.error('❌ Failed to load projects:', error);
