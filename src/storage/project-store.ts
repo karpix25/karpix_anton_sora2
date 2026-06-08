@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import type { Project, ProjectInput, ReferenceImage } from '../domain/project.js';
 import { query } from './db.js';
 import { SafeFileService } from '../services/safe-file.service.js';
+import { detectImageMimeType, isSupportedGeminiImageMimeType } from '../utils/media-mime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -587,10 +588,11 @@ export const projectStore = {
   }): Promise<ReferenceImage> {
     await ensureStorage();
 
-    const extension = safeFileExtension(payload.mimeType, payload.originalName);
+    const buffer = Buffer.from(payload.contentBase64, 'base64');
+    const mimeType = detectImageMimeType(buffer, payload.originalName, payload.mimeType);
+    const extension = safeFileExtension(mimeType || payload.mimeType, payload.originalName);
     const storedName = `${Date.now()}-${randomUUID()}${extension}`;
     const outputPath = path.join(uploadsDir, storedName);
-    const buffer = Buffer.from(payload.contentBase64, 'base64');
 
     await fs.writeFile(outputPath, buffer);
 
@@ -598,7 +600,7 @@ export const projectStore = {
       id: randomUUID(),
       originalName: normalizeString(payload.originalName) || storedName,
       storedName,
-      mimeType: normalizeString(payload.mimeType) || 'application/octet-stream',
+      mimeType: mimeType || normalizeString(payload.mimeType) || 'application/octet-stream',
       url: `/uploads/reference-images/${storedName}`,
       yandexDiskPath: '',
       yandexDownloadUrl: '',
@@ -623,7 +625,13 @@ export const projectStore = {
         }
 
         const buffer = await fs.readFile(imagePath);
-        const mimeType = image.mimeType || 'application/octet-stream';
+        const mimeType = detectImageMimeType(buffer, image.originalName || image.storedName, image.mimeType);
+        if (!isSupportedGeminiImageMimeType(mimeType)) {
+          console.warn(
+            `[ProjectStore] Skipping unsupported reference image MIME for Gemini: storedName=${image.storedName}, mime=${mimeType || image.mimeType || 'unknown'}`
+          );
+          return '';
+        }
         return `data:${mimeType};base64,${buffer.toString('base64')}`;
       })
     );
