@@ -59,6 +59,7 @@ const minGeneratedEffectiveVideoSeconds = (() => {
 })();
 const frameWidthPx = 720;
 const frameHeightPx = 1280;
+const portraitNormalizeVideoFilter = `scale=${frameWidthPx}:${frameHeightPx}:force_original_aspect_ratio=increase,crop=${frameWidthPx}:${frameHeightPx},setsar=1`;
 const trimStartFrames = 6;
 const emojiScale = 1.08;
 const emojiFetchTimeoutMs = 15000;
@@ -1312,7 +1313,7 @@ export class VideoPostprocessService {
           '-i',
           input.audioFilePath,
           '-filter_complex',
-          `[0:v]trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS,format=yuv420p[v]`,
+          `[0:v]${portraitNormalizeVideoFilter},trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS,format=yuv420p[v]`,
           '-map',
           '[v]',
           '-map',
@@ -1420,7 +1421,7 @@ export class VideoPostprocessService {
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concatScriptPath,
-                '-filter_complex', `[0:v][2:v]overlay=x=0:y=0:shortest=1:eof_action=endall,trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS[v]`,
+                '-filter_complex', `[0:v]${portraitNormalizeVideoFilter}[base];[base][2:v]overlay=x=0:y=0:shortest=1:eof_action=endall,trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS[v]`,
                 '-map', '[v]',
                 '-map', '1:a:0',
                 '-c:v', 'libx264',
@@ -1458,7 +1459,7 @@ export class VideoPostprocessService {
           const relativeDir = path.relative(process.cwd(), dirPath);
           subtitlesArgs.push(`fontsdir='${escapeFilterValue(relativeDir)}'`);
         }
-        const filter = `${subtitlesArgs.join(':')},trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS`;
+        const filter = `${portraitNormalizeVideoFilter},${subtitlesArgs.join(':')},trim=start_frame=${trimStartFrames},setpts=PTS-STARTPTS`;
         console.log(`[VideoPostprocessService] Task ${input.taskId}: running ffmpeg with ASS subtitles...`);
 
         await runFfmpeg([
