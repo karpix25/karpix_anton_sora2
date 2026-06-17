@@ -106,12 +106,14 @@ export class ManualGenerationService {
     return Math.max(0, Math.floor(project.packageVideoLimit || 0));
   }
 
+  private static assertProjectIsActive(project: Project): void {
+    if (!project.isActive) {
+      throw new Error(`Project is inactive: ${project.name}`);
+    }
+  }
+
   private static async assertPackageCapacity(project: Project): Promise<void> {
     const packageLimit = this.getPackageVideoLimit(project);
-    if (!packageLimit) {
-      return;
-    }
-
     const usage = await generationTaskStore.getPackageUsage(project.id);
     if (usage.billableTotal < packageLimit) {
       return;
@@ -129,10 +131,6 @@ export class ManualGenerationService {
 
   private static async pauseProjectIfPackageExhausted(project: Project): Promise<void> {
     const packageLimit = this.getPackageVideoLimit(project);
-    if (!packageLimit) {
-      return;
-    }
-
     const usage = await generationTaskStore.getPackageUsage(project.id);
     if (usage.billableTotal < packageLimit) {
       return;
@@ -159,6 +157,7 @@ export class ManualGenerationService {
     if (!project) {
       throw new Error(`Project not found: ${input.projectId}`);
     }
+    this.assertProjectIsActive(project);
 
     let libraryItem = await referenceLibraryStore.getItem(input.referenceLibraryItemId);
     if (!libraryItem || libraryItem.projectId !== project.id) {

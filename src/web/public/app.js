@@ -731,7 +731,7 @@ function renderProjectList() {
       const packageUsage = project.packageUsage || {};
       const packageText = packageLimit
         ? `пакет ${Number(packageUsage.billableTotal || 0)}/${packageLimit}`
-        : 'пакет без лимита';
+        : 'пакет: стоп';
       const subtitle = [
         project.projectLanguage === 'en' ? 'EN' : 'RU',
         project.automationEnabled ? 'автоматизация включена' : 'автоматизация выключена',
@@ -804,10 +804,10 @@ function renderProjectPlanSummary() {
   const autoStartedToday = autoTasksToday.filter((task) => task.status !== 'failed').length;
   const autoCompletedToday = autoTasksToday.filter((task) => task.status === 'completed').length;
   const autoInProgressToday = autoTasksToday.filter((task) => task.status === 'pending' || task.status === 'processing' || task.status === 'pending_download').length;
-  const dailyPlan = packageLimit ? Math.min(dailyLimit, remaining + autoStartedToday) : dailyLimit;
+  const dailyPlan = packageLimit ? Math.min(dailyLimit, remaining + autoStartedToday) : 0;
 
-  const packageLabel = packageLimit ? `${billableTotal}/${packageLimit}` : 'без лимита';
-  const remainingLabel = packageLimit ? String(remaining) : '—';
+  const packageLabel = packageLimit ? `${billableTotal}/${packageLimit}` : 'стоп';
+  const remainingLabel = String(remaining);
   const todayLabel = `${autoCompletedToday}/${dailyPlan}`;
 
   elements.projectPlanSummary.innerHTML = `

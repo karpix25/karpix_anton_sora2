@@ -104,18 +104,16 @@ export class AutoGenerationService {
     }
 
     const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
-    if (packageLimit) {
-      const packageUsage = await generationTaskStore.getPackageUsage(projectId);
-      if (packageUsage.billableTotal >= packageLimit) {
-        await projectStore.updateProject(projectId, {
-          automationEnabled: false,
-          isActive: false,
-        });
-        console.log(
-          `[AutoGenerationService] Project ${project.name}: package limit reached (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}). Project paused.`
-        );
-        return;
-      }
+    const packageUsage = await generationTaskStore.getPackageUsage(projectId);
+    if (packageUsage.billableTotal >= packageLimit) {
+      await projectStore.updateProject(projectId, {
+        automationEnabled: false,
+        isActive: false,
+      });
+      console.log(
+        `[AutoGenerationService] Project ${project.name}: package limit reached (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}). Project paused.`
+      );
+      return;
     }
 
     console.log(
@@ -193,20 +191,18 @@ export class AutoGenerationService {
         }
 
         const packageLimit = Math.max(0, Math.floor(project.packageVideoLimit || 0));
-        if (packageLimit) {
-          const packageUsage = await generationTaskStore.getPackageUsage(projectId);
-          if (packageUsage.billableTotal + inFlight.length >= packageLimit) {
-            await projectStore.updateProject(projectId, {
-              automationEnabled: false,
-              isActive: false,
-            });
-            console.log(
-              `[AutoGenerationService] Project ${project.name}: package limit reached/reserved (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}+${inFlight.length}). Queue paused.`
-            );
-            shouldStopLaunching = true;
-            await waitForRunningTasks();
-            return;
-          }
+        const packageUsage = await generationTaskStore.getPackageUsage(projectId);
+        if (packageUsage.billableTotal + inFlight.length >= packageLimit) {
+          await projectStore.updateProject(projectId, {
+            automationEnabled: false,
+            isActive: false,
+          });
+          console.log(
+            `[AutoGenerationService] Project ${project.name}: package limit reached/reserved (${packageUsage.completed}/${packageLimit}, reserved=${packageUsage.reserved}+${inFlight.length}). Queue paused.`
+          );
+          shouldStopLaunching = true;
+          await waitForRunningTasks();
+          return;
         }
 
         if (attemptsThisTick >= maxAttemptsThisTick) {

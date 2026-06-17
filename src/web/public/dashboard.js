@@ -96,7 +96,7 @@ function renderSummary() {
   const autoTodayValue = `${totals.autoCompletedToday || 0}/${totals.autoPlannedToday || 0}`;
   const packageValue = totals.packageLimitTotal
     ? `${totals.packageBillableTotal || 0}/${totals.packageLimitTotal || 0}`
-    : 'без лимитов';
+    : 'нет активных пакетов';
   const cards = [
     ['День', state.selectedDate || 'последние'],
     ['Проекты', totals.projects || 0],

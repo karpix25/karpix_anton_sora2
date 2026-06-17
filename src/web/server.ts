@@ -404,7 +404,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       }
       const packageDailyCap = packageLimit
         ? Math.min(project.dailyGenerationLimit, packageRemaining + autoStartedForProjectToday)
-        : project.dailyGenerationLimit;
+        : 0;
       const projectAutoPlannedToday = project.isActive && project.automationEnabled && packageDailyCap > 0 && reusableReferenceCount > 0
         ? packageDailyCap
         : 0;

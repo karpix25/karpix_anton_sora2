@@ -98,6 +98,22 @@ export class AdminNotifierService {
 
     const providerSuffix = provider ? ` (${provider})` : '';
 
+    if (lowercase.includes('project is inactive') || lowercase.includes('project inactive')) {
+      return '⏸ Проект выключен. Включите проект в панели, чтобы запускать генерацию.';
+    }
+
+    if (lowercase.includes('project package limit reached')) {
+      const usageMatch = errorContent.match(/Project package limit reached:\s*([^.\n]+)/i);
+      const usageText = usageMatch?.[1]?.trim();
+      return usageText
+        ? `📦 Пакет роликов проекта исчерпан (${usageText}). Увеличьте пакетный лимит и включите проект.`
+        : '📦 Пакет роликов проекта исчерпан. Увеличьте пакетный лимит и включите проект.';
+    }
+
+    if (lowercase.includes('daily limit reached') || lowercase.includes('daily generation limit')) {
+      return '📅 Дневной лимит генераций проекта исчерпан. Увеличьте дневной лимит или попробуйте завтра.';
+    }
+
     if (
       lowercase.includes('insufficient') || 
       lowercase.includes('balance') || 
@@ -111,7 +127,14 @@ export class AdminNotifierService {
       return `🛡 Запрос заблокирован системой модерации провайдера${providerSuffix}. Попробуйте изменить промпт или референс.`;
     }
 
-    if (lowercase.includes('limit') || lowercase.includes('rate limit') || lowercase.includes('too many requests')) {
+    if (
+      lowercase.includes('rate limit') ||
+      lowercase.includes('too many requests') ||
+      lowercase.includes('quota') ||
+      lowercase.includes('http 429') ||
+      lowercase.includes('status=429') ||
+      lowercase.includes('status 429')
+    ) {
       return `⏳ Исчерпан лимит запросов к сервису${providerSuffix}. Попробуйте позже.`;
     }
 
