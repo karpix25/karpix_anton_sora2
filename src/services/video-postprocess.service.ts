@@ -57,6 +57,13 @@ const minGeneratedEffectiveVideoSeconds = (() => {
   }
   return 5;
 })();
+const minGeneratedEffectiveVideoToleranceSeconds = (() => {
+  const parsed = Number(process.env.MIN_GENERATED_EFFECTIVE_VIDEO_TOLERANCE_SECONDS);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return 0.25;
+})();
 const frameWidthPx = 720;
 const frameHeightPx = 1280;
 const portraitNormalizeVideoFilter = `scale=${frameWidthPx}:${frameHeightPx}:force_original_aspect_ratio=increase,crop=${frameWidthPx}:${frameHeightPx},setsar=1`;
@@ -1151,9 +1158,12 @@ export class VideoPostprocessService {
     const trimStartSeconds = frameRate > 0 ? (trimStartFrames / frameRate) : 0;
     const effectiveDuration = rawDuration > 0 ? Math.max(0, rawDuration - trimStartSeconds) : 0;
 
-    if (effectiveDuration > 0 && effectiveDuration < minGeneratedEffectiveVideoSeconds) {
+    if (
+      effectiveDuration > 0 &&
+      effectiveDuration < minGeneratedEffectiveVideoSeconds - minGeneratedEffectiveVideoToleranceSeconds
+    ) {
       throw new Error(
-        `Generated video is too short (${effectiveDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s).`
+        `Generated video is too short (${effectiveDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s, tolerance ${minGeneratedEffectiveVideoToleranceSeconds.toFixed(2)}s).`
       );
     }
 
@@ -1203,9 +1213,12 @@ export class VideoPostprocessService {
       const effectiveVideoDuration = probedVideoDuration > 0
         ? Math.max(0, probedVideoDuration - trimStartSeconds)
         : 0;
-      if (effectiveVideoDuration > 0 && effectiveVideoDuration < minGeneratedEffectiveVideoSeconds) {
+      if (
+        effectiveVideoDuration > 0 &&
+        effectiveVideoDuration < minGeneratedEffectiveVideoSeconds - minGeneratedEffectiveVideoToleranceSeconds
+      ) {
         throw new Error(
-          `Generated video is too short (${effectiveVideoDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s).`
+          `Generated video is too short (${effectiveVideoDuration.toFixed(2)}s effective, minimum ${minGeneratedEffectiveVideoSeconds.toFixed(2)}s, tolerance ${minGeneratedEffectiveVideoToleranceSeconds.toFixed(2)}s).`
         );
       }
       const shortestMediaDuration = effectiveVideoDuration > 0
