@@ -577,17 +577,22 @@ export class ManualGenerationService {
         });
       }
 
-      console.log(`[ManualGenerationService] Task ${task.id}: starting postprocess with ffmpeg...`);
+      const latestProject = await projectStore.getProject(project.id);
+      const postprocessProject = latestProject || project;
+      const endFrameText = postprocessProject.endFrameText || project.endFrameText || '';
+      console.log(
+        `[ManualGenerationService] Task ${task.id}: starting postprocess with ffmpeg (endFrameText=${endFrameText.trim() ? 'set' : 'empty'})...`
+      );
       mergedVideoPath = await VideoPostprocessService.applyAudioTrack({
         taskId: task.id,
         generatedVideoUrl: resultVideoUrl,
         audioFilePath: audio.audioFilePath,
         textOverlays: textOverlays,
-        textStyle: project.textStyle,
-        endFrameText: project.endFrameText || '',
-        endFrameVerticalMargin: project.endFrameVerticalMargin,
-        endFrameWidthPercent: project.endFrameWidthPercent,
-        endFrameXPercent: project.endFrameXPercent,
+        textStyle: postprocessProject.textStyle,
+        endFrameText,
+        endFrameVerticalMargin: postprocessProject.endFrameVerticalMargin,
+        endFrameWidthPercent: postprocessProject.endFrameWidthPercent,
+        endFrameXPercent: postprocessProject.endFrameXPercent,
       });
       console.log(`[ManualGenerationService] Task ${task.id}: postprocess completed, uploading to Yandex Disk...`);
 

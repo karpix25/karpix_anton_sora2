@@ -1249,11 +1249,11 @@ export class VideoPostprocessService {
           return overlay;
         });
 
-        // Handle custom end-frame CTA (last 3 seconds)
+        // Handle custom end-frame CTA (last 3 seconds, or the full video if shorter)
         if (endFrameTextTrimmed) {
-          if (totalDuration > 3) {
-            const endFrameStart = Math.max(0, totalDuration - 3);
-            const endFrameEnd = totalDuration;
+          const endFrameEnd = Math.max(0, totalDuration);
+          if (endFrameEnd > 0) {
+            const endFrameStart = Math.max(0, endFrameEnd - 3);
             const endFrameVerticalMargin = input.endFrameVerticalMargin ?? 320;
             const endFrameWidthPercent = input.endFrameWidthPercent ?? 50;
             const endFrameXPercent = input.endFrameXPercent ?? 50;
@@ -1298,7 +1298,7 @@ export class VideoPostprocessService {
             ];
             console.log(`[VideoPostprocessService] Task ${input.taskId}: endFrameText overlay added at ${endFrameStart.toFixed(2)}s–${endFrameEnd.toFixed(2)}s`);
           } else {
-            console.warn(`[VideoPostprocessService] Task ${input.taskId}: video too short for end-frame CTA (${totalDuration.toFixed(2)}s < 3s), skipping`);
+            console.warn(`[VideoPostprocessService] Task ${input.taskId}: unable to resolve positive duration for end-frame CTA, skipping`);
           }
         }
       } catch (err: any) {
