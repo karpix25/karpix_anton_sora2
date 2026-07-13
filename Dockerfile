@@ -20,6 +20,7 @@ RUN npm install && npm cache clean --force
 COPY tsconfig.json ./
 COPY src ./src
 COPY scripts ./scripts
+RUN npm run check:src-artifacts
 
 RUN mkdir -p /app/data && chown -R node:node /app
 
