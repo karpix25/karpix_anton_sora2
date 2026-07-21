@@ -1419,12 +1419,15 @@ export class VideoPostprocessService {
 
               const concatScriptPath = path.join(overlayWorkDir, 'overlays.txt');
               const concatLines = concatEntries.map(e => {
-                // FFmpeg concat demuxer requires escaping paths
                 const escaped = e.imagePath.replace(/'/g, "'\\''");
                 return `file '${escaped}'\nduration ${e.duration.toFixed(4)}`;
               });
-              // Last entry duration is often ignored by concat demuxer unless repeated,
-              // but we use it as a stream for overlay so it's fine.
+              const lastConcatEntry = concatEntries[concatEntries.length - 1];
+              if (lastConcatEntry) {
+                // FFmpeg concat needs the last still image repeated to honor its duration.
+                const escaped = lastConcatEntry.imagePath.replace(/'/g, "'\\''");
+                concatLines.push(`file '${escaped}'`);
+              }
               await fs.writeFile(concatScriptPath, concatLines.join('\n'), 'utf8');
 
               const ffmpegArgs = [
